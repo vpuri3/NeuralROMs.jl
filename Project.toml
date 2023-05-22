@@ -1,0 +1,13 @@
+name = "GeometryLearning"
+uuid = "33bcc084-233e-4094-a32f-d925c598ad0c"
+authors = ["Vedant Puri <vedantpuri@gmail.com> and contributors"]
+version = "0.0.1"
+
+[compat]
+julia = "1.6"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
