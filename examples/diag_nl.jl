@@ -7,7 +7,6 @@ learning the mapping `x -> (A^{-1} M)(x)`.
 
 # Reference
 * https://slides.com/vedantpuri/project-discussion-2023-05-10
-
 """
 
 using GeometryLearning
@@ -118,7 +117,7 @@ function train(loss, p; opt = Optimisers.Adam(), E = 5_000, cb = nothing)
 end
 
 """ main program """
-function main(rng, N, Kx, Ku)
+function main(rng, N, Kx, Ku, E)
     K = Kx * Ku # samples
 
     model, p, loss, errors = model_setup(N, K)
@@ -141,9 +140,9 @@ function main(rng, N, Kx, Ku)
     cb_(0, p)
 
     # training loop
-    @time p = train(_loss, p; opt = Adam(1f-2), E = 1000, cb = _cb)
-    @time p = train(_loss, p; opt = Adam(1f-3), E = 7000, cb = _cb)
-    @time p = train(_loss, p; opt = Adam(1f-4), E = 2000, cb = _cb)
+    @time p = train(_loss, p; opt = Adam(1f-2), E = Int(E*0.05), cb = _cb)
+    @time p = train(_loss, p; opt = Adam(1f-3), E = Int(E*0.70), cb = _cb)
+    @time p = train(_loss, p; opt = Adam(1f-4), E = Int(E*0.25), cb = _cb)
 
     # test stats
     println("### Test stats ###")
