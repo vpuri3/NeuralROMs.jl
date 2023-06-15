@@ -4,7 +4,13 @@ module GeometryLearning
 
 using Reexport
 using FourierSpaces: FourierSpaces, linspace
+using Random
+using LinearAlgebra
+using Lux
 
 export linspace
+export Atten, Diag
 
-end
+include("layers.jl")
+
+end # module
