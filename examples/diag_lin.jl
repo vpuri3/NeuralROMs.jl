@@ -2,12 +2,7 @@
 """
 Geometry learning sandbox
 
-Want to solve `A(x) * u = M(x) * f` for varying `x` by
-learning the mapping `x -> (A^{-1} M)(x)`.
-
-# Reference
-* https://slides.com/vedantpuri/project-discussion-2023-05-10
-
+Learning a diagonal matrix
 """
 
 using SciMLOperators, LinearAlgebra, Random
