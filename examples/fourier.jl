@@ -9,7 +9,7 @@ learning the mapping `x -> (A^{-1} M)(x)`.
 * https://slides.com/vedantpuri/project-discussion-2023-05-10
 """
 
-using GeometryLearning, FourierSpaces, Tullio
+using GeometryLearning, FourierSpaces, NNlib
 using SciMLOperators, LinearAlgebra, Random
 using Zygote, Lux, ComponentArrays, Optimisers
 
@@ -18,11 +18,11 @@ function datagen(rng, V, discr, Kx, Ku)
 
     N = size(V, 1)
 
-    u = rand(rng, Float32, N, Ku)
+    f = rand(rng, Float32, N, Ku)
     x = rand(rng, Float32, N, Kx)
     x = cumsum(x, dims = 1)
 
-    f = kron(u, ones(Kx)')
+    f = kron(f, ones(Kx)')
     x = kron(ones(Ku)', x)
 
     V = make_transform(V, f)
@@ -76,7 +76,8 @@ function model_setup(V, x, f)
         m = NN(j, p, st)[1]
         M = reshape(m, (N, N, K))
 
-        @tullio u[i, k] := M[i, j, k] * f[j, k]
+        # @tullio u[i, k] := M[i, j, k] * f[j, k]
+        batched_vec(M, f)
     end
 
     function loss(p, x, f, ut)
