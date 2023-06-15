@@ -22,16 +22,16 @@ function datagen(rng, V, discr, Kx, Ku)
     x = rand(rng, Float32, N, Kx)
     x = cumsum(x, dims = 1)
 
-    u0 = kron(u, ones(Kx)')
-    x  = kron(ones(Ku)', x)
+    f = kron(u, ones(Kx)')
+    x = kron(ones(Ku)', x)
 
-    V = make_transform(V, u0)
+    V = make_transform(V, f)
     F = transformOp(V)
 
     # rm high freq
     Tr = truncationOp(V, (0.5,))
     x  = Tr * x
-    u0 = Tr * u0
+    f  = Tr * f
 
     # true sol
     D = gradientOp(V, discr)[1]
@@ -42,13 +42,13 @@ function datagen(rng, V, discr, Kx, Ku)
     Ji = inv(J)
 
     Lt = (Ji * Ji * A) \ (M * J)
-    ut = Lt * u0
+    ut = Lt * f
 
-    V, x, u0, ut
+    V, x, f, ut
 end
 
 """ model """
-function model_setup(V, x, u0)
+function model_setup(V, x, f)
 
     D = gradientOp(V)[1]
     F = transformOp(V)
@@ -66,27 +66,27 @@ function model_setup(V, x, u0)
     # wait for https://github.com/SciML/SciMLOperators.jl/pull/143
     # model_update_func(D, u, p, t; x = x) = NN(x, p, st)[1]
     # Lmodel = DiagonalOperator(zeros(N, K); update_func = model_update_func)
-    # model = (p, x, u0) -> Lmodel(u0, p, 0.0; x = x) 
+    # model = (p, x, f) -> Lmodel(f, p, 0.0; x = x) 
 
     p, st = Lux.setup(rng, NN)
     p = p |> ComponentArray
 
-    function model(p, x, u0) # full
+    function model(p, x, f) # full
         j = D * x
         m = NN(j, p, st)[1]
         M = reshape(m, (N, N, K))
 
-        @tullio u[i, k] := M[i, j, k] * u0[j, k]
+        @tullio u[i, k] := M[i, j, k] * f[j, k]
     end
 
-    function loss(p, x, u0, ut)
-        upred = model(p, x, u0)
+    function loss(p, x, f, ut)
+        upred = model(p, x, f)
 
         norm(upred - ut, 2)
     end
 
-    function errors(p, x, u0, ut)
-        upred = model(p, x, u0)
+    function errors(p, x, f, ut)
+        upred = model(p, x, f)
         udiff = upred - ut
 
         meanAE = norm(udiff, 1) / length(ut)
@@ -149,21 +149,21 @@ function main(rng, N, Kx, Ku, E)
     discr = Collocation()
 
     # datagen
-    _V, _x, _u0, _ut = datagen(rng, V, discr, Kx, Ku) # train
-    V_, x_, u0_, ut_ = datagen(rng, V, discr, Kx, Ku) # test
+    _V, _x, _f, _ut = datagen(rng, V, discr, Kx, Ku) # train
+    V_, x_, f_, ut_ = datagen(rng, V, discr, Kx, Ku) # test
 
     # model setup
     K = Kx * Ku
-    model, p, loss, errors = model_setup(_V, _x, _u0)
+    model, p, loss, errors = model_setup(_V, _x, _f)
 
     # train setup
-    _errors = (p,) -> errors(p, _x, _u0, _ut)
-    _loss   = (p,) -> loss(p, _x, _u0, _ut)
+    _errors = (p,) -> errors(p, _x, _f, _ut)
+    _loss   = (p,) -> loss(p, _x, _f, _ut)
     _cb  = (i, E, p,) -> callback(i, E, p, _loss, _errors)
 
     # test setup
-    errors_ = (p,) -> errors(p, x_, u0_, ut_)
-    loss_   = (p,) -> loss(p, x_, u0_, ut_)
+    errors_ = (p,) -> errors(p, x_, f_, ut_)
+    loss_   = (p,) -> loss(p, x_, f_, ut_)
     cb_  = (i, E, p,) -> callback(i, E, p, loss_, errors_)
 
     # test stats
