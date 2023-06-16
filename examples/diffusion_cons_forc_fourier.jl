@@ -14,9 +14,7 @@ using GeometryLearning, FourierSpaces, NNlib
 using SciMLOperators, LinearAlgebra, Random
 using Zygote, Lux, ComponentArrays, Optimisers
 
-using Plots
-
-# using Flux, NeuralOperators
+using Plots, Colors
 
 """ data """
 function datagen(rng, V, discr, K, f = nothing)
@@ -123,20 +121,36 @@ function train(loss, p; opt = Optimisers.Adam(), E = 5000, cb = nothing)
 end
 
 """ visualize """
-function visualize(V, _u, u_, model; I = 5)
+function visualize(V, test, train, model; I = 5)
+    _ν, _u = test
+    ν_, u_ = train
+
+    _v = model(_ν)
+    v_ = model(ν_)
+
     x, = points(V)
 
     I = min(I, size(_u, 2))
 
+    cmap = range(HSV(0,1,1), stop=HSV(-360,1,1), length=I) 
+
     _plt = plot(title = "Training", legend = false)
-    _u = _u[:, 1:I]
-    plot!(_plt, x, _u, style = :dash, width = 2.0)
-    plot!(_plt, x, model(_u), style = :solid, width = 2.0)
+    for i in 1:I
+        c = cmap[i]
+        u = _u[:, i]
+        v = _v[:, i]
+        plot!(_plt, x, u, s = :dash , w = 2.0, c = c)
+        plot!(_plt, x, v, s = :solid, w = 2.0, c = c)
+    end
 
     plt_ = plot(title = "Testing", legend = false)
-    u_ = u_[:, 1:I]
-    plot!(plt_, x, u_, style = :dash, width = 2.0)
-    plot!(plt_, x, model(u_), style = :solid, width = 2.0)
+    for i in 1:I
+        c = cmap[i]
+        u = u_[:, i]
+        v = v_[:, i]
+        plot!(plt_, x, u, s = :dash , w = 2.0, c = c)
+        plot!(plt_, x, v, s = :solid, w = 2.0, c = c)
+    end
 
     _plt, plt_
 end
@@ -146,7 +160,7 @@ end
 # parameters
 N = 128    # problem size
 K = 100    # X-samples
-E = 5000  # epochs
+E = 10000  # epochs
 
 rng = Random.default_rng()
 Random.seed!(rng, 0)
@@ -197,5 +211,5 @@ println("### Test stats ###")
 cb_(0, 0, p)
 
 # visualization
-_plt, plt_ = visualize(V, _u, u_, x -> model(p, x))
+_plt, plt_ = visualize(V, (_ν, _u), (ν_, u_), x -> model(p, x))
 #
