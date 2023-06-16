@@ -1,12 +1,13 @@
 #
 """
-Geometry learning sandbox
+Learn solution to diffusion equation
 
-Want to solve `A(x) * u = M(x) * f` for varying `x` by
-learning the mapping `x -> (A^{-1} M)(x)`.
+∇⋅ν∇ u = f
 
-# Reference
-* https://slides.com/vedantpuri/project-discussion-2023-05-10
+for variable ν, and constant f
+
+test bed for Fourier Neural Operator experiments where
+forcing is learned separately.
 """
 
 using GeometryLearning, FourierSpaces, NNlib
