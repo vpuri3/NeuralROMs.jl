@@ -2,15 +2,21 @@ module GeometryLearning
 
 # Write your package code here.
 
-using Reexport
-using FourierSpaces: FourierSpaces, linspace
-using Random
-using LinearAlgebra
+using FourierSpaces
+using FourierSpaces: linspace
 using Lux
 
-export linspace
-export Atten, Diag
+using Random
+using LinearAlgebra
 
 include("layers.jl")
+
+export
+       # utils
+       linspace,
+
+       # layers
+       Atten,
+       Diag
 
 end # module

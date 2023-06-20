@@ -1,4 +1,4 @@
-
+#
 """
 Diagonal layer
 """
@@ -72,4 +72,16 @@ function (l::Atten)(x::AbstractVecOrMat, ps, st::NamedTuple)
 
     return y, st
 end
+
+"""
+Neural Operator layer
+"""
+# struct FNOLayer{I, V, F} <: Lux.AbstractExplicitLayer
+#     in_dims::I
+#     out_dims::I
+#     modes::M
+#     transform::V
+#     activation::F
+# end
+
 #
