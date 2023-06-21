@@ -1,6 +1,7 @@
 #
 """
-    model_setup(NN, st)
+$SIGNATURES
+
 """
 function model_setup(NN::Lux.AbstractExplicitLayer, data)
 
@@ -48,6 +49,10 @@ function model_setup(NN::Lux.AbstractExplicitLayer, data)
     model, loss, stats
 end
 
+"""
+$SIGNATURES
+
+"""
 function callback(p, st; io::Union{Nothing, IO} = stdout,
                   _loss = nothing, _LOSS = nothing, _stats = nothing,
                   loss_ = nothing, LOSS_ = nothing, stats_ = nothing,
@@ -118,7 +123,7 @@ function callback(p, st; io::Union{Nothing, IO} = stdout,
 end
 
 """
-    train
+$SIGNATURES
 
 Train parameters `p` to minimize `loss` using optimization strategy `opt`.
 
@@ -156,7 +161,6 @@ function train(loss, p, st, maxiter; opt = Optimisers.Adam(), cb = nothing)
 end
 
 function plot_training(ITER, _LOSS, LOSS_)
-    # fix ITER
     z = findall(iszero, ITER)
 
     # fix ITER to account for multiple training loops
@@ -177,20 +181,23 @@ function plot_training(ITER, _LOSS, LOSS_)
     plt
 end
 
-""" visualize """
+"""
+$SIGNATURES
+
+"""
 function visualize(V, _data, data_, NN, p, st; nsamples = 5)
 
     x, = points(V)
 
-    _x, _y = _data
-    x_, y_ = data_
+    _x, _ŷ = _data
+    x_, ŷ_ = data_
 
-    _ŷ = NN(_x, p, st)[1]
-    ŷ_ = NN(x_, p, st)[1]
+    _y = NN(_x, p, st)[1]
+    y_ = NN(x_, p, st)[1]
 
-    N, K = size(_y)
+    N, K = size(_ŷ)
 
-    I = rand(axes(_y, 2), nsamples)
+    I = rand(axes(_ŷ, 2), nsamples)
     n = 4
     ms = 4
 
@@ -212,26 +219,26 @@ function visualize(V, _data, data_, NN, p, st; nsamples = 5)
         # training
         __y = _y[:, ii]
         __ŷ = _ŷ[:, ii]
-        scatter!(_p0, x[begin:n:end], __y[begin:n:end]; kw_data...)
-        plot!(_p0, x, __ŷ; kw_pred...)
+        scatter!(_p0, x[begin:n:end], __ŷ[begin:n:end]; kw_data...)
+        plot!(_p0, x, __y; kw_pred...)
 
         # testing
         y__ = y_[:, ii]
         ŷ__ = ŷ_[:, ii]
-        scatter!(p0_, x[begin:n:end], y__[begin:n:end]; kw_data...)
-        plot!(p0_, x, ŷ__; kw_pred...)
+        scatter!(p0_, x[begin:n:end], ŷ__[begin:n:end]; kw_data...)
+        plot!(p0_, x, y__; kw_pred...)
     end
 
-    _R2 = round(rsquare(_ŷ, _y), digits = 6)
-    R2_ = round(rsquare(ŷ_, y_), digits = 6)
+    _R2 = round(rsquare(_y, _ŷ), digits = 8)
+    R2_ = round(rsquare(y_, ŷ_), digits = 8)
 
     kw = (; legend = false, xlabel = "u(x) (data)", ylabel = "û(x) (pred)", aspect_ratio = :equal)
 
     _p1 = plot(; title = "Training R² = $_R2", kw...)
     p1_ = plot(; title = "Testing R² = $R2_", kw...)
 
-    scatter!(_p1, vec(_ŷ), vec(_y), ms = 2)
-    scatter!(p1_, vec(ŷ_), vec(y_), ms = 2)
+    scatter!(_p1, vec(_y), vec(_ŷ), ms = 2)
+    scatter!(p1_, vec(y_), vec(ŷ_), ms = 2)
 
     _l = [extrema(_y)...]
     l_ = [extrema(y_)...]
@@ -246,24 +253,24 @@ end
 
 Mean squared error
 """
-mse(ypred, ytrue) = sum(abs2, ytrue - ypred) / length(ytrue)
+mse(y, ŷ) = sum(abs2, ŷ - y) / length(ŷ)
 
 """
     rsquare(ypred, ytrue) -> 1 - MSE(ytrue, ypred) / var(yture)
 
 Calculuate r2 (coefficient of determination) score.
 """
-function rsquare(ypred, ytrue)
-    @assert size(ypred) == size(ytrue)
+function rsquare(y, ŷ)
+    @assert size(y) == size(ŷ)
 
-    ypred = vec(ypred)
-    ytrue = vec(ytrue)
+    y = vec(y)
+    ŷ = vec(ŷ)
 
-    mean = sum(ytrue) / length(ytrue)
-    MSE  = sum(abs2, ytrue - ypred) # sum of squares of residuals
-    VAR  = sum(abs2, ytrue .- mean) # sum of squares of data
+    ȳ = sum(ŷ) / length(ŷ)   # mean
+    MSE  = sum(abs2, ŷ  - y) # mse  (sum of squares of residuals)
+    VAR  = sum(abs2, ŷ .- ȳ) # var  (sum of squares of data)
 
-    rsq =  1 - MSE / (VAR + eps(eltype(ypred)))
+    rsq =  1 - MSE / (VAR + eps(eltype(y)))
 
     return rsq
 end

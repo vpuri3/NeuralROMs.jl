@@ -1,5 +1,7 @@
 module GeometryLearning
 
+using DocStringExtensions
+
 # PDE stack
 using FourierSpaces
 using FourierSpaces: linspace
@@ -28,15 +30,12 @@ export
        Diag,
 
        # training
-       # model_stats,
        model_setup,
-       # model_setup,
        callback,
        train,
        plot_training,
        visualize,
        mse,
        rsquare
-
 
 end # module
