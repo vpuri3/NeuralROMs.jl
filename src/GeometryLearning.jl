@@ -10,6 +10,7 @@ using FourierSpaces: linspace
 using Lux
 using Zygote
 using Optimisers
+using ComponentArrays
 
 using Random
 using LinearAlgebra
@@ -17,6 +18,9 @@ using LinearAlgebra
 # vis stack
 using Plots
 using Colors
+
+# serialization
+using BSON
 
 include("layers.jl")
 include("train.jl")
@@ -30,9 +34,10 @@ export
        Diag,
 
        # training
+       train_model,
        model_setup,
        callback,
-       train,
+       optimize,
        plot_training,
        visualize,
        mse,

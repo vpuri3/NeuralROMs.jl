@@ -2,6 +2,95 @@
 """
 $SIGNATURES
 
+# Arguments
+- `V`: function space
+- `NN`: Lux neural network
+- `_data`: training data as `(x, y)`
+- `data_`: testing  data as `(x, y)`
+
+Data arrays, `x`, `y` must be `AbstractMatrix`, or `AbstractArray{T,3}`.
+In the former case, the dimensions are assumed to be `(points, batch)`,
+and `(chs, points, batch)` in the latter, where the points dimension
+is equal to `length(V)`.
+
+# Keyword Arguments
+- `opts`: `NTuple` of optimizers
+- `maxiters`: Number of iterations for each optimization cycle
+- `cbstep`: prompt `callback` function every `cbstep` epochs
+- `dir`: directory to save model, plots
+- `io`: io for printing stats
+"""
+function train_model(
+    rng::Random.AbstractRNG,
+    NN::Lux.AbstractExplicitLayer,
+    _data::NTuple{2},
+    data_::NTuple{2},
+    V::Spaces.AbstractSpace;
+    opts::NTuple{N} = (Optimisers.Adam(),),
+    maxiters::NTuple{N} = (1000,),
+    cbstep::Int = 10,
+    dir = "",
+    name = "model",
+    io::IO = stdout,
+) where{N}
+
+    @assert length(opts) == length(maxiters)
+
+    # utility functions
+    _model, _loss, _stats = model_setup(NN, _data)
+    model_, loss_, stats_ = model_setup(NN, data_)
+
+    cb = (p, st) -> callback(p, st; _loss, _stats, loss_, stats_)
+
+    # get model parameters with rng
+    p, st = Lux.setup(rng, NN)
+    p = p |> ComponentArray
+
+    # print stats
+    cb(p, st)
+
+    # training callback
+    ITER  = Int[]
+    _LOSS = Float32[]
+    LOSS_ = Float32[]
+
+    CB = (p, st, iter, maxiter) -> callback(p, st;
+                                            _loss, _LOSS, loss_, LOSS_,
+                                            ITER, iter, maxiter, step = cbstep)
+
+    for i in eachindex(opts)
+        opt = opts[i]
+        maxiter = maxiters[i]
+
+        println("#======================#")
+        println("OPT: $opt, ITERS: $maxiter")
+        println("#======================#")
+
+        @time p, st = optimize(_loss, p, st, maxiter; opt, cb = CB)
+
+        cb(p, st)
+    end
+
+    # visualization
+    plt_train = plot_training(ITER, _LOSS, LOSS_)
+    plts = visualize(V, _data, data_, NN, p, st)
+
+    png(plt_train, joinpath(dir, "plt_training"))
+    png(plts[1],   joinpath(dir, "plt_traj_train"))
+    png(plts[2],   joinpath(dir, "plt_traj_test"))
+    png(plts[3],   joinpath(dir, "plt_r2_train"))
+    png(plts[4],   joinpath(dir, "plt_r2_test"))
+
+    model = NN, p, st
+ 
+    BSON.@save joinpath(dir, "$name.bson") _data data_ model
+
+    p, st, (ITER, _LOSS, LOSS_)
+end
+
+"""
+$SIGNATURES
+
 """
 function model_setup(NN::Lux.AbstractExplicitLayer, data)
 
@@ -131,7 +220,7 @@ Train parameters `p` to minimize `loss` using optimization strategy `opt`.
 - Loss signature: `loss(p, st) -> y, st`
 - Callback signature: `cb(p, st iter, maxiter) -> nothing` 
 """
-function train(loss, p, st, maxiter; opt = Optimisers.Adam(), cb = nothing)
+function optimize(loss, p, st, maxiter; opt = Optimisers.Adam(), cb = nothing)
 
     function grad(p, st)
         loss2 = Base.Fix2(loss, st)
@@ -185,7 +274,13 @@ end
 $SIGNATURES
 
 """
-function visualize(V, _data, data_, NN, p, st; nsamples = 5)
+function visualize(V::Spaces.AbstractSpace{<:Any, 1},
+    _data::NTuple{2},
+    data_::NTuple{2},
+    NN::Lux.AbstractExplicitLayer,
+    p,
+    st;
+    nsamples = 5)
 
     x, = points(V)
 
@@ -195,9 +290,11 @@ function visualize(V, _data, data_, NN, p, st; nsamples = 5)
     _y = NN(_x, p, st)[1]
     y_ = NN(x_, p, st)[1]
 
-    N, K = size(_ŷ)
+    N, _K = size(_y)[end-1:end]
+    N, K_ = size(y_)[end-1:end]
 
-    I = rand(axes(_ŷ, 2), nsamples)
+    _I = rand(1:_K, nsamples)
+    I_ = rand(1:K_, nsamples)
     n = 4
     ms = 4
 
@@ -206,28 +303,39 @@ function visualize(V, _data, data_, NN, p, st; nsamples = 5)
     # Trajectory plots
     kw = (; legend = false, xlabel = "x", ylabel = "u(x)")
 
-    _p0 = plot(;title = "Training Comparison, N=$N points, $K trajectories", kw...)
-    p0_ = plot(;title = "Testing Comparison, N=$N points, $K trajectories", kw...)
+    _p0 = plot(;title = "Training Comparison", kw...)
+    p0_ = plot(;title = "Testing Comparison" , kw...)
 
     for i in 1:nsamples
         c = cmap[i]
-        ii = I[i]
+        _i = _I[i]
+        i_ = I_[i]
 
         kw_data = (; markersize = ms, c = c,)
         kw_pred = (; s = :solid, w = 2.0, c = c)
 
+        _idx, idx_ = if _y isa AbstractMatrix
+            (Colon(), _i), (Colon(), i_)
+        elseif _y isa AbstractArray{<:Any, 3}
+            # plot only the first output channel
+            # make separate dispatches for visualize later
+            (1, Colon(), _i), (1, Colon(), i_)
+        end
+
         # training
-        __y = _y[:, ii]
-        __ŷ = _ŷ[:, ii]
+        __y = _y[_idx...]
+        __ŷ = _ŷ[_idx...]
         scatter!(_p0, x[begin:n:end], __ŷ[begin:n:end]; kw_data...)
         plot!(_p0, x, __y; kw_pred...)
 
         # testing
-        y__ = y_[:, ii]
-        ŷ__ = ŷ_[:, ii]
+        y__ = y_[idx_...]
+        ŷ__ = ŷ_[idx_...]
         scatter!(p0_, x[begin:n:end], ŷ__[begin:n:end]; kw_data...)
         plot!(p0_, x, y__; kw_pred...)
     end
+
+    # R2 plots
 
     _R2 = round(rsquare(_y, _ŷ), digits = 8)
     R2_ = round(rsquare(y_, ŷ_), digits = 8)
