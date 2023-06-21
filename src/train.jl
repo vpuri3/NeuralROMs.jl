@@ -1,42 +1,54 @@
 #
-""" model """
-function model_setup(NN::Lux.AbstractExplicitLayer, st)
+"""
+    model_setup(NN, st)
+"""
+function model_setup(NN::Lux.AbstractExplicitLayer, data)
 
-    function model(p, x)
+    x, ŷ = data
+
+    function model(p, st)
         NN(x, p, st)[1]
     end
 
-    function loss(p, x, utrue)
-        upred = model(p, x)
+    function loss(p, st)
+        y = NN(x, p, st)[1]
 
-        mse(utrue, upred)
+        mse(y, ŷ), st
     end
 
-    function stats(p, x, utrue)
-        upred = model(p, x)
-        udiff = upred - utrue
+    function stats(p, st; io::Union{Nothing, IO} = stdout)
+        y = model(p, st)
+        Δy = y - ŷ
 
-        meanAE = norm(udiff, 1) / length(utrue)
-        maxAE  = norm(udiff, Inf)
+        R2 = rsquare(y, ŷ)
+        MSE = mse(y, ŷ)
 
-        urel   = udiff ./ utrue
-        meanRE = norm(urel, 1) / length(utrue)
-        maxRE  = norm(urel, Inf)
+        meanAE = norm(Δy, 1) / length(ŷ)
+        maxAE  = norm(Δy, Inf)
 
-        str = ""
-        str *= string("meanAE: "  , round(meanAE, digits=8))
-        str *= string(", maxAE: " , round(maxAE , digits=8))
-        str *= string(", meanRE: ", round(meanRE, digits=8))
-        str *= string(", maxRE: " , round(maxRE , digits=8))
-        str *= "\n"
+        rel   = Δy ./ ŷ
+        meanRE = norm(rel, 1) / length(ŷ)
+        maxRE  = norm(rel, Inf)
 
-        meanAE, maxAE, meanRE, maxRE, str
+        if !isnothing(io)
+            str = ""
+            str *= string("R² score:       ", round(R2    , digits=8), "\n")
+            str *= string("mean SQR error: ", round(MSE   , digits=8), "\n")
+            str *= string("mean ABS error: ", round(meanAE, digits=8), "\n")
+            str *= string("max  ABS error: ", round(maxAE , digits=8), "\n")
+            str *= string("mean REL error: ", round(meanRE, digits=8), "\n")
+            str *= string("max  REL error: ", round(maxRE , digits=8))
+
+            println(io, str)
+        end
+
+        R2, MSE, meanAE, maxAE, meanRE, maxRE
     end
 
     model, loss, stats
 end
 
-function callback(p, io = stdout;
+function callback(p, st; io::Union{Nothing, IO} = stdout,
                   _loss = nothing, _LOSS = nothing, _stats = nothing,
                   loss_ = nothing, LOSS_ = nothing, stats_ = nothing,
                   iter = nothing, step = 0, maxiter = 0, ITER = nothing,
@@ -54,25 +66,30 @@ function callback(p, io = stdout;
         ""
     end
 
+    # log iter
     if !isnothing(ITER) & !isnothing(iter)
         push!(ITER, iter)
     end
 
+    # log training loss
     _l = if !isnothing(_loss)
-        _l = _loss(p)
+        _l = _loss(p, st)[1]
         !isnothing(_LOSS) && push!(_LOSS, _l)
         _l
     else
         nothing
     end
 
+    # log test loss
     l_ = if !isnothing(loss_)
-        l_ = loss_(p)
+        l_ = loss_(p, st)[1]
         !isnothing(LOSS_) && push!(LOSS_, l_)
         l_
     else
         nothing
     end
+
+    isnothing(io) && return
 
     if !isnothing(_l)
         str *= string("TRAIN LOSS: ", round(_l, digits=8), " ")
@@ -85,35 +102,57 @@ function callback(p, io = stdout;
     println(io, str)
 
     if !isnothing(io)
-        !isnothing(_stats) && print(io, "TRAIN STATS: ", _stats(p)[end])
-        !isnothing(stats_) && print(io, "TEST  STATS: ", stats_(p)[end])
+        if !isnothing(_stats)
+            println(io, "### TRAIN STATS ###")
+            _stats(p, st)
+            println(io, "#=================#")
+        end
+        if !isnothing(stats_) 
+            println(io, "### TEST  STATS ###")
+            stats_(p, st)
+            println(io, "#=================#")
+        end
     end
 
     return
 end
 
-""" training """
-function train(loss, p, maxiter; opt = Optimisers.Adam(), cb = nothing)
+"""
+    train
+
+Train parameters `p` to minimize `loss` using optimization strategy `opt`.
+
+# Arguments
+- Loss signature: `loss(p, st) -> y, st`
+- Callback signature: `cb(p, st iter, maxiter) -> nothing` 
+"""
+function train(loss, p, st, maxiter; opt = Optimisers.Adam(), cb = nothing)
+
+    function grad(p, st)
+        loss2 = Base.Fix2(loss, st)
+        (l, st), pb = Zygote.pullback(loss2, p)
+        gr = pb((one.(l), nothing))[1]
+
+        l, gr, st
+    end
+
+    # print stats
+    !isnothing(cb) && cb(p, st, 0, maxiter)
 
     # dry run
-    l, pb = Zygote.pullback(loss, p)
-    gr = pb(one.(l))[1]
-
-    !isnothing(cb) && cb(p, 0, maxiter)
+    grad(p, st)
 
     # init optimizer
     opt_st = Optimisers.setup(opt, p)
 
     for iter in 1:maxiter
-        l, pb = Zygote.pullback(loss, p)
-        gr = pb(one.(l))[1]
-
+        _, gr, st = grad(p, st)
         opt_st, p = Optimisers.update(opt_st, p, gr)
 
-        !isnothing(cb) && cb(p, iter, maxiter)
+        !isnothing(cb) && cb(p, st, iter, maxiter)
     end
 
-    p
+    p, st
 end
 
 function plot_training(ITER, _LOSS, LOSS_)
@@ -139,17 +178,15 @@ function plot_training(ITER, _LOSS, LOSS_)
 end
 
 """ visualize """
-function visualize(V, test, train, model, p; nsamples = 5)
-
-    x, = points(V)[1]
-
-    _x, _y = test
-    x_, y_ = train
-
-    _ŷ = model(p, _x)
-    ŷ_ = model(p, x_)
+function visualize(V, _data, data_, NN, p, st; nsamples = 5)
 
     x, = points(V)
+
+    _x, _y = _data
+    x_, y_ = data_
+
+    _ŷ = NN(_x, p, st)[1]
+    ŷ_ = NN(x_, p, st)[1]
 
     N, K = size(_y)
 
@@ -185,16 +222,13 @@ function visualize(V, test, train, model, p; nsamples = 5)
         plot!(p0_, x, ŷ__; kw_pred...)
     end
 
-    _r2 = round(rsquare(_ŷ, _y), digits = 6)
-    r2_ = round(rsquare(ŷ_, y_), digits = 6)
-
-    println("TRAINING R2: $_r2")
-    println("TESTING  R2: $r2_")
+    _R2 = round(rsquare(_ŷ, _y), digits = 6)
+    R2_ = round(rsquare(ŷ_, y_), digits = 6)
 
     kw = (; legend = false, xlabel = "u(x) (data)", ylabel = "û(x) (pred)", aspect_ratio = :equal)
 
-    _p1 = plot(; title = "Training R² = $_r2", kw...)
-    p1_ = plot(; title = "Testing R² = $r2_", kw...)
+    _p1 = plot(; title = "Training R² = $_R2", kw...)
+    p1_ = plot(; title = "Testing R² = $R2_", kw...)
 
     scatter!(_p1, vec(_ŷ), vec(_y), ms = 2)
     scatter!(p1_, vec(ŷ_), vec(y_), ms = 2)
@@ -208,11 +242,11 @@ function visualize(V, test, train, model, p; nsamples = 5)
 end
 
 """
-    mse(ytrue, ypred)
+    mse(ypred, ytrue)
 
 Mean squared error
 """
-mse(ypred, ytrue) = sum((ytrue - ypred).^2) / length(ytrue)
+mse(ypred, ytrue) = sum(abs2, ytrue - ypred) / length(ytrue)
 
 """
     rsquare(ypred, ytrue) -> 1 - MSE(ytrue, ypred) / var(yture)
@@ -226,8 +260,8 @@ function rsquare(ypred, ytrue)
     ytrue = vec(ytrue)
 
     mean = sum(ytrue) / length(ytrue)
-    MSE  = sum((ytrue - ypred).^2) # sum of squares of residuals
-    VAR  = sum((ytrue .- mean).^2) # sum of squares of data
+    MSE  = sum(abs2, ytrue - ypred) # sum of squares of residuals
+    VAR  = sum(abs2, ytrue .- mean) # sum of squares of data
 
     rsq =  1 - MSE / (VAR + eps(eltype(ypred)))
 

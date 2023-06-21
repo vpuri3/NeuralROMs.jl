@@ -73,8 +73,31 @@ function (l::Atten)(x::AbstractVecOrMat, ps, st::NamedTuple)
     return y, st
 end
 
+function OperatorLayer(in_dims, out_dims, modes;
+                       transform = nothing, activation = identity,
+                      )
+
+    conv = OperatorConv()
+    lin = Dense(in_dims, out_dims; use_bias = false)
+
+    Chain(
+        Lux.Parallel(sum, lin, conv),
+        Lux.WrappedFunction(activation)
+    )
+end
+
 """
 Neural Operator layer
+
+accept data in shape (C, X1, ..., Xd, B)
+
+for FFT, permutedims to (X1, ..., Xd, C, B)
+
+put plan_rfft in st (based on batch size).
+reuse plan in layer application.
+generate new plan if size mismatch
+
+FNOLayer = Parallel(sum, OperatorConv, Dense(w,w; use_bias = false)) ∘ σ
 """
 # struct FNOLayer{I, V, F} <: Lux.AbstractExplicitLayer
 #     in_dims::I

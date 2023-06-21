@@ -28,7 +28,9 @@ export
        Diag,
 
        # training
+       # model_stats,
        model_setup,
+       # model_setup,
        callback,
        train,
        plot_training,
