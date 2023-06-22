@@ -144,6 +144,9 @@ end
 function Lux.initialparameters(rng::Random.AbstractRNG, l::OperatorConv)
     scale = one(Float32) # / (l.in_dims * l.out_dims)
 
+    # TODO - innitialize as W_re, W_imag if eltype(Transform) isreal
+    #        so eltype(params) is always real
+    # TODO - create AbstractTransform interface
     (;
      W = scale * l.init(rng, ComplexF32, l.out_dims, l.in_dims, prod(l.modes)),
     )
@@ -165,7 +168,7 @@ function (l::OperatorConv{D})(x::AbstractArray, p, st::NamedTuple) where{D}
     # transform
     # F1 = l.transform(x_perm, 1:D)
     # x̂ = F1 * x_perm   # [K1...Kd, Ci, B]
-    x̂ = l.transform[1](Zygote.hook(real, x_perm), 1:D)
+    x̂ = l.transform[1](x_perm, 1:D)
 
     # truncate
     x̂_tr = view(x̂, map(d -> 1:d, l.modes)..., :, :)     # [M1...Md, Ci, B]
@@ -182,12 +185,16 @@ function (l::OperatorConv{D})(x::AbstractArray, p, st::NamedTuple) where{D}
     # inverse transform
     # F2 = l.transform(x_perm, 1:D)
     # y_perm = F2 \ ŷ
-    y_perm = l.transform[2](ŷ, size(x_perm, 1), 1:D) |> real
+    y_perm = l.transform[2](ŷ, size(x_perm, 1), 1:D)
 
     # unpermute
     y = permutedims(y_perm, (D+1, 1:D..., D+2)) # [Co, N1...Nd, B] <- [N1...Nd, Co, B]
 
     return y, st
+end
+
+function (l::OperatorConv{D})((x, z)::Tuple, p, st::NamedTuple) where{D}
+
 end
 
 """
@@ -201,6 +208,7 @@ struct FusionLayer
     layer2
     connection
 end
+
 function lin_nonlin((x_ln, x_nl), p, st)
 
     # linear
