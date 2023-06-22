@@ -44,7 +44,7 @@ function train_model(
 
     # get model parameters with rng
     p, st = Lux.setup(rng, NN)
-    p = p |> ComponentArray
+    # p = p |> ComponentArray # not nice for real + complex
 
     # print stats
     cb(p, st)
@@ -225,9 +225,9 @@ function optimize(loss, p, st, maxiter; opt = Optimisers.Adam(), cb = nothing)
     function grad(p, st)
         loss2 = Base.Fix2(loss, st)
         (l, st), pb = Zygote.pullback(loss2, p)
-        gr = pb((one.(l), nothing))[1]
+        g = pb((one.(l), nothing))[1]
 
-        l, gr, st
+        l, g, st
     end
 
     # print stats
@@ -240,8 +240,8 @@ function optimize(loss, p, st, maxiter; opt = Optimisers.Adam(), cb = nothing)
     opt_st = Optimisers.setup(opt, p)
 
     for iter in 1:maxiter
-        _, gr, st = grad(p, st)
-        opt_st, p = Optimisers.update(opt_st, p, gr)
+        _, g, st = grad(p, st)
+        opt_st, p = Optimisers.update(opt_st, p, g)
 
         !isnothing(cb) && cb(p, st, iter, maxiter)
     end

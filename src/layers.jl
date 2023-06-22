@@ -130,7 +130,7 @@ function Lux.initialparameters(rng::Random.AbstractRNG, l::OperatorConv)
     scale = one(Float32) # / (l.in_dims * l.out_dims)
 
     (;
-     W = scale * l.init(rng, l.out_dims, l.in_dims, prod(l.modes)),
+     W = scale * l.init(rng, ComplexF32, l.out_dims, l.in_dims, prod(l.modes)),
     )
 end
 
@@ -167,7 +167,7 @@ function (l::OperatorConv{D})(x::AbstractArray, p, st::NamedTuple) where{D}
     # inverse transform
     # F2 = l.transform(x_perm, 1:D)
     # y_perm = F2 \ ŷ
-    y_perm = l.transform[2](ŷ, size(x_perm, 1), 1:D)
+    y_perm = l.transform[2](ŷ, size(x_perm, 1), 1:D) |> real
 
     # unpermute
     y = permutedims(y_perm, (D+1, 1:D..., D+2)) # [Co, N1...Nd, B] <- [N1...Nd, Co, B]
