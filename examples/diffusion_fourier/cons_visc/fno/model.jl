@@ -85,8 +85,10 @@ o = size(_data[2], 1) # out channels
 
 # linear
 NN = Lux.Chain(
+
     # lifting
     Lux.Dense(c , w),
+
     # operator layer
     OperatorKernel(w, w, m),
 

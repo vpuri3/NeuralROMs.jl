@@ -97,6 +97,18 @@ Neural Operator convolution layer
 
 accept data in shape (C, X1, ..., Xd, B)
 
+TODO - Extend this to accept two inputs (optionally)
+For example if you have linear dependence on `f`, and nonlinear on `ν`,
+then
+
+```
+ν -> lifting -> OpKernel (nl) -> ... -> OpKernel -> project (lin) -> out
+                                           /|\
+                                            |
+                                            f
+```
+where OpKernel(ν, f) will perform something like `ν̂' * W * f̂` in
+fourier space.
 """
 struct OperatorConv{D, F, I} <: Lux.AbstractExplicitLayer
     in_dims::Int
