@@ -78,24 +78,28 @@ _V, _data = datagen(rng, V, K, ν0) # train
 V_, data_ = datagen(rng, V, K, ν0) # test
 
 # model
-w = 32 # width
+w = 2     # width
 m = (32,) # modes
 c = size(_data[1], 1) # in  channels
 o = size(_data[2], 1) # out channels
 
 # linear
-NN = Lux.Chain(
 
-    # lifting
-    Lux.Dense(c , w),
+# NN = Lux.Chain(
+#
+#     # lifting
+#     Lux.Dense(c , w),
+#
+#     # operator layer
+#     OperatorKernel(w, w, m),
+#
+#     # projection
+#     # Lux.Dense(w , w),
+#     Lux.Dense(w , o),
+# )
 
-    # operator layer
-    OperatorKernel(w, w, m),
-
-    # projection
-    Lux.Dense(w , w),
-    Lux.Dense(w , o),
-)
+# NN = OperatorKernel(c, o, m)
+NN = OperatorConv(c, o, m)
 
 opts = Optimisers.Adam.((1f-5, 1f-1, 1f-2, 1f-3,))
 maxiters  = E .* (0.05, 0.05, 0.70, 0.20) .|> Int

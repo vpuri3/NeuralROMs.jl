@@ -23,8 +23,8 @@ is equal to `length(V)`.
 function train_model(
     rng::Random.AbstractRNG,
     NN::Lux.AbstractExplicitLayer,
-    _data::NTuple{2},
-    data_::NTuple{2},
+    _data::NTuple{2, Any},
+    data_::NTuple{2, Any},
     V::Spaces.AbstractSpace;
     opts::NTuple{N} = (Optimisers.Adam(),),
     maxiters::NTuple{N} = (1000,),
@@ -275,8 +275,8 @@ $SIGNATURES
 
 """
 function visualize(V::Spaces.AbstractSpace{<:Any, 1},
-    _data::NTuple{2},
-    data_::NTuple{2},
+    _data::NTuple{2, Any},
+    data_::NTuple{2, Any},
     NN::Lux.AbstractExplicitLayer,
     p,
     st;

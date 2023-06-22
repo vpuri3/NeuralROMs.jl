@@ -76,6 +76,23 @@ end
 """
 $SIGNATURES
 
+accept data in shape (C, X1, ..., Xd, B)
+
+TODO - Extend this to accept two inputs (optionally)
+For example if you have linear dependence on `f`, and nonlinear on `ν`,
+then
+
+```
+ν -> lifting -> OpKernel (nl) -> ... -> OpKernel -> project (lin) -> out
+                                           /|\
+                                            |
+                                           forc
+```
+
+where OpKernel(ν, f) will perform something like `ν̂' * W * f̂` in
+fourier space.
+
+options: Bilinear, Branch/ Parallel, PairwiseFusion
 """
 function OperatorKernel(in_dims::Int, out_dims::Int, modes::NTuple{D, Int};
     activation = identity,
@@ -95,20 +112,6 @@ end
 """
 Neural Operator convolution layer
 
-accept data in shape (C, X1, ..., Xd, B)
-
-TODO - Extend this to accept two inputs (optionally)
-For example if you have linear dependence on `f`, and nonlinear on `ν`,
-then
-
-```
-ν -> lifting -> OpKernel (nl) -> ... -> OpKernel -> project (lin) -> out
-                                           /|\
-                                            |
-                                            f
-```
-where OpKernel(ν, f) will perform something like `ν̂' * W * f̂` in
-fourier space.
 """
 struct OperatorConv{D, F, I} <: Lux.AbstractExplicitLayer
     in_dims::Int
@@ -186,4 +189,32 @@ function (l::OperatorConv{D})(x::AbstractArray, p, st::NamedTuple) where{D}
 
     return y, st
 end
+
+"""
+$SIGNATURES
+
+make subtype of Lux.AbstractExplicitContainerLayer
+Basically PairwiseFusionLayer where connection is also a layer
+"""
+struct FusionLayer
+    layer1
+    layer2
+    connection
+end
+function lin_nonlin((x_ln, x_nl), p, st)
+
+    # linear
+    y_ln, st_ln = NN_ln(x_ln, p.ln, st.ln)
+
+    # nonlinear
+    y_nl, st_nl = NN_nl(x_nl, p.nl, st.nl)
+
+    # connection
+    y, st_cnn = NN_lin((y_ln, y_nl), p.cnn, st.cnn)
+
+    st = (; ln = st_ln, nl = st_nl, cnn = st_cnn)
+
+    y, st
+end
+
 #
