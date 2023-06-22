@@ -83,14 +83,15 @@ m = (32,) # modes
 c = size(_data[1], 1) # in  channels
 o = size(_data[2], 1) # out channels
 
+# linear
 NN = Lux.Chain(
     # lifting
     Lux.Dense(c , w),
     # operator layer
-    OperatorKernel(w, w, m; activation = Lux.tanh_fast),
+    OperatorKernel(w, w, m),
 
     # projection
-    Lux.Dense(w , w, tanh),
+    Lux.Dense(w , w),
     Lux.Dense(w , o),
 )
 
