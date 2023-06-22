@@ -56,6 +56,7 @@ export
 
        # OpKernelBilinear,
        OpConvBilinear,
+       linear_nonlinear,
 
        # training
        train_model,

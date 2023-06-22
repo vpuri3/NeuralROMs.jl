@@ -5,8 +5,8 @@ $SIGNATURES
 # Arguments
 - `V`: function space
 - `NN`: Lux neural network
-- `_data`: training data as `(x, y)`
-- `data_`: testing  data as `(x, y)`
+- `_data`: training data as `(x, y)`. `x` may be an AbstractArray or a tuple of arrays
+- `data_`: testing data (same requirement as `_data)
 
 Data arrays, `x`, `y` must be `AbstractMatrix`, or `AbstractArray{T,3}`.
 In the former case, the dimensions are assumed to be `(points, batch)`,
@@ -33,6 +33,11 @@ function train_model(
     name = "model",
     io::IO = stdout,
 ) where{N}
+
+    for data in (_data, data_)
+        @assert data[1] isa AbstractArray || data[1] isa NTuple{2, AbstractArray}
+        @assert data[2] isa AbstractArray
+    end
 
     @assert length(opts) == length(maxiters)
 
