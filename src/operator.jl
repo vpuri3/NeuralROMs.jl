@@ -53,8 +53,10 @@ x1 → linear → y1 ↘
 x2 → nonlin → y2 ↗
 ```
 
+returns NN accepting `(x, p, t)`
+
 """
-function linear_nonlinear_model(linear, nonlinear, bilinear, project)
+function linear_nonlinear(linear, nonlinear, bilinear, project = NoOpLayer())
 
     Chain(
         Parallel(nothing, linear, nonlinear),
@@ -69,6 +71,11 @@ end
 
 """
 Neural Operator convolution layer
+
+# TODO `OpConv` design consierations
+- create AbstractTransform interface
+- innitialize params W_re, W_imag if eltype(Transform) isn't isreal
+so that eltype(params) is always real
 
 """
 struct OpConv{D, F, I} <: Lux.AbstractExplicitLayer
@@ -100,10 +107,12 @@ function OpConv(ch_in::Int, ch_out::Int, modes::NTuple{D, Int};
 end
 
 function Lux.initialparameters(rng::Random.AbstractRNG, l::OpConv)
-    scale = one(Float32) / (l.ch_in * l.ch_out)
+
+    dims  = (l.ch_in, l.ch_out, prod(l.modes))
+    scale = one(Float32) # / (l.ch_in * l.ch_out)
 
     (;
-     W = scale * l.init(rng, ComplexF32, l.ch_in, l.ch_out, prod(l.modes)),
+     W = scale * l.init(rng, ComplexF32, dims...),
     )
 end
 
@@ -112,15 +121,6 @@ Lux.parameterlength(l::OpConv) = prod(l.modes) * l.ch_in * l.ch_out
 Lux.statelength(::OpConv) = 0
 
 function (l::OpConv{D})(x::AbstractArray, p, st::NamedTuple) where{D}
-
-    # TODO `OpConv` design consierations
-    # - create AbstractTransform interface
-    # - innitialize params W_re, W_imag if eltype(Transform) isn't isreal
-    #        so that eltype(params) is always real
-
-    # TODO `OpConv` performance considerations
-    # - try permutedims and use NNlib.batched_mul
-    # - put fft plan in `st`. generate new if !(FFTW.assert_applicable(F, u))
 
     @assert D == ndims(x) - 2
     @assert size(x, 1) == l.ch_in
@@ -173,10 +173,12 @@ function OpConvBilinear(ch_in1::Int, ch_in2::Int, ch_out::Int,
 end
 
 function Lux.initialparameters(rng::Random.AbstractRNG, l::OpConvBilinear)
-    scale = one(Float32) / (l.ch_in * l.ch_out)
+
+    dims  = (l.ch_in1, l.ch_in2, l.ch_out, prod(l.modes))
+    scale = one(Float32) # / (l.ch_in1 * l.ch_in2 * l.ch_out)
 
     (;
-     W = scale * l.init(rng, ComplexF32, l.ch_in1, l.ch_in2, prod(l.modes)),
+     W = scale * l.init(rng, ComplexF32, dims...),
     )
 end
 
@@ -190,7 +192,7 @@ Extend OpConv to accept two inputs
 Like Lux.Bilinear in modal space
 
 """
-function (l::OpConvBilinear{D})((x, y)::NTuple{2,AbstractArray}, p, st::NamedTuple) where{D}
+function (l::OpConvBilinear{D})((x, y)::NTuple{2, AbstractArray}, p, st::NamedTuple) where{D}
 
     @assert ndims(x) == ndims(y)
     @assert D == ndims(x) - 2
@@ -200,14 +202,14 @@ function (l::OpConvBilinear{D})((x, y)::NTuple{2,AbstractArray}, p, st::NamedTup
 
     Ns = size(x)[2:D+1] # transform dimensions
 
-    # permute, transform, truncate
+    # transform, truncate
     x̂_tr, Ks = __opconv(x, l.transform, l.modes)
     ŷ_tr, Ks = __opconv(y, l.transform, l.modes)
 
     # apply weight
     ẑ_tr = opconv_wt(x̂_tr, ŷ_tr, p.W)
 
-    # pad, inv-transform, un-permute
+    # pad, inv-transform
     z = opconv__(ẑ_tr, l.transform, l.modes, Ks, Ns)
 
     return z, st
@@ -289,9 +291,22 @@ function opconv_wt(x, y, W)
 
     D = ndims(x) - 2
 
-    modes = size(x)[1:D]
-    Co, Ci = size(W)[1:2]
+    modes = size(x)[2:D+1]
+    C1, C2, Co = size(W)[1:3]
     B = size(x)[end]
 
+    @assert size(x, 1) == C1
+    @assert size(y, 1) == C2
+    @assert size(y)[end] == B
+
+    # reshape
+    X = reshape(x, (C1, prod(modes), B)) # [C1, M, B]
+    Y = reshape(y, (C2, prod(modes), B)) # [C2, M, B]
+
+    # apply weight to get [Co, M, B]
+    @tullio Z[co, m, b] := X[c1, m, b] * W[c1, c2, co, m] * Y[c2, m, b]
+
+    # un-reshape
+    reshape(Z, (Co, modes..., B))
 end
 #
