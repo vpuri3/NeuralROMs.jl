@@ -8,9 +8,11 @@ using FourierSpaces: linspace
 
 # ML Stack
 using Lux
-using Zygote
 using Optimisers
-using ComponentArrays
+
+# autodiff
+using Zygote
+using ChainRulesCore
 
 using Random
 using LinearAlgebra
@@ -22,6 +24,13 @@ using Colors
 # serialization
 using BSON
 
+# misc
+using FFTW
+using NNlib
+using Tullio
+using ComponentArrays
+
+include("utils.jl")
 include("layers.jl")
 include("train.jl")
 
@@ -32,6 +41,8 @@ export
        # layers
        Atten,
        Diag,
+       OperatorKernel,
+       OperatorConv,
 
        # training
        train_model,
