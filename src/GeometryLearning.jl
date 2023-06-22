@@ -31,8 +31,12 @@ using Tullio
 using ComponentArrays
 
 include("utils.jl")
-include("layers.jl")
 include("train.jl")
+
+include("layers.jl")
+
+include("transform.jl")
+include("operator.jl")
 
 export
        # utils
@@ -41,14 +45,24 @@ export
        # layers
        Atten,
        Diag,
-       OperatorKernel,
-       OperatorConv,
+
+       # transforms
+       FourierTransform,
+       CosineTransform,
+
+       # operator layers
+       OpKernel,
+       OpConv,
+
+       # OpKernelBilinear,
+       OpConvBilinear,
 
        # training
        train_model,
        model_setup,
        callback,
        optimize,
+
        plot_training,
        visualize,
        mse,

@@ -91,15 +91,15 @@ o = size(_data[2], 1) # out channels
 #     Lux.Dense(c , w),
 #
 #     # operator layer
-#     OperatorKernel(w, w, m),
+#     OpKernel(w, w, m),
 #
 #     # projection
 #     # Lux.Dense(w , w),
 #     Lux.Dense(w , o),
 # )
 
-# NN = OperatorKernel(c, o, m)
-NN = OperatorConv(c, o, m)
+# NN = OpKernel(c, o, m)
+NN = OpConv(c, o, m)
 
 opts = Optimisers.Adam.((1f-5, 1f-1, 1f-2, 1f-3,))
 maxiters  = E .* (0.05, 0.05, 0.70, 0.20) .|> Int
