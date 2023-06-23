@@ -48,18 +48,21 @@ $SIGNATURES
 if you have linear dependence on `x1`, and nonlinear on `x2`, then
 
 ```
-x1 → linear → y1 ↘
+x1 → nonlin → y1 ↘
                   bilinear → project → z
-x2 → nonlin → y2 ↗
+x2 → linear → y2 ↗
 ```
 
-returns NN accepting `(x, p, t)`
+# Arguments
+- Call `nonlin` as `nonlin(x1, p, st)`
+- Call `linear` as `linear(x2, p, st)`
+- Call `bilin`  as `bilin((y1, y2), p, st)`
 
 """
-function linear_nonlinear(linear, nonlinear, bilinear, project = NoOpLayer())
+function linear_nonlinear(nonlinear, linear, bilinear, project = NoOpLayer())
 
     Chain(
-        Parallel(nothing, linear, nonlinear),
+        Parallel(nothing, nonlinear, linear),
         bilinear,
         project,
     )
