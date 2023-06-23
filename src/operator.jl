@@ -34,7 +34,7 @@ function OpKernelBilinear(ch_in1::Int, ch_in2::Int, ch_out::Int,
 
     conv = OpConvBilinear(ch_in1, ch_in2, ch_out, modes; transform, init)
     # lin  = Bilinear((ch_in1, ch_in2) => ch_out; init_weight = init, use_bias = false)
-    lin  = Bilinear((ch_in1, ch_in2) => ch_out; init_weight = init)
+    lin  = Bilinear((ch_in1, ch_in2) => ch_out; init_weight = init) # doesnt accept abstractarray
 
     Chain(
         Lux.Parallel(.+, lin, conv),
@@ -175,7 +175,7 @@ end
 function Lux.initialparameters(rng::Random.AbstractRNG, l::OpConvBilinear)
 
     dims  = (l.ch_in1, l.ch_in2, l.ch_out, prod(l.modes))
-    scale = one(Float32) # / (l.ch_in1 * l.ch_in2 * l.ch_out)
+    scale = one(Float32) / (l.ch_in1 * l.ch_in2 * l.ch_out)
 
     (;
      W = scale * l.init(rng, ComplexF32, dims...),
