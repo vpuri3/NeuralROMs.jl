@@ -29,6 +29,7 @@ using FFTW
 using NNlib
 using Tullio
 using ComponentArrays
+using Setfield: @set!
 
 include("utils.jl")
 include("train.jl")

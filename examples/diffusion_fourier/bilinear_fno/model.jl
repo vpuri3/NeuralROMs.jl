@@ -75,7 +75,7 @@ end
 N  = 128    # problem size
 K1 = 50     # X-samples
 K2 = 50     # X-samples
-E  = 100  # epochs
+E  = 200  # epochs
 
 rng = Random.default_rng()
 Random.seed!(rng, 917)
@@ -103,16 +103,13 @@ V_, data_ = datagen(rng, N, K1, K2) # test
 _data = split_data(_data)
 data_ = split_data(data_)
 
-w = 32    # width
+w = 16    # width
 m = (16,) # modes
 c1 = size(_data[1][1], 1) # in  channel 1
 c2 = size(_data[1][2], 1) # in  channel 2
 o  = size(_data[2]   , 1) # out channel
 
-nonlin = Chain(Dense(c1, w, Lux.tanh_fast), OpKernel(w, w, m, Lux.tanh_fast))
-linear = Dense(c2, w)
-bilin  = OpConvBilinear(w, w, o, m)
-
+# nonlin = Chain(Dense(c1, w, tanh), OpKernel(w, w, m, Lux.tanh_fast))
 nonlin = Chain(Dense(c1, w, tanh), Dense(w, w, tanh))
 linear = Dense(c2, w)
 bilin  = OpConvBilinear(w, w, o, m)
@@ -120,15 +117,14 @@ NN = linear_nonlinear(nonlin, linear, bilin)
 
 # NN  = OpConvBilinear(c1, c2, o, m) # very poor initial guess
 
-# opts = Optimisers.Adam.((1f-5, 1f-1, 1f-2, 1f-3, 1f-4,))
-# maxiters  = E .* (0.05, 0.05, 0.10, 0.50, 0.30) .|> Int
-
-opts = Optimisers.Adam.((1f-5, 1f-4, 1f-4, 1f-5, 1f-6,))
-maxiters  = E .* (0.05, 0.05, 0.10, 0.50, 0.30) .|> Int
+opt = Optimisers.Adam()
+learning_rates = (1f-6, 1f-4, 1f-4, 1f-5, 1f-6,)
+maxiters  = E .* (0.05, 0.05, 0.10, 0.50, 0.30,) .|> Int
 
 dir = @__DIR__
 
-p, st, STATS = train_model(rng, NN, _data, data_, _V; opts, maxiters, dir, cbstep = 1)
+p, st, STATS = train_model(rng, NN, _data, data_, _V, opt;
+                           learning_rates, maxiters, dir, cbstep = 1)
 
 nothing
 #

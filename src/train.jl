@@ -25,9 +25,10 @@ function train_model(
     NN::Lux.AbstractExplicitLayer,
     _data::NTuple{2, Any},
     data_::NTuple{2, Any},
-    V::Spaces.AbstractSpace;
-    opts::NTuple{N} = (Optimisers.Adam(),),
-    maxiters::NTuple{N} = (1000,),
+    V::Spaces.AbstractSpace,
+    opt::Optimisers.AbstractRule = Optimisers.Adam();
+    learning_rates::NTuple{N, Float32} = (1f-3,),
+    maxiters::NTuple{N} = (100,),
     cbstep::Int = 10,
     dir = "",
     name = "model",
@@ -39,41 +40,53 @@ function train_model(
         @assert data[2] isa AbstractArray
     end
 
-    @assert length(opts) == length(maxiters)
+    @assert length(learning_rates) == length(maxiters)
 
     # utility functions
     _model, _loss, _stats = model_setup(NN, _data)
     model_, loss_, stats_ = model_setup(NN, data_)
 
-    cb = (p, st) -> callback(p, st; _loss, _stats, loss_, stats_)
+    # analysis callback
+    CB = (p, st; io = io) -> callback(p, st; io, _loss, _stats, loss_, stats_)
 
     # get model parameters with rng
     p, st = Lux.setup(rng, NN)
     # p = p |> ComponentArray # not nice for real + complex
 
     # print stats
-    cb(p, st)
+    CB(p, st)
 
     # training callback
     ITER  = Int[]
     _LOSS = Float32[]
     LOSS_ = Float32[]
 
-    CB = (p, st, iter, maxiter) -> callback(p, st;
-                                            _loss, _LOSS, loss_, LOSS_,
-                                            ITER, iter, maxiter, step = cbstep)
+    cb = (p, st, iter, maxiter; io = io) -> callback(p, st; io,
+                                                _loss, _LOSS, loss_, LOSS_,
+                                                ITER, iter, maxiter, step = cbstep)
 
-    for i in eachindex(opts)
-        opt = opts[i]
+        println(io, "#======================#")
+        println(io, "Starting Trainig Loop")
+        println(io, "Optimizer: $opt")
+        println(io, "#======================#")
+
+    # set up optimizer
+    opt_st = nothing
+
+    for i in eachindex(maxiters)
+        learning_rate = learning_rates[i]
         maxiter = maxiters[i]
 
-        println("#======================#")
-        println("OPT: $opt, ITERS: $maxiter")
-        println("#======================#")
+        @set! opt.eta = learning_rate
 
-        @time p, st = optimize(_loss, p, st, maxiter; opt, cb = CB)
+        println(io, "#======================#")
+        println(io, "Learning Rate: $learning_rate, ITERS: $maxiter")
+        println(io, "#======================#")
 
-        cb(p, st)
+        # do not update opt_st
+        @time p, st, _ = optimize(_loss, p, st, maxiter; opt, opt_st, cb)
+
+        CB(p, st)
     end
 
     # visualization
@@ -202,14 +215,16 @@ function callback(p, st; io::Union{Nothing, IO} = stdout,
 
     if !isnothing(io)
         if !isnothing(_stats)
-            println(io, "### TRAIN STATS ###")
+            println(io, "#======================#")
+            println(io, "TRAIN STATS")
             _stats(p, st)
-            println(io, "#=================#")
+            println(io, "#======================#")
         end
         if !isnothing(stats_) 
-            println(io, "### TEST  STATS ###")
+            println(io, "#======================#")
+            println(io, "TEST  STATS")
             stats_(p, st)
-            println(io, "#=================#")
+            println(io, "#======================#")
         end
     end
 
@@ -225,7 +240,11 @@ Train parameters `p` to minimize `loss` using optimization strategy `opt`.
 - Loss signature: `loss(p, st) -> y, st`
 - Callback signature: `cb(p, st iter, maxiter) -> nothing` 
 """
-function optimize(loss, p, st, maxiter; opt = Optimisers.Adam(), cb = nothing)
+function optimize(loss, p, st, maxiter;
+    opt = Optimisers.Adam(),
+    opt_st = nothing,
+    cb = nothing
+)
 
     function grad(p, st)
         loss2 = Base.Fix2(loss, st)
@@ -242,7 +261,7 @@ function optimize(loss, p, st, maxiter; opt = Optimisers.Adam(), cb = nothing)
     grad(p, st)
 
     # init optimizer
-    opt_st = Optimisers.setup(opt, p)
+    opt_st = isnothing(opt_st) ? Optimisers.setup(opt, p) : opt_st
 
     for iter in 1:maxiter
         _, g, st = grad(p, st)
@@ -251,7 +270,7 @@ function optimize(loss, p, st, maxiter; opt = Optimisers.Adam(), cb = nothing)
         !isnothing(cb) && cb(p, st, iter, maxiter)
     end
 
-    p, st
+    p, st, opt_st
 end
 
 function plot_training(ITER, _LOSS, LOSS_)
@@ -267,10 +286,13 @@ function plot_training(ITER, _LOSS, LOSS_)
     end
 
     plt = plot(title = "Training Plot", yaxis = :log,
-               xlabel = "Epochs", ylabel = "Loss (MSE)")
+               xlabel = "Epochs", ylabel = "Loss (MSE)",
+               ylims = (minimum(_LOSS) / 2, 10^2))
 
     plot!(plt, ITER, _LOSS, w = 2.0, c = :green, label = "Train Dataset")
     plot!(plt, ITER, LOSS_, w = 2.0, c = :red, label = "Test Dataset")
+
+    vline!(plt, ITER[z[2:end]], c = :black, w = 2.0, label = nothing)
 
     plt
 end
