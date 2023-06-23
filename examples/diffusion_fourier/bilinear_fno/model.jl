@@ -93,7 +93,7 @@ V_, data_ = datagen(rng, N, K1, K2) # test
 # c = size(_data[1], 1) # in  channels
 # o = size(_data[2], 1) # out channels
 # # NN = Lux.Chain( Lux.Dense(c , w), OpKernel(w, w, m), Lux.Dense(w , o)) # FNO
-# # NN = OpKernel(c, o, m; activation = Lux.tanh_fast)
+# # NN = OpKernel(c, o, m, Lux.tanh_fast)
 # NN = OpConv(c, o, m)
 
 ###
@@ -105,18 +105,15 @@ data_ = split_data(data_)
 
 w = 32    # width
 m = (16,) # modes
-c1 = size(_data[1][1], 1) # in  channels
-c2 = size(_data[1][2], 1) # in  channels
-o  = size(_data[2]   , 1) # out channels
+c1 = size(_data[1][1], 1) # in  channel 1
+c2 = size(_data[1][2], 1) # in  channel 2
+o  = size(_data[2]   , 1) # out channel
 
 linear = Dense(c2, w)
-nonlin = Chain(
-    Dense(c1, w, Lux.tanh_fast),
-    OpKernel(w, w, m; activation = Lux.tanh_fast),
-)
+nonlin = Chain(Dense(c1, w, Lux.tanh_fast), OpKernel(w, w, m, Lux.tanh_fast))
+bilin  = OpConvBilinear(w, w, o, m)
 
-bilinear = OpConvBilinear(w, w, o, m)
-NN = linear_nonlinear(linear, nonlin, bilinear)
+NN = linear_nonlinear(linear, nonlin, bilin)
 
 opts = Optimisers.Adam.((1f-5, 1f-1, 1f-2, 1f-3, 1f-4,))
 maxiters  = E .* (0.05, 0.05, 0.10, 0.50, 0.30) .|> Int

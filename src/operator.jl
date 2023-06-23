@@ -10,8 +10,8 @@ $SIGNATURES
 accept data in shape (C, X1, ..., Xd, B)
 
 """
-function OpKernel(ch_in::Int, ch_out::Int, modes::NTuple{D, Int};
-    activation = identity,
+function OpKernel(ch_in::Int, ch_out::Int, modes::NTuple{D, Int},
+    activation = identity;
     transform = nothing,
     init = Lux.glorot_uniform,
 ) where{D}
@@ -27,8 +27,8 @@ function OpKernel(ch_in::Int, ch_out::Int, modes::NTuple{D, Int};
 end
 
 function OpKernelBilinear(ch_in1::Int, ch_in2::Int, ch_out::Int,
-    modes::NTuple{D, Int};
-    activation = identity,
+    modes::NTuple{D, Int},
+    activation = identity;
     init = Lux.glorot_uniform,
 ) where{D}
 

@@ -84,7 +84,7 @@ m = (16,) # modes
 c = size(_data[1], 1) # in  channels
 o = size(_data[2], 1) # out channels
 # NN = Lux.Chain( Lux.Dense(c , w), OpKernel(w, w, m), Lux.Dense(w , o)) # FNO
-# NN = OpKernel(c, o, m; activation = Lux.tanh_fast)
+# NN = OpKernel(c, o, m)
 NN = OpConv(c, o, m)
 
 opts = Optimisers.Adam.((1f-5, 1f-1, 1f-2, 1f-3, 1f-4,))
