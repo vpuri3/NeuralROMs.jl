@@ -83,8 +83,8 @@ function train_model(
         println(io, "Learning Rate: $learning_rate, ITERS: $maxiter")
         println(io, "#======================#")
 
-        # do not update opt_st
-        @time p, st, _ = optimize(_loss, p, st, maxiter; opt, opt_st, cb)
+        # @time p, st, _ = optimize(_loss, p, st, maxiter; opt, opt_st, cb)
+        @time p, st, opt_st = optimize(_loss, p, st, maxiter; opt, opt_st, cb)
 
         CB(p, st)
     end
@@ -287,7 +287,7 @@ function plot_training(ITER, _LOSS, LOSS_)
 
     plt = plot(title = "Training Plot", yaxis = :log,
                xlabel = "Epochs", ylabel = "Loss (MSE)",
-               ylims = (minimum(_LOSS) / 2, 10^2))
+               ylims = (minimum(_LOSS) / 2, maximum(LOSS_) * 2))
 
     plot!(plt, ITER, _LOSS, w = 2.0, c = :green, label = "Train Dataset")
     plot!(plt, ITER, LOSS_, w = 2.0, c = :red, label = "Test Dataset")
