@@ -85,7 +85,7 @@ o = size(_data[2], 1)
 NN = Lux.Chain(
     # BatchNorm(c), # assumes channels (ndims(x)-1)th dim, not first.
     Lux.Dense(c , w, tanh),
-    Lux.Dense(w , w, tanh),
+    Lux.Dense(w , w, tanh), # Lux.BatchNorm(w),
     Lux.Dense(w , w, tanh) |> Base.Fix2(SkipConnection, +),
     Lux.Dense(w , w, tanh) |> Base.Fix2(SkipConnection, +),
     Lux.Dense(w , w, tanh) |> Base.Fix2(SkipConnection, +),

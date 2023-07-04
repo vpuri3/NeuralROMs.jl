@@ -2,7 +2,7 @@
 """
 Learn solution to diffusion equation
 
-    -∇⋅ν₀∇ u = f
+    -∇⋅ν∇u = f
 
 for constant ν₀, and variable f
 
@@ -119,10 +119,10 @@ NN = linear_nonlinear(nonlin, linear, bilin)
 # NN  = OpConvBilinear(c1, c2, o, m) # very poor initial guess
 
 opt = Optimisers.Adam()
-# learning_rates = (1f-6, 1f-4, 1f-4, 1f-5, 1f-6,)
-learning_rates = (1f-3, 1f-4, 1f-5, 1f-5, 1f-6,)
+# learning_rates = (1f-3, 1f-3, 1f-3, 1f-3, 1f-3,)
+learning_rates = (1f-3, 1f-3,)
 
-maxiters  = E .* (0.05, 0.05, 0.10, 0.50, 0.30,) .|> Int
+maxiters  = E .* (0.70, 0.30,) .|> Int
 
 dir = @__DIR__
 
