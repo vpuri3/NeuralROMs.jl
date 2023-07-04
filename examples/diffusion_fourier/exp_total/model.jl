@@ -24,55 +24,6 @@ using Plots, BSON
 include("../datagen.jl")
 
 """ data """
-#=
-function datagen(rng, N, K1, K2)
-
-    V = FourierSpace(N; domain = IntervalDomain(0, 2pi))
-    x = points(V)[1]
-    discr = Collocation()
-
-    ν = 1 .+  1 * rand(Float32, N, K1)
-    f = 0 .+ 20 * rand(Float32, N, K2)
-
-    ν = kron(ones(K2)', ν)
-    f = kron(f, ones(K1)')
-    x = kron(x, ones(K1 * K2)')
-
-    @assert size(f) == size(ν)
-
-    V = make_transform(V, f)
-    F = transformOp(V)
-
-    # rm high freq modes
-    Tr = truncationOp(V, (0.5,))
-    ν  = Tr * ν
-    f  = Tr * f
-
-    # true sol
-    A = diffusionOp(ν, V, discr)
-    u = A \ f
-
-    d0 = zeros(Float32, (3, N, K1 * K2))
-    d0[1, :, :] = ν
-    d0[2, :, :] = f
-    d0[3, :, :] = x
-    d1 = reshape(u, (1, N, K1 * K2))
-
-    data = (d0, d1)
-
-    V, data
-end
-
-function split_data(data)
-    x, y = data
-
-    x1 = view(x, [1,3], :, :) # ν, x
-    x2 = view(x, [2], :, :)   # f
-
-    ((x1, x2), y)
-end
-=#
-
 function combine_data(data)
     x, ν, f, u = data
 
@@ -127,19 +78,27 @@ V_, data_, _, _ = datagen(rng, N, K1, K2) # test
 ###
 # FNO model - works very well
 ###
+
 _data = combine_data(_data)
 data_ = combine_data(data_)
 
-w = 32    # width
-m = (16,) # modes
+w = 16    # width
+m = (32,) # modes
 c = size(_data[1], 1) # in  channels
 o = size(_data[2], 1) # out channels
 
 NN = Lux.Chain(
+    # lifting
     PermutedBatchNorm(c, 3),
-    Lux.Dense(c , w, Lux.tanh_fast),
+    Dense(c , w, Lux.tanh_fast),
+
+    # FNO
     OpKernel(w, w, m, Lux.tanh_fast),
-    Lux.Dense(w , o)
+    OpKernel(w, w, m, Lux.tanh_fast),
+
+    # projection
+    Dense(w, w, Lux.tanh_fast),
+    Dense(w , o)
 )
 
 ###
@@ -148,22 +107,20 @@ NN = Lux.Chain(
 
 # _data = split_data(_data)
 # data_ = split_data(data_)
-#
+
 # w = 16    # width
 # m = (32,) # modes
 # c1 = size(_data[1][1], 1) # in  channel 1
 # c2 = size(_data[1][2], 1) # in  channel 2
 # o  = size(_data[2]   , 1) # out channel
-#
+
 # # nonlin = OpKernel(c1, w, m, Lux.tanh_fast)
 # nonlin = Chain(Dense(c1, w, Lux.tanh_fast), OpKernel(w, w, m, Lux.tanh_fast))
 # # nonlin = Chain(Dense(c1, w, tanh), Dense(w, w, tanh))
 # linear = Dense(c2, w)
 # bilin  = OpConvBilinear(w, w, o, m)
-#
+
 # NN = linear_nonlinear(nonlin, linear, bilin)
-#
-# # NN  = OpConvBilinear(c1, c2, o, m) # very poor initial guess
 
 opt = Optimisers.Adam()
 learning_rates = (1f-1, 1f-2, 1f-3, 1f-4)
