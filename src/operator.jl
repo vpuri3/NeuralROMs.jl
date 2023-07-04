@@ -93,9 +93,9 @@ struct OpConv{D, F, I} <: Lux.AbstractExplicitLayer
             length(modes),
             typeof(transform),
             typeof(init),
-            }(
-              ch_in, ch_out, modes, transform, init,
-             )
+           }(
+             ch_in, ch_out, modes, transform, init,
+            )
     end
 end
 

@@ -46,6 +46,7 @@ export
        # layers
        Atten,
        Diag,
+       PermutedBatchNorm,
 
        # transforms
        FourierTransform,

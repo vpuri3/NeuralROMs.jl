@@ -33,6 +33,7 @@ function train_model(
     dir = "",
     name = "model",
     io::IO = stdout,
+    # loss = :MSE, # :RMSE
 ) where{N}
 
     for data in (_data, data_)
@@ -389,6 +390,20 @@ end
 Mean squared error
 """
 mse(y, ŷ) = sum(abs2, ŷ - y) / length(ŷ)
+
+"""
+    rel_mse(ypred, ytrue)
+
+relative mean square error
+"""
+function rel_mse(y, ŷ)
+    m = minimum(ŷ)
+
+    ŷ_rel = ŷ - (m - 1f0)
+    y_rel = y - (m - 1f0)
+
+    mse(y_rel, ŷ_rel)
+end
 
 """
     rsquare(ypred, ytrue) -> 1 - MSE(ytrue, ypred) / var(yture)
