@@ -25,8 +25,8 @@ include("../datagen.jl")
 
 # parameters
 N  = 128  # problem size
-K1 = 50   # ν-samples
-K2 = 50   # f-samples
+K1 = 25   # ν-samples
+K2 = 25   # f-samples
 E  = 200  # epochs
 
 rng = Random.default_rng()
