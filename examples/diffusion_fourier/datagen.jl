@@ -30,12 +30,10 @@ function datagen(rng, N, K1, K2)
     F1 = transformOp(V1)
     F2 = transformOp(V2)
 
-    # ν = 1 .+ 50 .^ rand(rng, Float32, N, K1)
-    ν = 1 .+  2 .^ rand(Float32, N, K1)
-    # ν = 1 .+  1 * rand(Float32, N, K1)
+    ν = 1 .+ 50 .^ rand(rng, Float32, N, K1)
+    # ν = 1 .+  32 .^ rand(Float32, N, K1)
     f = 0 .+ 400 * rand(rng, Float32, N, K2)
 
-    # ν = 1 .+  1 * rand(Float32, N, K1)
     # f = 0 .+ 20 * rand(Float32, N, K2)
 
     # truncation op
@@ -81,6 +79,42 @@ function datagen(rng, N, K1, K2)
     V, data0, data1, data2
 end
 
+function combine_data(data)
+    x, ν, f, u = data
+
+    N, K = size(x)
+
+    x1 = zeros(3, N, K) # x, ν, f
+    y  = zeros(1, N, K) # u
+
+    x1[1, :, :] = x
+    x1[2, :, :] = ν
+    x1[3, :, :] = f
+
+    y[1, :, :] = u
+
+    (x1, y)
+end
+
+function split_data(data)
+    x, ν, f, u = data
+
+    N, K = size(x)
+
+    x1 = zeros(2, N, K) # ν, x
+    x2 = zeros(1, N, K) # f
+    y  = zeros(1, N, K) # u
+
+    x1[1, :, :] = x
+    x1[2, :, :] = ν
+
+    x2[1, :, :] = f
+
+    y[1, :, :] = u
+
+    ((x1, x2), y)
+end
+
 #=
 N  = 128    # problem size
 K1 = 100     # X-samples
@@ -97,12 +131,38 @@ x0, ν0, f0, u0 = data0
 x1, ν1, f1, u1 = data1
 x2, ν2, f2, u2 = data2
 
-nplts = 10
+nplts = 5
+
+dir = @__DIR__
 
 x  = points(V)[1]
-I1 = rand(1:K1, nplts)
-p1 = plot(x, u1[:, I1], w = 2.0, legend = nothing)
-display(p1)
 
+I0 = rand(1:K0, nplts)
+p0 = plot(x, u0[:, I0], w = 2.0, legend = nothing, title = "u(ν, f)")
+png(p0, joinpath(dir, "plt_u0"))
+
+##########
+I1 = rand(1:K1, nplts)
+p1 = plot(x, u1[:, I1], w = 2.0, legend = nothing, title = "u(ν, f₀)")
+png(p1, joinpath(dir, "plt_u1"))
+
+p1 = plot(x, f1[:, I1], w = 2.0, legend = nothing, title = "f₀(x)")
+png(p1, joinpath(dir, "plt_f1"))
+
+p1 = plot(x, ν1[:, I1], w = 2.0, legend = nothing, title = "ν(x)")
+png(p1, joinpath(dir, "plt_nu1"))
+
+##########
+I2 = rand(1:K2, nplts)
+p2 = plot(x, u2[:, I2], w = 2.0, legend = nothing, title = "u(ν₀, f)")
+png(p2, joinpath(dir, "plt_u2"))
+
+p2 = plot(x, f2[:, I2], w = 2.0, legend = nothing, title = "f(x)")
+png(p2, joinpath(dir, "plt_f2"))
+
+p2 = plot(x, ν2[:, I2], w = 2.0, legend = nothing, title = "ν₀(x)")
+png(p2, joinpath(dir, "plt_nu2"))
+
+##########
 nothing
 =#

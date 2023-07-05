@@ -288,7 +288,7 @@ function plot_training(ITER, _LOSS, LOSS_)
 
     plt = plot(title = "Training Plot", yaxis = :log,
                xlabel = "Epochs", ylabel = "Loss (MSE)",
-               ylims = (minimum(_LOSS) / 2, maximum(LOSS_) * 2))
+               ylims = (minimum(_LOSS) / 10, maximum(LOSS_) * 10))
 
     plot!(plt, ITER, _LOSS, w = 2.0, c = :green, label = "Train Dataset")
     plot!(plt, ITER, LOSS_, w = 2.0, c = :red, label = "Test Dataset")
@@ -382,46 +382,5 @@ function visualize(V::Spaces.AbstractSpace{<:Any, 1},
     plot!(p1_, l_, l_, w = 4.0, c = :red)
 
     _p0, p0_, _p1, p1_
-end
-
-"""
-    mse(ypred, ytrue)
-
-Mean squared error
-"""
-mse(y, ŷ) = sum(abs2, ŷ - y) / length(ŷ)
-
-"""
-    rel_mse(ypred, ytrue)
-
-relative mean square error
-"""
-function rel_mse(y, ŷ)
-    m = minimum(ŷ)
-
-    ŷ_rel = ŷ - (m - 1f0)
-    y_rel = y - (m - 1f0)
-
-    mse(y_rel, ŷ_rel)
-end
-
-"""
-    rsquare(ypred, ytrue) -> 1 - MSE(ytrue, ypred) / var(yture)
-
-Calculuate r2 (coefficient of determination) score.
-"""
-function rsquare(y, ŷ)
-    @assert size(y) == size(ŷ)
-
-    y = vec(y)
-    ŷ = vec(ŷ)
-
-    ȳ = sum(ŷ) / length(ŷ)   # mean
-    MSE  = sum(abs2, ŷ  - y) # mse  (sum of squares of residuals)
-    VAR  = sum(abs2, ŷ .- ȳ) # var  (sum of squares of data)
-
-    rsq =  1 - MSE / (VAR + eps(eltype(y)))
-
-    return rsq
 end
 #

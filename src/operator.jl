@@ -16,12 +16,14 @@ function OpKernel(ch_in::Int, ch_out::Int, modes::NTuple{D, Int},
     init = Lux.glorot_uniform,
 ) where{D}
 
+    activation = fastify(activation)
+
     conv = OpConv(ch_in, ch_out, modes; transform, init)
-    # lin = Dense(ch_in, ch_out; use_bias = false, init_weight = init)
-    lin = Dense(ch_in, ch_out; init_weight = init)
+    # loc = Dense(ch_in, ch_out; use_bias = false, init_weight = init)
+    loc = Dense(ch_in, ch_out; init_weight = init)
 
     Chain(
-        Lux.Parallel(+, lin, conv),
+        Lux.Parallel(+, loc, conv),
         Lux.WrappedFunction(activation),
     )
 end
@@ -29,15 +31,17 @@ end
 function OpKernelBilinear(ch_in1::Int, ch_in2::Int, ch_out::Int,
     modes::NTuple{D, Int},
     activation = identity;
+    transform = nothing,
     init = Lux.glorot_uniform,
 ) where{D}
 
+    activation = fastify(activation)
+
     conv = OpConvBilinear(ch_in1, ch_in2, ch_out, modes; transform, init)
-    # lin  = Bilinear((ch_in1, ch_in2) => ch_out; init_weight = init, use_bias = false)
-    lin  = Bilinear((ch_in1, ch_in2) => ch_out; init_weight = init) # doesnt accept abstractarray
+    loc  = Bilinear((ch_in1, ch_in2) => ch_out; init_weight = init, use_bias = false)
 
     Chain(
-        Lux.Parallel(.+, lin, conv),
+        Lux.Parallel(.+, loc, conv),
         Lux.WrappedFunction(activation),
     )
 end

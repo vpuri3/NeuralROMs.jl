@@ -32,6 +32,7 @@ using ComponentArrays
 using Setfield: @set!
 
 include("utils.jl")
+include("metrics.jl")
 include("train.jl")
 
 include("layers.jl")
@@ -56,7 +57,7 @@ export
        OpKernel,
        OpConv,
 
-       # OpKernelBilinear,
+       OpKernelBilinear,
        OpConvBilinear,
        linear_nonlinear,
 

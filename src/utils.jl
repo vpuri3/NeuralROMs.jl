@@ -1,4 +1,8 @@
 #
+fastify(act) = act
+fastify(::typeof(tanh)) = Lux.tanh_fast
+fastify(::typeof(Lux.sigmoid)) = Lux.sigmoid_fast
+
 function pad_array(x::AbstractArray{<:Any, N}, dims::NTuple{N}) where{N}
     X = similar(x, dims)
     fill!(X, 0)

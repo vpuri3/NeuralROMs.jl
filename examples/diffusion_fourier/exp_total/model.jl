@@ -23,113 +23,177 @@ using Plots, BSON
 
 include("../datagen.jl")
 
-""" data """
-function combine_data(data)
-    x, ν, f, u = data
-
-    N, K = size(x)
-
-    x1 = zeros(3, N, K) # x, ν, f
-    y  = zeros(1, N, K) # u
-
-    x1[1, :, :] = x
-    x1[2, :, :] = ν
-    x1[3, :, :] = f
-
-    y[1, :, :] = u
-
-    (x1, y)
-end
-
-function split_data(data)
-    x, ν, f, u = data
-
-    N, K = size(x)
-
-    x1 = zeros(2, N, K) # ν, x
-    x2 = zeros(1, N, K) # f
-    y  = zeros(1, N, K) # u
-
-    x1[1, :, :] = x
-    x1[2, :, :] = ν
-
-    x2[1, :, :] = f
-
-    y[1, :, :] = u
-
-    ((x1, x2), y)
-end
-
-""" main program """
-
 # parameters
 N  = 128  # problem size
-K1 = 50   # X-samples
-K2 = 50   # X-samples
+K1 = 50   # ν-samples
+K2 = 50   # f-samples
 E  = 200  # epochs
 
 rng = Random.default_rng()
-Random.seed!(rng, 917)
+Random.seed!(rng, 123)
 
 # datagen
 _V, _data, _, _ = datagen(rng, N, K1, K2) # train
 V_, data_, _, _ = datagen(rng, N, K1, K2) # test
 
 ###
-# FNO model - works very well
+# nonlienar FNO model
 ###
-
-_data = combine_data(_data)
-data_ = combine_data(data_)
+if false
+            
+__data = combine_data(_data)
+data__ = combine_data(data_)
 
 w = 16    # width
 m = (32,) # modes
-c = size(_data[1], 1) # in  channels
-o = size(_data[2], 1) # out channels
+c = size(__data[1], 1) # in  channels
+o = size(__data[2], 1) # out channels
 
 NN = Lux.Chain(
-    # lifting
     PermutedBatchNorm(c, 3),
-    Dense(c , w, Lux.tanh_fast),
-
-    # FNO
-    OpKernel(w, w, m, Lux.tanh_fast),
-    OpKernel(w, w, m, Lux.tanh_fast),
-
-    # projection
-    Dense(w, w, Lux.tanh_fast),
+    Dense(c , w, tanh),
+    OpKernel(w, w, m, tanh),
+    OpKernel(w, w, m, tanh),
     Dense(w , o)
 )
 
+opt = Optimisers.Adam()
+learning_rates = (1f-2, 1f-3, 1f-3)
+maxiters  = E .* (0.10, 0.20, 0.70) .|> Int
+dir = joinpath(@__DIR__, "exp_FNO_nonlin")
+mkpath(dir)
+
+FNO_nonlin = train_model(rng, NN, __data, data__, _V, opt;
+                        learning_rates, maxiters, dir, cbstep = 1)
+
+end
+
 ###
-# Bilinear model
+# linear FNO model
 ###
 
-# _data = split_data(_data)
-# data_ = split_data(data_)
+if false
 
-# w = 16    # width
-# m = (32,) # modes
-# c1 = size(_data[1][1], 1) # in  channel 1
-# c2 = size(_data[1][2], 1) # in  channel 2
-# o  = size(_data[2]   , 1) # out channel
+__data = combine_data(_data)
+data__ = combine_data(data_)
 
-# # nonlin = OpKernel(c1, w, m, Lux.tanh_fast)
-# nonlin = Chain(Dense(c1, w, Lux.tanh_fast), OpKernel(w, w, m, Lux.tanh_fast))
-# # nonlin = Chain(Dense(c1, w, tanh), Dense(w, w, tanh))
-# linear = Dense(c2, w)
-# bilin  = OpConvBilinear(w, w, o, m)
+w = 16    # width
+m = (32,) # modes
+c = size(__data[1], 1) # in  channels
+o = size(__data[2], 1) # out channels
 
-# NN = linear_nonlinear(nonlin, linear, bilin)
+NN = Lux.Chain(
+    Dense(c , w),
+    OpKernel(w, w, m),
+    Dense(w , o)
+)
 
 opt = Optimisers.Adam()
-learning_rates = (1f-1, 1f-2, 1f-3, 1f-4)
-maxiters  = E .* (0.10, 0.20, 0.50, 0.20) .|> Int
+learning_rates = (1f-2, 1f-3, 1f-3)
+maxiters  = E .* (0.10, 0.20, 0.70) .|> Int
+dir = joinpath(@__DIR__, "exp_FNO_linear")
+mkpath(dir)
 
-dir = @__DIR__
+FNO_linear = train_model(rng, NN, __data, data__, _V, opt;
+                        learning_rates, maxiters, dir, cbstep = 1)
+end
 
-p, st, STATS = train_model(rng, NN, _data, data_, _V, opt;
+###
+# Bilinear (linear / nonlin) model
+###
+
+if false
+    
+__data = split_data(_data)
+data__ = split_data(data_)
+
+w1 = 16    # width nonlin
+w2 = 16    # width linear
+m = (32,) # modes
+c1 = size(__data[1][1], 1) # in  channel nonlin
+c2 = size(__data[1][2], 1) # in  channel linear
+o  = size(__data[2]   , 1) # out channel
+
+nonlin = Chain(PermutedBatchNorm(c1, 3), Dense(c1, w1, tanh), OpKernel(w1, w1, m, tanh))
+linear = Dense(c2, w2)
+bilin  = OpConvBilinear(w1, w2, o, m)
+# bilin  = OpKernelBilinear(w1, w2, o, m) # errors
+# bilin  = Bilinear((w1, w2) => o)
+
+NN = linear_nonlinear(nonlin, linear, bilin)
+
+opt = Optimisers.Adam()
+learning_rates = (1f-3,)
+maxiters  = E .* (1.00,) .|> Int
+dir = joinpath(@__DIR__, "exp_FNO_linear_nonlinear")
+mkpath(dir)
+
+FNO_linear_nonlinear = train_model(rng, NN, __data, data__, _V, opt;
                            learning_rates, maxiters, dir, cbstep = 1)
+
+end
+
+###
+# Bilinear (linear / linear) model
+###
+
+if false
+    
+__data = split_data(_data)
+data__ = split_data(data_)
+
+w1 = 16    # width nonlin
+w2 = 16    # width linear
+m = (32,) # modes
+c1 = size(__data[1][1], 1) # in  channel nonlin
+c2 = size(__data[1][2], 1) # in  channel linear
+o  = size(__data[2]   , 1) # out channel
+
+nonlin = Chain(PermutedBatchNorm(c1, 3), Dense(c1, w1), OpKernel(w1, w1, m))
+linear = Dense(c2, w2)
+bilin  = OpConvBilinear(w1, w2, o, m)
+
+NN = linear_nonlinear(nonlin, linear, bilin)
+
+opt = Optimisers.Adam()
+learning_rates = (1f-3,)
+maxiters  = E .* (1.00,) .|> Int
+dir = joinpath(@__DIR__, "exp_FNO_linear_linear")
+mkpath(dir)
+
+FNO_linear_linear = train_model(rng, NN, __data, data__, _V, opt;
+                           learning_rates, maxiters, dir, cbstep = 1)
+
+end
+################
+# Visualization
+################
+
+if true
+    ST_linear = FNO_linear[3]
+    ST_nonlin = FNO_nonlin[3]
+    ST_linear_linear = FNO_linear_linear[3]
+    ST_linear_nonlinear = FNO_linear_nonlinear[3]
+
+    plt = plot(title = "Training Plot", yaxis = :log,
+               xlabel = "Epochs", ylabel = "Loss (MSE)",
+               ylims = (10^-2, 10^5),
+    )
+
+    plot!(plt, ST_linear[1], ST_linear[2], w = 2.0, c = :green, s = :solid, label = "FNO linear")
+    plot!(plt, ST_linear[1], ST_linear[3], w = 2.0, c = :green, s = :dash, label = nothing)
+
+    plot!(plt, ST_nonlin[1], ST_nonlin[2], w = 2.0, c = :black, s = :solid, label = "FNO nonlin")
+    plot!(plt, ST_nonlin[1], ST_nonlin[3], w = 2.0, c = :black, s = :dash, label = nothing)
+
+    plot!(plt, ST_linear_linear[1], ST_linear_linear[2], w = 2.0, c = :blue, s = :solid, label = "Bilinear FNO (linear, linear)")
+    plot!(plt, ST_linear_linear[1], ST_linear_linear[3], w = 2.0, c = :blue, s = :dash, label = nothing)
+
+    plot!(plt, ST_linear_nonlinear[1], ST_linear_nonlinear[2], w = 2.0, c = :red, s = :solid, label = "Bilinear FNO (linear, nonlinear)")
+    plot!(plt, ST_linear_nonlinear[1], ST_linear_nonlinear[3], w = 2.0, c = :red, s = :dash, label = nothing)
+
+    png(plt, joinpath(@__DIR__, "plt_train"))
+end
 
 nothing
 #
