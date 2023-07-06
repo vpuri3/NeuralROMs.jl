@@ -101,10 +101,11 @@ function train_model(
     png(plts[4],   joinpath(dir, "plt_r2_test"))
 
     model = NN, p, st
+    STATS = ITER, _LOSS, LOSS_
  
     BSON.@save joinpath(dir, "$name.bson") _data data_ model
 
-    p, st, (ITER, _LOSS, LOSS_)
+    model, STATS
 end
 
 """

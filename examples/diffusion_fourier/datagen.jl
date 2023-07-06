@@ -31,10 +31,7 @@ function datagen(rng, N, K1, K2)
     F2 = transformOp(V2)
 
     ν = 1 .+ 50 .^ rand(rng, Float32, N, K1)
-    # ν = 1 .+  32 .^ rand(Float32, N, K1)
     f = 0 .+ 400 * rand(rng, Float32, N, K2)
-
-    # f = 0 .+ 20 * rand(Float32, N, K2)
 
     # truncation op
     # X0 = truncationOp(V0, (0.50,))

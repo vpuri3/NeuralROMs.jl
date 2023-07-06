@@ -39,7 +39,7 @@ V_, data_, _, _ = datagen(rng, N, K1, K2) # test
 ###
 # nonlienar FNO model
 ###
-if false
+if true
             
 __data = combine_data(_data)
 data__ = combine_data(data_)
@@ -72,7 +72,7 @@ end
 # linear FNO model
 ###
 
-if false
+if true
 
 __data = combine_data(_data)
 data__ = combine_data(data_)
@@ -102,7 +102,7 @@ end
 # Bilinear (linear / nonlin) model
 ###
 
-if false
+if true
     
 __data = split_data(_data)
 data__ = split_data(data_)
@@ -137,7 +137,7 @@ end
 # Bilinear (linear / linear) model
 ###
 
-if false
+if true
     
 __data = split_data(_data)
 data__ = split_data(data_)
@@ -170,10 +170,10 @@ end
 ################
 
 if true
-    ST_linear = FNO_linear[3]
-    ST_nonlin = FNO_nonlin[3]
-    ST_linear_linear = FNO_linear_linear[3]
-    ST_linear_nonlinear = FNO_linear_nonlinear[3]
+    ST_linear = FNO_linear[2]
+    ST_nonlin = FNO_nonlin[2]
+    ST_linear_linear = FNO_linear_linear[2]
+    ST_linear_nonlinear = FNO_linear_nonlinear[2]
 
     plt = plot(title = "Training Plot", yaxis = :log,
                xlabel = "Epochs", ylabel = "Loss (MSE)",
@@ -192,7 +192,7 @@ if true
     plot!(plt, ST_linear_nonlinear[1], ST_linear_nonlinear[2], w = 2.0, c = :red, s = :solid, label = "Bilinear FNO (linear, nonlinear)")
     plot!(plt, ST_linear_nonlinear[1], ST_linear_nonlinear[3], w = 2.0, c = :red, s = :dash, label = nothing)
 
-    png(plt, joinpath(@__DIR__, "plt_train"))
+    png(plt, joinpath(@__DIR__, "plt_train_bilin"))
 end
 
 nothing
