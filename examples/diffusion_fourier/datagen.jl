@@ -30,8 +30,15 @@ function datagen(rng, N, K1, K2)
     F1 = transformOp(V1)
     F2 = transformOp(V2)
 
-    ν = 1 .+ 50 .^ rand(rng, Float32, N, K1)
-    f = 0 .+ 400 * rand(rng, Float32, N, K2)
+    ν = 10 .+ 100 .^ rand(rng, Float32, N, K1)
+    # f = 0 .+ 1000 * rand(rng, Float32, N, K2)
+    f = 0 .+ 1000 .^ rand(rng, Float32, N, K2)
+
+    # scale1 = 2 * rand(rng, 1, K1)
+    # scale2 = 1 * rand(rng, 1, K2)
+    #
+    # ν = ν .* scale1
+    # f = f .* scale2
 
     # truncation op
     # X0 = truncationOp(V0, (0.50,))
@@ -41,6 +48,8 @@ function datagen(rng, N, K1, K2)
     # rm high freq modes
     ν = X1 * ν
     f = X2 * f
+
+    @assert all(>(1f0), ν)
 
     # get arrays
     ν0 = kron(ν, ones(K2)')
@@ -119,7 +128,7 @@ K2 = 100     # X-samples
 K0 = K1 * K2
 
 rng = Random.default_rng()
-Random.seed!(rng, 123)
+Random.seed!(rng, 127)
 
 # datagen
 V, data0, data1, data2 = datagen(rng, N, K1, K2)
@@ -135,16 +144,16 @@ dir = @__DIR__
 x  = points(V)[1]
 
 I0 = rand(1:K0, nplts)
-p0 = plot(x, u0[:, I0], w = 2.0, legend = nothing, title = "u(ν, f)")
-png(p0, joinpath(dir, "plt_u0"))
+# p0 = plot(x, u0[:, I0], w = 2.0, legend = nothing, title = "u(ν, f)")
+# png(p0, joinpath(dir, "plt_u0"))
 
 ##########
 I1 = rand(1:K1, nplts)
 p1 = plot(x, u1[:, I1], w = 2.0, legend = nothing, title = "u(ν, f₀)")
 png(p1, joinpath(dir, "plt_u1"))
 
-p1 = plot(x, f1[:, I1], w = 2.0, legend = nothing, title = "f₀(x)")
-png(p1, joinpath(dir, "plt_f1"))
+# p1 = plot(x, f1[:, I1], w = 2.0, legend = nothing, title = "f₀(x)")
+# png(p1, joinpath(dir, "plt_f1"))
 
 p1 = plot(x, ν1[:, I1], w = 2.0, legend = nothing, title = "ν(x)")
 png(p1, joinpath(dir, "plt_nu1"))
@@ -157,8 +166,8 @@ png(p2, joinpath(dir, "plt_u2"))
 p2 = plot(x, f2[:, I2], w = 2.0, legend = nothing, title = "f(x)")
 png(p2, joinpath(dir, "plt_f2"))
 
-p2 = plot(x, ν2[:, I2], w = 2.0, legend = nothing, title = "ν₀(x)")
-png(p2, joinpath(dir, "plt_nu2"))
+# p2 = plot(x, ν2[:, I2], w = 2.0, legend = nothing, title = "ν₀(x)")
+# png(p2, joinpath(dir, "plt_nu2"))
 
 ##########
 nothing
