@@ -6,10 +6,11 @@ Generate solution data to diffusion equation
 for changing ν, f
 """
 
-using FourierSpaces, LinearAlgebra, Plots, Random
+using FourierSpaces, LinearAlgebra
+using NNlib
 
 """ data """
-function datagen(rng, N, K1, K2)
+function datagen(rng, N, K1, K2; mode = :train)
 
     K0 = K1 * K2
 
@@ -31,7 +32,6 @@ function datagen(rng, N, K1, K2)
     F2 = transformOp(V2)
 
     ν = 10 .+ 100 .^ rand(rng, Float32, N, K1)
-    # f = 0 .+ 1000 * rand(rng, Float32, N, K2)
     f = 0 .+ 1000 .^ rand(rng, Float32, N, K2)
 
     # scale1 = 2 * rand(rng, 1, K1)
@@ -60,6 +60,26 @@ function datagen(rng, N, K1, K2)
     f1 = kron(f[:, 1], ones(K1)')
     f2 = f
 
+    @assert f1[:, 1] == f1[:, end]
+    @assert ν2[:, 1] == ν2[:, end]
+
+    # arbitrarily scale forcing
+    # TODO -
+    # - multiple scales of motion
+    # - diagonal scaling
+    # - establish superposition (experiment)
+    # - translation
+    # - frequency (performance on unit scaled high freq, low freq data)
+    if mode == :test
+        fscale0 = 10 * rand(rng, 1, K0)
+        fscale1 = 10 * rand(rng, 1, K1)
+        fscale2 = 10 * rand(rng, 1, K2)
+
+        f0 = f0 .* fscale0 .* exp.(sin.(x0 .- 10 * rand(N, K0)) .* 5 .* rand(N, K0))
+        f1 = f1 .* fscale1 .* exp.(sin.(x1 .- 10 * rand(N, K1)) .* 5 .* rand(N, K1))
+        f2 = f2 .* fscale2 .* exp.(sin.(x2 .- 10 * rand(N, K2)) .* 5 .* rand(N, K2))
+    end
+
     # diffusion op
     discr = Collocation()
     A0 = diffusionOp(ν0, V0, discr)
@@ -78,9 +98,6 @@ function datagen(rng, N, K1, K2)
     @assert all(isequal((N, K0)), size.(data0))
     @assert all(isequal((N, K1)), size.(data1))
     @assert all(isequal((N, K2)), size.(data2))
-
-    @assert f1[:, 1] == f1[:, end]
-    @assert ν2[:, 1] == ν2[:, end]
 
     V, data0, data1, data2
 end
@@ -122,6 +139,8 @@ function split_data(data)
 end
 
 #=
+using Plots, Random
+
 N  = 128    # problem size
 K1 = 100     # X-samples
 K2 = 100     # X-samples
@@ -130,7 +149,6 @@ K0 = K1 * K2
 rng = Random.default_rng()
 Random.seed!(rng, 127)
 
-# datagen
 V, data0, data1, data2 = datagen(rng, N, K1, K2)
 
 x0, ν0, f0, u0 = data0
@@ -144,16 +162,16 @@ dir = @__DIR__
 x  = points(V)[1]
 
 I0 = rand(1:K0, nplts)
-# p0 = plot(x, u0[:, I0], w = 2.0, legend = nothing, title = "u(ν, f)")
-# png(p0, joinpath(dir, "plt_u0"))
+p0 = plot(x, u0[:, I0], w = 2.0, legend = nothing, title = "u(ν, f)")
+png(p0, joinpath(dir, "plt_u0"))
 
 ##########
 I1 = rand(1:K1, nplts)
 p1 = plot(x, u1[:, I1], w = 2.0, legend = nothing, title = "u(ν, f₀)")
 png(p1, joinpath(dir, "plt_u1"))
 
-# p1 = plot(x, f1[:, I1], w = 2.0, legend = nothing, title = "f₀(x)")
-# png(p1, joinpath(dir, "plt_f1"))
+p1 = plot(x, f1[:, I1], w = 2.0, legend = nothing, title = "f₀(x)")
+png(p1, joinpath(dir, "plt_f1"))
 
 p1 = plot(x, ν1[:, I1], w = 2.0, legend = nothing, title = "ν(x)")
 png(p1, joinpath(dir, "plt_nu1"))
@@ -166,8 +184,8 @@ png(p2, joinpath(dir, "plt_u2"))
 p2 = plot(x, f2[:, I2], w = 2.0, legend = nothing, title = "f(x)")
 png(p2, joinpath(dir, "plt_f2"))
 
-# p2 = plot(x, ν2[:, I2], w = 2.0, legend = nothing, title = "ν₀(x)")
-# png(p2, joinpath(dir, "plt_nu2"))
+p2 = plot(x, ν2[:, I2], w = 2.0, legend = nothing, title = "ν₀(x)")
+png(p2, joinpath(dir, "plt_nu2"))
 
 ##########
 nothing

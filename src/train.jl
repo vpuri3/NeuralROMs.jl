@@ -32,9 +32,15 @@ function train_model(
     cbstep::Int = 10,
     dir = "",
     name = "model",
+    nsamples = 5,
     io::IO = stdout,
-    # loss = :MSE, # :RMSE
+    p = nothing,  # initial parameters
+    st = nothing, # initial state
+    lossfun = GeometryLearning.mse,
 ) where{N}
+
+    # make directory for saving model
+    mkpath(dir)
 
     for data in (_data, data_)
         @assert data[1] isa AbstractArray || data[1] isa NTuple{2, AbstractArray}
@@ -44,15 +50,20 @@ function train_model(
     @assert length(learning_rates) == length(maxiters)
 
     # utility functions
-    _model, _loss, _stats = model_setup(NN, _data)
-    model_, loss_, stats_ = model_setup(NN, data_)
+    _model, _loss, _stats = model_setup(NN, _data; lossfun)
+    model_, loss_, stats_ = model_setup(NN, data_; lossfun)
 
     # analysis callback
     CB = (p, st; io = io) -> callback(p, st; io, _loss, _stats, loss_, stats_)
 
+    # if initial parameters not provided,
     # get model parameters with rng
-    p, st = Lux.setup(rng, NN)
-    # p = p |> ComponentArray # not nice for real + complex
+
+    _p, _st = Lux.setup(rng, NN)
+    # _p = _p |> ComponentArray # not nice for real + complex
+
+    p  = isnothing(p ) ? _p  : p
+    st = isnothing(st) ? _st : st
 
     # print stats
     CB(p, st)
@@ -84,15 +95,19 @@ function train_model(
         println(io, "Learning Rate: $learning_rate, ITERS: $maxiter")
         println(io, "#======================#")
 
-        # @time p, st, _ = optimize(_loss, p, st, maxiter; opt, opt_st, cb)
         @time p, st, opt_st = optimize(_loss, p, st, maxiter; opt, opt_st, cb)
 
         CB(p, st)
     end
 
+    # save statistics
+    statsfile = open(joinpath(dir, "statistics.txt"), "w")
+    CB(p, st; io = statsfile)
+    close(statsfile)
+
     # visualization
     plt_train = plot_training(ITER, _LOSS, LOSS_)
-    plts = visualize(V, _data, data_, NN, p, st)
+    plts = visualize(V, _data, data_, NN, p, st; nsamples)
 
     png(plt_train, joinpath(dir, "plt_training"))
     png(plts[1],   joinpath(dir, "plt_traj_train"))
@@ -112,7 +127,7 @@ end
 $SIGNATURES
 
 """
-function model_setup(NN::Lux.AbstractExplicitLayer, data)
+function model_setup(NN::Lux.AbstractExplicitLayer, data; lossfun = mse)
 
     x, ŷ = data
 
@@ -123,7 +138,7 @@ function model_setup(NN::Lux.AbstractExplicitLayer, data)
     function loss(p, st)
         y = NN(x, p, st)[1]
 
-        mse(y, ŷ), st
+        lossfun(y, ŷ), st
     end
 
     function stats(p, st; io::Union{Nothing, IO} = stdout)
@@ -219,13 +234,13 @@ function callback(p, st; io::Union{Nothing, IO} = stdout,
         if !isnothing(_stats)
             println(io, "#======================#")
             println(io, "TRAIN STATS")
-            _stats(p, st)
+            _stats(p, st; io)
             println(io, "#======================#")
         end
         if !isnothing(stats_) 
             println(io, "#======================#")
             println(io, "TEST  STATS")
-            stats_(p, st)
+            stats_(p, st; io)
             println(io, "#======================#")
         end
     end
@@ -369,13 +384,13 @@ function visualize(V::Spaces.AbstractSpace{<:Any, 1},
     _R2 = round(rsquare(_y, _ŷ), digits = 8)
     R2_ = round(rsquare(y_, ŷ_), digits = 8)
 
-    kw = (; legend = false, xlabel = "u(x) (data)", ylabel = "û(x) (pred)", aspect_ratio = :equal)
+    kw = (; legend = false, xlabel = "Data", ylabel = "Prediction", aspect_ratio = :equal)
 
     _p1 = plot(; title = "Training R² = $_R2", kw...)
     p1_ = plot(; title = "Testing R² = $R2_", kw...)
 
-    scatter!(_p1, vec(_y), vec(_ŷ), ms = 2)
-    scatter!(p1_, vec(y_), vec(ŷ_), ms = 2)
+    scatter!(_p1, vec(_y), vec(_ŷ), ms = 1)
+    scatter!(p1_, vec(y_), vec(ŷ_), ms = 1)
 
     _l = [extrema(_y)...]
     l_ = [extrema(y_)...]
