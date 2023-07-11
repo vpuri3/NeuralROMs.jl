@@ -66,9 +66,7 @@ function datagen(rng, N, K1, K2; mode = :train)
     # arbitrarily scale forcing
     # TODO -
     # - multiple scales of motion
-    # - diagonal scaling
     # - establish superposition (experiment)
-    # - translation
     # - frequency (performance on unit scaled high freq, low freq data)
     if mode == :test
         fscale0 = 10 * rand(rng, 1, K0)
