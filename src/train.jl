@@ -37,6 +37,7 @@ function train_model(
     p = nothing,  # initial parameters
     st = nothing, # initial state
     lossfun = GeometryLearning.mse,
+    device = Lux.cpu,
 ) where{N}
 
     # make directory for saving model
@@ -46,6 +47,8 @@ function train_model(
         @assert data[1] isa AbstractArray || data[1] isa NTuple{2, AbstractArray}
         @assert data[2] isa AbstractArray
     end
+
+    _data, data_ = (_data, data_) |> device
 
     @assert length(learning_rates) == length(maxiters)
 
@@ -64,6 +67,8 @@ function train_model(
 
     p  = isnothing(p ) ? _p  : p
     st = isnothing(st) ? _st : st
+
+    p, st = (p, st) |> device
 
     # print stats
     CB(p, st)
@@ -106,6 +111,9 @@ function train_model(
     close(statsfile)
 
     # visualization
+    p, st = (p, st) |> Lux.cpu
+    _data, data_ = (_data, data_) |> Lux.cpu
+
     plt_train = plot_training(ITER, _LOSS, LOSS_)
     plts = visualize(V, _data, data_, NN, p, st; nsamples)
 
