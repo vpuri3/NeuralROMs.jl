@@ -1,54 +1,54 @@
-
-using BenchmarkTools, FFTW, LinearAlgebra
-
-FFTW.set_num_threads(32)
-BLAS.set_num_threads(8)
-
-#=
+#
+using BenchmarkTools, FFTW, CUDA
 
 C  = 16
 Ns = 128, 128
-K  = 100
+K  = 64
 
-x = rand(C, Ns..., K);
-y = rand(Ns..., C, K)
+# x = rand(C, Ns..., K) |> cu
+# dx = 2:3
 
-dx = 2:3
+x = rand(Ns..., K, C) |> cu
+y = rand(Ns..., C, K) |> cu
+
+dx = 1:2
 dy = 1:2
 
 println("### FFT dim $dx ###")
 _x = rfft(x, dx)
-@btime rfft($x, $dx)
-@btime irfft($_x, $Ns[1], $dx)
+@btime CUDA.@sync rfft($x, $dx)
+@btime CUDA.@sync irfft($_x, $Ns[1], $dx)
 
 println("### FFT dim $dy ###")
 _y = rfft(y, dy)
-@btime rfft($y, $dy)
-@btime irfft($_y, $Ns[1], $dy)
+@btime CUDA.@sync rfft($y, $dy)
+@btime CUDA.@sync irfft($_y, $Ns[1], $dy)
 
 println("### permutedims ###")
-@btime permutedims($x, (2, 3, 1, 4))
-@btime permutedims($y, (3, 1, 2, 4))
+perm_x = (4, 1, 2, 3)
+perm_y = (3, 1, 2, 4)
+@btime CUDA.@sync permutedims($x, $perm_x)
+@btime CUDA.@sync permutedims($y, $perm_y)
 
-=#
+# println("FFT on PermutedDimsArray")
+# @btime CUDA.@sync rfft(PermutedDimsArray($y, $perm_y), $dx) # very bad
 
 """
-Bringing FFT dimensions to the front is not advantageous
-
-```
-julia> include("examples/fft_perf.jl")
-### FFT dim 2:3 ###
-  61.609 ms (9 allocations: 203.13 MiB)
-  108.098 ms (13 allocations: 606.25 MiB)
+julia> include("examples/cuda_perf.jl")
 ### FFT dim 1:2 ###
-  56.772 ms (9 allocations: 203.13 MiB)
-  100.064 ms (13 allocations: 606.25 MiB)
+  1.149 ms (36 allocations: 1.73 KiB)
+  2.927 ms (37 allocations: 1.70 KiB)
+### FFT dim 1:2 ###
+  1.085 ms (36 allocations: 1.73 KiB)
+  1.782 ms (44 allocations: 2.03 KiB)
 ### permutedims ###
-  41.810 ms (3 allocations: 200.00 MiB)
-  25.929 ms (3 allocations: 200.00 MiB)
-```
+  2.941 ms (70 allocations: 4.03 KiB)
+  796.055 μs (24 allocations: 1.08 KiB)
 """
 
+nothing
+
+#=
 # linear transform with Tullio
 using NNlib, Tullio
 
@@ -58,23 +58,24 @@ B = 100
 
 X = rand(Ci, M, B)
 
-# W = rand(Co, Ci, M)
-# @btime @tullio Y[co, m, b] := W[co, ci, m] * X[ci, m, b]
+W = rand(Co, Ci, M)
+@btime @tullio Y[co, m, b] := W[co, ci, m] * X[ci, m, b] # current
 
 W = rand(Ci, Co, M)
 @btime @tullio Y[co, m, b] := W[ci, co, m] * X[ci, m, b] # winner
 
-# W = rand(Co, M, Ci)
-# @btime @tullio Y[co, m, b] := W[co, m, ci] * X[ci, m, b] # worst - do not run
+W = rand(Co, M, Ci)
+@btime @tullio Y[co, m, b] := W[co, m, ci] * X[ci, m, b]
 
-# W = rand(Ci, M, Co)
-# @btime @tullio Y[co, m, b] := W[ci, m, co] * X[ci, m, b]
+W = rand(Ci, M, Co)
+@btime @tullio Y[co, m, b] := W[ci, m, co] * X[ci, m, b]
 
-# W = rand(M, Co, Ci)
-# @btime @tullio Y[co, m, b] := W[m, co, ci] * X[ci, m, b]
+W = rand(M, Co, Ci)
+@btime @tullio Y[co, m, b] := W[m, co, ci] * X[ci, m, b]
 
-# W = rand(M, Ci, Co)
-# @btime @tullio Y[co, m, b] := W[m, ci, co] * X[ci, m, b]
+W = rand(M, Ci, Co)
+@btime @tullio Y[co, m, b] := W[m, ci, co] * X[ci, m, b]
+=#
 
 """
 ```
