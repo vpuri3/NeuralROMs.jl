@@ -1,6 +1,10 @@
 #
 using BenchmarkTools, FFTW, CUDA
 
+CUDA.allowscalar(false)
+
+if false
+
 C  = 16
 Ns = 128, 128
 K  = 64
@@ -33,6 +37,8 @@ perm_y = (3, 1, 2, 4)
 # println("FFT on PermutedDimsArray")
 # @btime CUDA.@sync rfft(PermutedDimsArray($y, $perm_y), $dx) # very bad
 
+end
+
 """
 julia> include("examples/cuda_perf.jl")
 ### FFT dim 1:2 ###
@@ -48,73 +54,39 @@ julia> include("examples/cuda_perf.jl")
 
 nothing
 
-#=
-# linear transform with Tullio
-using NNlib, Tullio
+using NNlib, Tullio, CUDA
+
+if true
 
 Ci, Co = 32, 64
 M = 1024
 B = 100
 
-X = rand(Ci, M, B)
+X = CUDA.rand(Ci, M, B)
+W = CUDA.rand(Co, Ci, M)
 
-W = rand(Co, Ci, M)
-@btime @tullio Y[co, m, b] := W[co, ci, m] * X[ci, m, b] # current
+W = reshape(W, (Co, Ci, M))
+@btime @tullio Y[co, m, b] := W[co, ci, m] * X[ci, m, b]
 
-W = rand(Ci, Co, M)
+W = reshape(W, (Ci, Co, M))
 @btime @tullio Y[co, m, b] := W[ci, co, m] * X[ci, m, b] # winner
 
-W = rand(Co, M, Ci)
-@btime @tullio Y[co, m, b] := W[co, m, ci] * X[ci, m, b]
+# W = reshape(W, (Co, M, Ci))
+# @btime @tullio Y[co, m, b] := W[co, m, ci] * X[ci, m, b] # worst - do not run
 
-W = rand(Ci, M, Co)
+W = reshape(W, (Ci, M, Co))
 @btime @tullio Y[co, m, b] := W[ci, m, co] * X[ci, m, b]
 
-W = rand(M, Co, Ci)
+W = reshape(W, (M, Co, Ci))
 @btime @tullio Y[co, m, b] := W[m, co, ci] * X[ci, m, b]
 
-W = rand(M, Ci, Co)
+W = reshape(W, (M, Ci, Co))
 @btime @tullio Y[co, m, b] := W[m, ci, co] * X[ci, m, b]
-=#
+
+end
 
 """
-```
-Ci, Co = 64, 32
-M = 1024
-B = 100
 
-julia> include("examples/fft_perf.jl")
-  19.883 ms (116 allocations: 25.01 MiB)
-  8.989 ms (116 allocations: 25.01 MiB)  # winner
-  43.560 ms (116 allocations: 25.01 MiB)
-  11.161 ms (116 allocations: 25.01 MiB)
-  67.615 ms (118 allocations: 25.01 MiB)
-  72.830 ms (116 allocations: 25.01 MiB)
-
-Ci, Co = 64, 32
-M = 1024
-B = 100
-
-julia> include("examples/fft_perf.jl")
-  39.987 ms (116 allocations: 50.01 MiB)
-  18.441 ms (116 allocations: 50.01 MiB)  # winner
-  109.079 ms (118 allocations: 50.01 MiB)
-  20.383 ms (116 allocations: 50.01 MiB)
-  130.341 ms (117 allocations: 50.01 MiB)
-  140.711 ms (117 allocations: 50.01 MiB)
-
-Ci, Co = 32, 64
-M = 1024
-B = 100
-
-julia> include("examples/fft_perf.jl")
-  19.794 ms (117 allocations: 50.01 MiB)
-  9.101 ms (116 allocations: 50.01 MiB)  # winner
-  47.273 ms (117 allocations: 50.01 MiB)
-  11.320 ms (116 allocations: 50.01 MiB)
-  64.177 ms (117 allocations: 50.01 MiB)
-  66.034 ms (116 allocations: 50.01 MiB)
-```
 """
 
 nothing

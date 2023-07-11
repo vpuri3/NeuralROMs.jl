@@ -2,7 +2,7 @@
 using BenchmarkTools, FFTW, LinearAlgebra
 
 FFTW.set_num_threads(32)
-BLAS.set_num_threads(8)
+BLAS.set_num_threads(16)
 
 #=
 
@@ -57,24 +57,25 @@ M = 1024
 B = 100
 
 X = rand(Ci, M, B)
+W = rand(Co, Ci, M)
 
-# W = rand(Co, Ci, M)
-# @btime @tullio Y[co, m, b] := W[co, ci, m] * X[ci, m, b]
+W = respahe(W, (Co, Ci, M))
+@btime @tullio Y[co, m, b] := W[co, ci, m] * X[ci, m, b]
 
-W = rand(Ci, Co, M)
+W = reshape(W, (Ci, Co, M))
 @btime @tullio Y[co, m, b] := W[ci, co, m] * X[ci, m, b] # winner
 
-# W = rand(Co, M, Ci)
-# @btime @tullio Y[co, m, b] := W[co, m, ci] * X[ci, m, b] # worst - do not run
+W = reshape(W, (Co, M, Ci))
+@btime @tullio Y[co, m, b] := W[co, m, ci] * X[ci, m, b] # worst - do not run
 
-# W = rand(Ci, M, Co)
-# @btime @tullio Y[co, m, b] := W[ci, m, co] * X[ci, m, b]
+W = reshape(W, (Ci, M, Co))
+@btime @tullio Y[co, m, b] := W[ci, m, co] * X[ci, m, b]
 
-# W = rand(M, Co, Ci)
-# @btime @tullio Y[co, m, b] := W[m, co, ci] * X[ci, m, b]
+W = reshape(W, (M, Co, Ci))
+@btime @tullio Y[co, m, b] := W[m, co, ci] * X[ci, m, b]
 
-# W = rand(M, Ci, Co)
-# @btime @tullio Y[co, m, b] := W[m, ci, co] * X[ci, m, b]
+W = reshape(W, (M, Ci, Co))
+@btime @tullio Y[co, m, b] := W[m, ci, co] * X[ci, m, b]
 
 """
 ```
