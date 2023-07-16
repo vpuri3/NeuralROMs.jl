@@ -39,7 +39,7 @@ include("../datagen.jl")
 N  = 128  # problem size
 K1 = 32   # ν-samples
 K2 = 32   # f-samples
-E  = 500  # epochs
+E  = 200  # epochs
 
 rng = Random.default_rng()
 Random.seed!(rng, 117)
@@ -47,9 +47,6 @@ Random.seed!(rng, 117)
 # datagen
 _V, _data, _, _ = datagen(rng, N, K1, K2) # train
 V_, data_, _, _ = datagen(rng, N, K1, K2) # test
-
-scale = 10 * ones(1, K1 * K2)
-data_ = (data_[1], data_[2], scale .* data_[3], scale .* data_[4])
 
 ###
 # nonlienar FNO model
@@ -64,9 +61,6 @@ m = (32,) # modes
 c = size(__data[1], 1) # in  channels
 o = size(__data[2], 1) # out channels
 
-# NN = OpKernel(c, o, m, tanh)
-# NN = OpConv(c, o, m)
-
 NN = Lux.Chain(
     Dense(c , w, tanh),
     OpConv(w, w, m),
@@ -74,14 +68,13 @@ NN = Lux.Chain(
     Dense(w , o)
 )
 
-p, st = Lux.setup(rng, NN) |> gpu
+opt = Optimisers.Adam()
+learning_rates = (1f-3,)
+maxiters  = E .* (1.00,) .|> Int
+dir = joinpath(@__DIR__, "dump")
 
-x, _ = __data |> gpu
-y = NN(x, p, st)[1]
-
-f(p) = NN(x, p, st)[1] |> sum
-
-Zygote.gradient(f, p)
+model, _ = train_model(rng, NN, __data, data__, _V, opt;
+               learning_rates, maxiters, dir, cbstep = 1, device = gpu)
 
 end
 
@@ -107,14 +100,13 @@ bilin  = OpConvBilinear(w1, w2, o, m)
 
 NN = linear_nonlinear(nonlin, linear, bilin)
 
-p, st = Lux.setup(rng, NN) |> gpu
+opt = Optimisers.Adam()
+learning_rates = (1f-3,)
+maxiters  = E .* (1.00,) .|> Int
+dir = joinpath(@__DIR__, "dump")
 
-x, _ = __data |> gpu
-y = NN(x, p, st)[1]
-
-f(p) = NN(x, p, st)[1] |> sum
-
-Zygote.gradient(f, p)
+model, _ = train_model(rng, NN, __data, data__, _V, opt;
+               learning_rates, maxiters, dir, cbstep = 1, device = gpu)
 
 end
 #
