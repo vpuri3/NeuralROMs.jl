@@ -1,11 +1,11 @@
 
 using BenchmarkTools, FFTW, LinearAlgebra
 
-FFTW.set_num_threads(32)
-BLAS.set_num_threads(16)
+FFTW.set_num_threads(8)
+BLAS.set_num_threads(2)
 
-#=
-
+if true
+    
 C  = 16
 Ns = 128, 128
 K  = 100
@@ -16,12 +16,12 @@ y = rand(Ns..., C, K)
 dx = 2:3
 dy = 1:2
 
-println("### FFT dim $dx ###")
+println("### rFFT/irFFT dim $dx (C, Nx, Ny, B) ###")
 _x = rfft(x, dx)
 @btime rfft($x, $dx)
 @btime irfft($_x, $Ns[1], $dx)
 
-println("### FFT dim $dy ###")
+println("### rFFT/irFFT dim $dy (Nx, Ny, C, B) ###")
 _y = rfft(y, dy)
 @btime rfft($y, $dy)
 @btime irfft($_y, $Ns[1], $dy)
@@ -30,7 +30,7 @@ println("### permutedims ###")
 @btime permutedims($x, (2, 3, 1, 4))
 @btime permutedims($y, (3, 1, 2, 4))
 
-=#
+end
 
 """
 Bringing FFT dimensions to the front is not advantageous
@@ -50,8 +50,10 @@ julia> include("examples/fft_perf.jl")
 """
 
 # linear transform with Tullio
-using NNlib, Tullio
+using Tullio
 
+if false
+    
 Ci, Co = 32, 64
 M = 1024
 B = 100
@@ -76,6 +78,8 @@ W = reshape(W, (M, Co, Ci))
 
 W = reshape(W, (M, Ci, Co))
 @btime @tullio Y[co, m, b] := W[m, ci, co] * X[ci, m, b]
+
+end
 
 """
 ```

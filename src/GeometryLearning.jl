@@ -24,7 +24,11 @@ using Colors
 # serialization
 using BSON
 
-# misc
+# GPU stack
+using CUDA
+using CUDA: AbstractGPUArray
+using KernelAbstractions
+
 using FFTW
 using NNlib
 using Tullio
