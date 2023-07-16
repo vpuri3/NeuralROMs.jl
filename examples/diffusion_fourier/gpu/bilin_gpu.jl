@@ -89,7 +89,7 @@ end
 # Bilinear (linear / nonlin) model
 ###
 
-if false
+if true
 
 __data = split_data(_data)
 data__ = split_data(data_)
@@ -106,6 +106,15 @@ linear = Dense(c2, w2)
 bilin  = OpConvBilinear(w1, w2, o, m)
 
 NN = linear_nonlinear(nonlin, linear, bilin)
+
+p, st = Lux.setup(rng, NN) |> gpu
+
+x, _ = __data |> gpu
+y = NN(x, p, st)[1]
+
+f(p) = NN(x, p, st)[1] |> sum
+
+Zygote.gradient(f, p)
 
 end
 #
