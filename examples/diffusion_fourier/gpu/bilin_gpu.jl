@@ -82,7 +82,7 @@ end
 # Bilinear (linear / nonlin) model
 ###
 
-if true
+if false
 
 __data = split_data(_data)
 data__ = split_data(data_)
@@ -99,6 +99,33 @@ NN = linear_nonlinear(Dense(c1, w1, tanh), Dense(c2, w2), OpConvBilinear(w1, w2,
 # NN = OpConvBilinear(c1, c2, o, m) # fast
 
 # NN = linear_nonlinear(Dense(c1, w1, tanh), NoOpLayer(), OpConvBilinear(w1, c2, o, m))
+
+opt = Optimisers.Adam()
+learning_rates = (1f-3,)
+maxiters  = E .* (1.00,) .|> Int
+dir = joinpath(@__DIR__, "dump")
+
+model, _ = train_model(rng, NN, __data, data__, _V, opt;
+               learning_rates, maxiters, dir, cbstep = 1, device = gpu)
+
+end
+
+if true
+
+w1 = 32
+w2 = 32
+wo = 1
+m = (32,)
+K = 100
+
+__data = ((rand(w1, N, K), rand(w2, N, K)), rand(wo, N, K))
+data__ = ((rand(w1, N, K), rand(w2, N, K)), rand(wo, N, K))
+
+c1 = size(__data[1][1], 1) # in  channel nonlin
+c2 = size(__data[1][2], 1) # in  channel linear
+o  = size(__data[2]   , 1) # out channel
+
+NN = OpConvBilinear(w1, w2, wo, m)
 
 opt = Optimisers.Adam()
 learning_rates = (1f-3,)
