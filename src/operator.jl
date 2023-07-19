@@ -129,8 +129,8 @@ Lux.statelength(::OpConv) = 0
 
 function (l::OpConv{D})(x::AbstractArray, p, st::NamedTuple) where{D}
 
-    @assert D == ndims(x) - 2
-    @assert size(x, 1) == l.ch_in
+    @assert ndims(x) == D + 2     "got $(ndims(x)) == $(D+2)"
+    @assert size(x, 1) == l.ch_in "got $(size(x, 1)) == $(l.ch_in)"
     Ns = size(x)[2:D+1] # transform dimensions
 
     # transform, truncate
@@ -201,10 +201,10 @@ Like Lux.Bilinear in modal space
 """
 function (l::OpConvBilinear{D})((x, y)::NTuple{2, AbstractArray}, p, st::NamedTuple) where{D}
 
-    @assert ndims(x) == ndims(y)
-    @assert D == ndims(x) - 2
-    @assert size(x, 1) == l.ch_in1
-    @assert size(y, 1) == l.ch_in2
+    @assert ndims(x) == ndims(y) == D + 2
+    @assert D == ndims(x) - 2      "got $(D) == $(ndims(x))"
+    @assert size(x, 1) == l.ch_in1 "got $(size(x, 1)) == $(l.ch_in1)"
+    @assert size(y, 1) == l.ch_in2 "got $(size(y, 1)) == $(l.ch_in2)"
     @assert size(x)[2:end] == size(y)[2:end]
 
     Ns = size(x)[2:D+1] # transform dimensions
