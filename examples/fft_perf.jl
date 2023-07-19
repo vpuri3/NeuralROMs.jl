@@ -1,11 +1,11 @@
 
 using BenchmarkTools, FFTW, LinearAlgebra
 
-FFTW.set_num_threads(8)
 BLAS.set_num_threads(2)
+FFTW.set_num_threads(8)
 
-if true
-    
+if false
+
 C  = 16
 Ns = 128, 128
 K  = 100
@@ -54,71 +54,179 @@ using Tullio
 
 if false
     
-Ci, Co = 32, 64
+Ci, Co = 32, 32
 M = 1024
 B = 100
 
 X = rand(Ci, M, B)
 W = rand(Co, Ci, M)
 
-W = respahe(W, (Co, Ci, M))
+println("#==================#")
+println("### Tullio tests ###")
+println("# with x[C, M, B]")
+println("#==================#")
+
+GC.gc()
+
+println("# Y[co, m, b] = W[co, ci, m] * X[ci, m, b]")
+W = reshape(W, (Co, Ci, M))
 @btime @tullio Y[co, m, b] := W[co, ci, m] * X[ci, m, b]
 
+GC.gc()
+
+println("# Y[co, m, b] = W[ci, co, m] * X[ci, m, b]")
 W = reshape(W, (Ci, Co, M))
 @btime @tullio Y[co, m, b] := W[ci, co, m] * X[ci, m, b] # winner
 
-W = reshape(W, (Co, M, Ci))
-@btime @tullio Y[co, m, b] := W[co, m, ci] * X[ci, m, b] # worst - do not run
+GC.gc()
 
+println("# Y[co, m, b] = W[co, m, ci] * X[ci, m, b]")
+# W = reshape(W, (Co, M, Ci))
+# @btime @tullio Y[co, m, b] := W[co, m, ci] * X[ci, m, b] # worst - do not run
+
+GC.gc()
+
+println("# Y[co, m, b] = W[ci, m, co] * X[ci, m, b]")
 W = reshape(W, (Ci, M, Co))
 @btime @tullio Y[co, m, b] := W[ci, m, co] * X[ci, m, b]
 
+GC.gc()
+
+println("# Y[co, m, b] = W[m, ci, co] * X[ci, m, b]")
 W = reshape(W, (M, Co, Ci))
 @btime @tullio Y[co, m, b] := W[m, co, ci] * X[ci, m, b]
 
+GC.gc()
+
+println("# Y[co, m, b] = W[m, co, ci] * X[ci, m, b]")
 W = reshape(W, (M, Ci, Co))
 @btime @tullio Y[co, m, b] := W[m, ci, co] * X[ci, m, b]
 
 end
 
 """
-```
-Ci, Co = 64, 32
+#==================#
+### Tullio tests ###
+# with x[C, M, B]
+#==================#
+# Y[co, m, b] = W[co, ci, m] * X[ci, m, b]
+  84.978 ms (2 allocations: 25.00 MiB)    
+# Y[co, m, b] = W[ci, co, m] * X[ci, m, b]
+  25.760 ms (2 allocations: 25.00 MiB)    
+# Y[co, m, b] = W[co, m, ci] * X[ci, m, b]
+# Y[co, m, b] = W[ci, m, co] * X[ci, m, b]
+  37.652 ms (2 allocations: 25.00 MiB) 
+# Y[co, m, b] = W[m, ci, co] * X[ci, m, b]
+  608.589 ms (2 allocations: 25.00 MiB)
+# Y[co, m, b] = W[m, co, ci] * X[ci, m, b]    
+  421.808 ms (2 allocations: 25.00 MiB)
+"""
+
+if false
+println("#==================#")
+println("### Tullio tests ###")
+println("# with x[M, C, B]")
+println("#==================#")
+
+Ci, Co = 32, 32
 M = 1024
 B = 100
 
-julia> include("examples/fft_perf.jl")
-  19.883 ms (116 allocations: 25.01 MiB)
-  8.989 ms (116 allocations: 25.01 MiB)  # winner
-  43.560 ms (116 allocations: 25.01 MiB)
-  11.161 ms (116 allocations: 25.01 MiB)
-  67.615 ms (118 allocations: 25.01 MiB)
-  72.830 ms (116 allocations: 25.01 MiB)
+X = rand(M, Ci, B)
+W = rand(Co, Ci, M)
 
-Ci, Co = 64, 32
+GC.gc()
+
+println("# Y[m, co, b] = W[co, ci, m] * X[m, ci, b]")
+W = reshape(W, (Co, Ci, M))
+@btime @tullio Y[m, co, b] := W[co, ci, m] * X[m, ci, b]
+
+GC.gc()
+
+println("# Y[m, co, b] = W[ci, co, m] * X[m, ci, b]")
+W = reshape(W, (Ci, Co, M))
+@btime @tullio Y[m, co, b] := W[ci, co, m] * X[m, ci, b]
+
+GC.gc()
+
+println("# Y[m, co, b] = W[m, ci, co] * X[m, ci, b]")
+W = reshape(W, (M, Co, Ci))
+@btime @tullio Y[m, co, b] := W[m, co, ci] * X[m, ci, b]
+
+GC.gc()
+
+println("# Y[m, co, b] = W[m, co, ci] * X[m, ci, b]")
+W = reshape(W, (M, Ci, Co))
+@btime @tullio Y[m, co, b] := W[m, ci, co] * X[m, ci, b]
+
+end
+
+"""
+#==================#
+### Tullio tests ###
+# with x[M, C, B]
+#==================#
+# Y[m, co, b] = W[co, ci, m] * X[m, ci, b]
+  276.022 ms (2 allocations: 25.00 MiB)
+# Y[m, co, b] = W[ci, co, m] * X[m, ci, b]
+  165.038 ms (2 allocations: 25.00 MiB)
+# Y[m, co, b] = W[m, ci, co] * X[m, ci, b]
+  270.286 ms (2 allocations: 25.00 MiB)
+# Y[m, co, b] = W[m, co, ci] * X[m, ci, b]
+  320.016 ms (2 allocations: 25.00 MiB)
+"""
+
+if true
+println("#==================#")
+println("### Tullio Bilinear tests ###")
+println("# with x/y[C, M, B]")
+println("#==================#")
+
+C1, C2, Co = 32, 32, 4
 M = 1024
 B = 100
 
-julia> include("examples/fft_perf.jl")
-  39.987 ms (116 allocations: 50.01 MiB)
-  18.441 ms (116 allocations: 50.01 MiB)  # winner
-  109.079 ms (118 allocations: 50.01 MiB)
-  20.383 ms (116 allocations: 50.01 MiB)
-  130.341 ms (117 allocations: 50.01 MiB)
-  140.711 ms (117 allocations: 50.01 MiB)
+X = rand(C1, M, B)
+Y = rand(C2, M, B)
+W = rand(Co, C1, C2, M)
 
-Ci, Co = 32, 64
-M = 1024
-B = 100
+GC.gc()
+W = reshape(W, (Co, C1, C2, M))
+@btime @tullio Z[co, m, b] := X[c1, m, b] * W[co, c1, c2, m] * Y[c2, m, b]
 
-julia> include("examples/fft_perf.jl")
-  19.794 ms (117 allocations: 50.01 MiB)
-  9.101 ms (116 allocations: 50.01 MiB)  # winner
-  47.273 ms (117 allocations: 50.01 MiB)
-  11.320 ms (116 allocations: 50.01 MiB)
-  64.177 ms (117 allocations: 50.01 MiB)
-  66.034 ms (116 allocations: 50.01 MiB)
-```
+GC.gc()
+W = reshape(W, (Co, C2, C1, M))
+@btime @tullio Z[co, m, b] := X[c1, m, b] * W[co, c2, c1, m] * Y[c2, m, b]
+
+GC.gc()
+W = reshape(W, (C1, Co, C2, M))
+@btime @tullio Z[co, m, b] := X[c1, m, b] * W[c1, co, c2, m] * Y[c2, m, b]
+
+GC.gc()
+W = reshape(W, (C2, Co, C1, M))
+@btime @tullio Z[co, m, b] := X[c1, m, b] * W[c2, co, c1, m] * Y[c2, m, b]
+
+GC.gc()
+W = reshape(W, (C1, C2, Co, M))
+@btime CUDA.@sync @tullio Z[co, m, b] := X[c1, m, b] * W[c1, c2, co, m] * Y[c2, m, b]
+
+GC.gc()
+W = reshape(W, (C2, C1, Co, M))
+@btime CUDA.@sync @tullio Z[co, m, b] := X[c1, m, b] * W[c2, c1, co, m] * Y[c2, m, b]
+
+end
+
+"""
+#==================#
+### Tullio Bilinear tests ###
+# with x/y[C, M, B]
+#==================#
+  487.817 ms (8 allocations: 3.13 MiB)
+  529.306 ms (8 allocations: 3.13 MiB)
+  137.640 ms (8 allocations: 3.13 MiB)
+  528.762 ms (8 allocations: 3.13 MiB)
+  130.426 ms (8 allocations: 3.13 MiB)
+  506.867 ms (8 allocations: 3.13 MiB)
 """
 
 nothing

@@ -39,7 +39,7 @@ include("../datagen.jl")
 N  = 128  # problem size
 K1 = 32   # ν-samples
 K2 = 32   # f-samples
-E  = 200  # epochs
+E  = 20  # epochs
 
 rng = Random.default_rng()
 Random.seed!(rng, 117)
@@ -51,7 +51,7 @@ V_, data_, _, _ = datagen(rng, N, K1, K2) # test
 ###
 # nonlienar FNO model
 ###
-if true
+if false
 
 __data = combine_data(_data)
 data__ = combine_data(data_)
@@ -63,7 +63,7 @@ o = size(__data[2], 1) # out channels
 
 NN = Lux.Chain(
     Dense(c , w, tanh),
-    OpConv(w, w, m),
+    OpKernel(w, w, m, tanh),
     OpKernel(w, w, m, tanh),
     Dense(w , o)
 )
@@ -94,11 +94,11 @@ c1 = size(__data[1][1], 1) # in  channel nonlin
 c2 = size(__data[1][2], 1) # in  channel linear
 o  = size(__data[2]   , 1) # out channel
 
-nonlin = Chain(Dense(c1, w1, tanh), OpKernel(w1, w1, m, tanh))
-linear = Dense(c2, w2)
-bilin  = OpConvBilinear(w1, w2, o, m)
+# NN = linear_nonlinear(Dense(c1, w1, tanh), Dense(c2, w2), Bilinear((w1, w2) => o))
+NN = linear_nonlinear(Dense(c1, w1, tanh), Dense(c2, w2), OpConvBilinear(w1, w2, o, m))
+# NN = OpConvBilinear(c1, c2, o, m) # fast
 
-NN = linear_nonlinear(nonlin, linear, bilin)
+# NN = linear_nonlinear(Dense(c1, w1, tanh), NoOpLayer(), OpConvBilinear(w1, c2, o, m))
 
 opt = Optimisers.Adam()
 learning_rates = (1f-3,)
@@ -109,4 +109,6 @@ model, _ = train_model(rng, NN, __data, data__, _V, opt;
                learning_rates, maxiters, dir, cbstep = 1, device = gpu)
 
 end
+
+nothing
 #

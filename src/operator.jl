@@ -115,8 +115,8 @@ end
 
 function Lux.initialparameters(rng::Random.AbstractRNG, l::OpConv)
 
-    dims  = (l.ch_in, l.ch_out, prod(l.modes))
-    scale = one(Float32) # / (l.ch_in * l.ch_out)
+    dims  = (l.ch_out, l.ch_in, prod(l.modes))
+    scale = one(Float32) / (l.ch_in * l.ch_out)
 
     (;
      W = scale * l.init(rng, ComplexF32, dims...),
@@ -181,7 +181,7 @@ end
 
 function Lux.initialparameters(rng::Random.AbstractRNG, l::OpConvBilinear)
 
-    dims  = (l.ch_in1, l.ch_in2, l.ch_out, prod(l.modes))
+    dims  = (l.ch_out, l.ch_in1, l.ch_in2, prod(l.modes))
     scale = one(Float32) / (l.ch_in1 * l.ch_in2 * l.ch_out)
 
     (;
@@ -253,6 +253,7 @@ function __opconv(x::AbstractGPUArray, transform, modes::NTuple{D, Int}) where{D
     perm1 = ((2:D+1)..., 1, N)
     perm2 = (D+1, (1:D)..., N)
 
+    #============================================#
     # move transform dims to front
     x = permutedims(x, perm1) # [N1...Nd, Ci, B] <- [Ci, N1...Nd, B]
 
@@ -261,6 +262,7 @@ function __opconv(x::AbstractGPUArray, transform, modes::NTuple{D, Int}) where{D
 
     # unpermute
     x̂ = permutedims(x̂, perm2) # [Ci, K1...Kd, B] <- [K1...Kd, Ci, B]
+    #============================================#
 
     # truncate
     x̂_tr = view(x̂, :, map(d -> 1:d, modes)..., :) # [Ci, M1...Md, B]
@@ -281,7 +283,7 @@ function opconv__(ŷ_tr, transform, modes::NTuple{D, Int}, Ks, Ns) where{D}
     ŷ = pad_array(ŷ_tr, (Co, Ks..., B)) # [Co, K1...Kd, B]
 
     # inverse transform
-    transform[2](ŷ, Ns[1], 2:D+1) # [Co, N1...Nd, B]
+    transform[2](ŷ, Ns[1], 2:D+1)       # [Co, N1...Nd, B]
 end
 
 """
@@ -300,6 +302,7 @@ function opconv__(ŷ_tr::AbstractGPUArray, transform, modes::NTuple{D, Int}, Ks
     # pad frequency modes
     ŷ = pad_array(ŷ_tr, (Co, Ks..., B)) # [Co, K1...Kd, B] <- [Co, M1...Md, B]
 
+    #============================================#
     # permute
     ŷ = permutedims(ŷ, perm1)           # [K1...Kd, Co, B] <- [Co, K1...Kd, B]
 
@@ -308,6 +311,7 @@ function opconv__(ŷ_tr::AbstractGPUArray, transform, modes::NTuple{D, Int}, Ks
 
     # unpermute
     permutedims(y, perm2)               # [C, N1...Nd, B] <- [N1...Nd, C, B]
+    #============================================#
 end
 
 """
@@ -332,10 +336,10 @@ function opconv_wt(x, W)
     @assert size(x, 1) == Ci
 
     # reshape
-    X = reshape(x, (Ci, prod(modes), B)) # [Ci, M, B]
+    X = reshape(x, (Ci, prod(modes), B))              # [Ci, M, B]
 
     # apply weight
-    @tullio Y[co, m, b] := W[ci, co, m] * X[ci, m, b] # [Co, M, B]
+    @tullio Y[co, m, b] := W[co, ci, m] * X[ci, m, b] # [Co, M, B]
 
     # un-reshape
     reshape(Y, (Co, modes..., B))
@@ -346,7 +350,7 @@ function opconv_wt(x, y, W)
     D = ndims(x) - 2
 
     modes = size(x)[2:D+1]
-    C1, C2, Co = size(W)[1:3]
+    Co, C1, C2 = size(W)[1:3]
     B = size(x)[end]
 
     @assert size(x, 1) == C1
@@ -358,7 +362,7 @@ function opconv_wt(x, y, W)
     Y = reshape(y, (C2, prod(modes), B)) # [C2, M, B]
 
     # apply weight to get [Co, M, B]
-    @tullio Z[co, m, b] := X[c1, m, b] * W[c1, c2, co, m] * Y[c2, m, b]
+    @tullio Z[co, m, b] := X[c1, m, b] * W[co, c1, c2, m] * Y[c2, m, b]
 
     # un-reshape
     reshape(Z, (Co, modes..., B))
