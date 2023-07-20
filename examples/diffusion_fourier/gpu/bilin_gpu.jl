@@ -37,9 +37,9 @@ include("../datagen.jl")
 
 # parameters
 N  = 128  # problem size
-K1 = 32   # ν-samples
-K2 = 32   # f-samples
-E  = 20  # epochs
+K1 = 16   # ν-samples
+K2 = 16   # f-samples
+E  = 200  # epochs
 
 rng = Random.default_rng()
 Random.seed!(rng, 117)
@@ -62,7 +62,9 @@ c = size(__data[1], 1) # in  channels
 o = size(__data[2], 1) # out channels
 
 NN = Lux.Chain(
+    PermutedBatchNorm(c, 3),
     Dense(c , w, tanh),
+    OpKernel(w, w, m, tanh),
     OpKernel(w, w, m, tanh),
     OpKernel(w, w, m, tanh),
     Dense(w , o)
@@ -75,14 +77,14 @@ dir = joinpath(@__DIR__, "dump")
 
 model, _ = train_model(rng, NN, __data, data__, _V, opt;
                learning_rates, maxiters, dir, cbstep = 1, device = gpu)
-
+GC.gc()
 end
 
 ###
 # Bilinear (linear / nonlin) model
 ###
 
-if false
+if true
 
 __data = split_data(_data)
 data__ = split_data(data_)
@@ -94,38 +96,11 @@ c1 = size(__data[1][1], 1) # in  channel nonlin
 c2 = size(__data[1][2], 1) # in  channel linear
 o  = size(__data[2]   , 1) # out channel
 
-# NN = linear_nonlinear(Dense(c1, w1, tanh), Dense(c2, w2), Bilinear((w1, w2) => o))
-NN = linear_nonlinear(Dense(c1, w1, tanh), Dense(c2, w2), OpConvBilinear(w1, w2, o, m))
-# NN = OpConvBilinear(c1, c2, o, m) # fast
+nonlin = Chain(PermutedBatchNorm(c1, 3), Dense(c1, w1, tanh), OpKernel(w1, w1, m, tanh))
+linear = Dense(c2, w2, use_bias = false)
+bilin  = OpConvBilinear(w1, w2, o, m)
 
-# NN = linear_nonlinear(Dense(c1, w1, tanh), NoOpLayer(), OpConvBilinear(w1, c2, o, m))
-
-opt = Optimisers.Adam()
-learning_rates = (1f-3,)
-maxiters  = E .* (1.00,) .|> Int
-dir = joinpath(@__DIR__, "dump")
-
-model, _ = train_model(rng, NN, __data, data__, _V, opt;
-               learning_rates, maxiters, dir, cbstep = 1, device = gpu)
-
-end
-
-if true
-
-w1 = 32
-w2 = 32
-wo = 1
-m = (32,)
-K = 100
-
-__data = ((rand(w1, N, K), rand(w2, N, K)), rand(wo, N, K))
-data__ = ((rand(w1, N, K), rand(w2, N, K)), rand(wo, N, K))
-
-c1 = size(__data[1][1], 1) # in  channel nonlin
-c2 = size(__data[1][2], 1) # in  channel linear
-o  = size(__data[2]   , 1) # out channel
-
-NN = OpConvBilinear(w1, w2, wo, m)
+NN = linear_nonlinear(nonlin, linear, bilin)
 
 opt = Optimisers.Adam()
 learning_rates = (1f-3,)
@@ -133,8 +108,7 @@ maxiters  = E .* (1.00,) .|> Int
 dir = joinpath(@__DIR__, "dump")
 
 model, _ = train_model(rng, NN, __data, data__, _V, opt;
-               learning_rates, maxiters, dir, cbstep = 1, device = gpu)
-
+               learning_rates, maxiters, dir, cbstep = 1, device = cpu)
 end
 
 nothing

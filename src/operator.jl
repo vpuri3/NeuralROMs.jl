@@ -362,9 +362,11 @@ function opconv_wt(x, y, W)
     Y = reshape(y, (C2, prod(modes), B)) # [C2, M, B]
 
     # apply weight to get [Co, M, B]
-    @tullio Z[co, m, b] := X[c1, m, b] * W[co, c1, c2, m] * Y[c2, m, b]
+    # @tullio Z[co, m, b] := X[c1, m, b] * W[co, c1, c2, m] * Y[c2, m, b]
+    @tullio Z1[co, c1, m, b] := W[co, c1, c2, m] * Y[c2, m, b]
+    @tullio Z2[co, m, b]     := Z1[co, c1, m, b] * X[c1, m, b]
 
     # un-reshape
-    reshape(Z, (Co, modes..., B))
+    reshape(Z2, (Co, modes..., B))
 end
 #

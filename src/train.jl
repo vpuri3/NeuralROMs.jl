@@ -48,13 +48,13 @@ function train_model(
         @assert data[2] isa AbstractArray
     end
 
-    _data, data_ = (_data, data_) |> device
+    _devicedata, devicedata_ = (_data, data_) |> device
 
     @assert length(learning_rates) == length(maxiters)
 
     # utility functions
-    _model, _loss, _stats = model_setup(NN, _data; lossfun)
-    model_, loss_, stats_ = model_setup(NN, data_; lossfun)
+    _model, _loss, _stats = model_setup(NN, _devicedata; lossfun)
+    model_, loss_, stats_ = model_setup(NN, devicedata_; lossfun)
 
     # analysis callback
     CB = (p, st; io = io) -> callback(p, st; io, _loss, _stats, loss_, stats_)
@@ -110,10 +110,23 @@ function train_model(
     CB(p, st; io = statsfile)
     close(statsfile)
 
-    # visualization
-    p, st = (p, st) |> Lux.cpu
-    _data, data_ = (_data, data_) |> Lux.cpu
+    # transfer to host device and free stuff
+    if device == Lux.gpu
+        if _data[1] isa AbstractArray
+            CUDA.unsafe_free!(_devicedata[1])
+            CUDA.unsafe_free!(devicedata_[2])
+        else
+            CUDA.unsafe_free!.(_devicedata[1])
+            CUDA.unsafe_free!.(devicedata_[1])
+        end
 
+        CUDA.unsafe_free!(_devicedata[2])
+        CUDA.unsafe_free!(devicedata_[2])
+    end
+
+    p, st = (p, st) |> Lux.cpu
+
+    # visualization
     plt_train = plot_training(ITER, _LOSS, LOSS_)
     plts = visualize(V, _data, data_, NN, p, st; nsamples)
 

@@ -155,7 +155,6 @@ W = CUDA.rand(Co, Ci, M)
 GC.gc()
 
 println("# Y[m, co, b] = W[co, ci, m] * X[m, ci, b]")
-W = reshape(W, (Co, Ci, M))
 @btime CUDA.@sync @tullio Y[m, co, b] := W[co, ci, m] * X[m, ci, b]
 
 GC.gc()
@@ -193,7 +192,7 @@ end
   4.486 ms (163 allocations: 7.92 KiB)
 """
 
-if true
+if false
 println("#==================#")
 println("### Tullio Bilinear tests ###")
 println("# with x/y[C, M, B]")
@@ -250,5 +249,45 @@ end
 
 """
 
-nothing
+###
+# Gradient computation
+###
+
+using Zygote
+
+# CUDA.@captured
+# https://juliagpu.org/post/2021-06-10-cuda_3.3/#high-level_graph_apis
+# https://github.com/JuliaGPU/CUDA.jl/blob/a8c55aed276892aeb7bbe5220448a5ca5922a9be/test/core/cudadrv.jl#L380-L395
+
+C1, C2, Co = 32, 32, 4
+M = 1024
+B = 100
+
+X = CUDA.rand(C1, M, B)
+Y = CUDA.rand(C2, M, B)
+W = CUDA.rand(Co, C1, C2, M)
+
+function loss(X, Y, W)
+    # @tullio Z[co, m, b] := X[c1, m, b] * W[co, c1, c2, m] * Y[c2, m, b]
+
+    @tullio Z1[co, c1, m, b] := W[co, c1, c2, m] * Y[c2, m, b]
+    @tullio Z2[co, m, b]     := Z1[co, c1, m, b] * X[c1, m, b]
+    sum(Z2)
+end
+
+function grad(X, Y, W)
+    f = W -> loss(X, Y, W)
+    l, pb = Zygote.pullback(f, W)
+    pb(one.(l))
+end
+
+CUDA.@time loss(X, Y, W);
+CUDA.@time loss(X, Y, W);
+
+CUDA.@time grad(X, Y, W);
+CUDA.@time grad(X, Y, W);
+
+CUDA.@profile CUDA.@time grad(X, Y, W);
+
+GC.gc(false)
 #
