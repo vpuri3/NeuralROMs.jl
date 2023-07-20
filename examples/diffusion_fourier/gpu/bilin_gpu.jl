@@ -13,7 +13,7 @@ forcing is learned separately.
 using GeometryLearning
 
 # PDE stack
-using FourierSpaces, LinearAlgebra
+using LinearAlgebra
 
 # ML stack
 using Lux, Random, Optimisers
@@ -37,8 +37,8 @@ include("../datagen.jl")
 
 # parameters
 N  = 128  # problem size
-K1 = 16   # ν-samples
-K2 = 16   # f-samples
+K1 = 32   # ν-samples
+K2 = 32   # f-samples
 E  = 200  # epochs
 
 rng = Random.default_rng()
@@ -77,7 +77,6 @@ dir = joinpath(@__DIR__, "dump")
 
 model, _ = train_model(rng, NN, __data, data__, _V, opt;
                learning_rates, maxiters, dir, cbstep = 1, device = gpu)
-GC.gc()
 end
 
 ###
@@ -108,7 +107,7 @@ maxiters  = E .* (1.00,) .|> Int
 dir = joinpath(@__DIR__, "dump")
 
 model, _ = train_model(rng, NN, __data, data__, _V, opt;
-               learning_rates, maxiters, dir, cbstep = 1, device = cpu)
+        learning_rates, maxiters, dir, cbstep = 1, device = gpu, make_plots = false)
 end
 
 nothing

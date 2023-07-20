@@ -115,7 +115,7 @@ end
 
 function Lux.initialparameters(rng::Random.AbstractRNG, l::OpConv)
 
-    dims  = (l.ch_out, l.ch_in, prod(l.modes))
+    dims  = (l.ch_in, l.ch_out, prod(l.modes))
     scale = one(Float32) / (l.ch_in * l.ch_out)
 
     (;
@@ -181,7 +181,7 @@ end
 
 function Lux.initialparameters(rng::Random.AbstractRNG, l::OpConvBilinear)
 
-    dims  = (l.ch_out, l.ch_in1, l.ch_in2, prod(l.modes))
+    dims  = (l.ch_in1, l.ch_in2, l.ch_out, prod(l.modes))
     scale = one(Float32) / (l.ch_in1 * l.ch_in2 * l.ch_out)
 
     (;
@@ -339,7 +339,7 @@ function opconv_wt(x, W)
     X = reshape(x, (Ci, prod(modes), B))              # [Ci, M, B]
 
     # apply weight
-    @tullio Y[co, m, b] := W[co, ci, m] * X[ci, m, b] # [Co, M, B]
+    @tullio Y[co, m, b] := W[ci, co, m] * X[ci, m, b] # [Co, M, B]
 
     # un-reshape
     reshape(Y, (Co, modes..., B))
@@ -350,21 +350,30 @@ function opconv_wt(x, y, W)
     D = ndims(x) - 2
 
     modes = size(x)[2:D+1]
-    Co, C1, C2 = size(W)[1:3]
+    C1, C2, Co = size(W)[1:3]
     B = size(x)[end]
 
-    @assert size(x, 1) == C1
-    @assert size(y, 1) == C2
-    @assert size(y)[end] == B
+    @assert size(x, 1) == C1  "got $(size(x, 1)) == $C1"
+    @assert size(y, 1) == C2  "got $(size(y, 1)) == $C2"
+    @assert size(y)[end] == B "got $(size(y)[end]) == $B"
 
     # reshape
     X = reshape(x, (C1, prod(modes), B)) # [C1, M, B]
     Y = reshape(y, (C2, prod(modes), B)) # [C2, M, B]
 
     # apply weight to get [Co, M, B]
+    # see examples/cuda_perf.jl for triage
+
+    #
     # @tullio Z[co, m, b] := X[c1, m, b] * W[co, c1, c2, m] * Y[c2, m, b]
-    @tullio Z1[co, c1, m, b] := W[co, c1, c2, m] * Y[c2, m, b]
-    @tullio Z2[co, m, b]     := Z1[co, c1, m, b] * X[c1, m, b]
+
+    #
+    # @tullio Z1[co, c1, m, b] := W[co, c1, c2, m] * Y[c2, m, b]
+    # @tullio Z2[co, m, b]     := Z1[co, c1, m, b] * X[c1, m, b]
+
+    #
+    @tullio Z1[c2, co, m, b] := W[c1, c2, co, m] * X[c1, m, b]
+    @tullio Z2[co, m, b]     := Z1[c2, co, m, b] * Y[c2, m, b]
 
     # un-reshape
     reshape(Z2, (Co, modes..., B))

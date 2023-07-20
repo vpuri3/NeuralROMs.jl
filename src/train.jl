@@ -38,6 +38,7 @@ function train_model(
     st = nothing, # initial state
     lossfun = GeometryLearning.mse,
     device = Lux.cpu,
+    make_plots = true,
 ) where{N}
 
     # make directory for saving model
@@ -127,14 +128,16 @@ function train_model(
     p, st = (p, st) |> Lux.cpu
 
     # visualization
-    plt_train = plot_training(ITER, _LOSS, LOSS_)
-    plts = visualize(V, _data, data_, NN, p, st; nsamples)
+    if make_plots
+        plt_train = plot_training(ITER, _LOSS, LOSS_)
+        plts = visualize(V, _data, data_, NN, p, st; nsamples)
 
-    png(plt_train, joinpath(dir, "plt_training"))
-    png(plts[1],   joinpath(dir, "plt_traj_train"))
-    png(plts[2],   joinpath(dir, "plt_traj_test"))
-    png(plts[3],   joinpath(dir, "plt_r2_train"))
-    png(plts[4],   joinpath(dir, "plt_r2_test"))
+        png(plt_train, joinpath(dir, "plt_training"))
+        png(plts[1],   joinpath(dir, "plt_traj_train"))
+        png(plts[2],   joinpath(dir, "plt_traj_test"))
+        png(plts[3],   joinpath(dir, "plt_r2_train"))
+        png(plts[4],   joinpath(dir, "plt_r2_test"))
+    end
 
     model = NN, p, st
     STATS = ITER, _LOSS, LOSS_
