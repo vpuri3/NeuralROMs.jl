@@ -175,7 +175,7 @@ end
   37.645 ms (386 allocations: 19.14 KiB)
 """
 
-if false
+if true
 println("#==================#")
 println("### Tullio Linear Test ###")
 println("# with x[M, C, B]")
@@ -771,9 +771,9 @@ X = CUDA.rand(M, C1, B)
 Y = CUDA.rand(M, C2, B)
 W = CUDA.rand(Co, C1, C2, M)
 
-println("### M at end")
-
-#############
+# println("### M at end")
+#
+# #############
 # println("###")
 # W = reshape(W, (Co, C1, C2, M))
 #
@@ -786,13 +786,13 @@ println("### M at end")
 #
 # println()
 # function f(X, Y, W)
-#     @tullio Z1[co, c2, m, b] := W[co, c1, c2, m] * X[m, c1, b]
-#     @tullio Z2[co, m, b]     := Z1[co, c2, m, b] * Y[m, c2, b]
+#     @tullio Z1[m, co, c2, b] := W[co, c1, c2, m] * X[m, c1, b]
+#     @tullio Z2[m, co, b]     := Z1[m, co, c2, b] * Y[m, c2, b]
 # end
 # @btime CUDA.@sync $f($X, $Y, $W)
 # @btime CUDA.@sync $grad($f, $X, $Y, $W)
-
-#############
+#
+# #############
 # println("###")
 # W = reshape(W, (C1, C2, Co, M))
 #
@@ -855,42 +855,42 @@ end
 @btime CUDA.@sync $grad($f, $X, $Y, $W)
 
 #############
-# println("###")
-# W = reshape(W, (M, C1, C2, Co))
-#
-# function f(X, Y, W)
-#     @tullio Z1[c2, co, m, b] := W[m, c1, c2, co] * X[c1, m, b]
-#     @tullio Z2[co, m, b]     := Z1[c2, co, m, b] * Y[c2, m, b]
-# end
-# @btime CUDA.@sync $f($X, $Y, $W)
-# @btime CUDA.@sync $grad($f, $X, $Y, $W)
-#
-# println()
-# function f(X, Y, W)
-#     @tullio Z1[c1, co, m, b] := W[m, c1, c2, co] * Y[c2, m, b]
-#     @tullio Z2[co, m, b]     := Z1[c1, co, m, b] * X[c1, m, b]
-# end
-# @btime CUDA.@sync $f($X, $Y, $W)
-# @btime CUDA.@sync $grad($f, $X, $Y, $W)
+println("###")
+W = reshape(W, (M, C1, C2, Co))
+
+function f(X, Y, W)
+    @tullio Z1[m, c2, co, b] := W[m, c1, c2, co] * X[m, c1, b]
+    @tullio Z2[m, co, b]     := Z1[m, c2, co, b] * Y[m, c2, b]
+end
+@btime CUDA.@sync $f($X, $Y, $W)
+@btime CUDA.@sync $grad($f, $X, $Y, $W)
+
+println()
+function f(X, Y, W)
+    @tullio Z1[m, c1, co, b] := W[m, c1, c2, co] * Y[m, c2, b]
+    @tullio Z2[m, co, b]     := Z1[m, c1, co, b] * X[m, c1, b]
+end
+@btime CUDA.@sync $f($X, $Y, $W)
+@btime CUDA.@sync $grad($f, $X, $Y, $W)
 
 #############
-# println("###")
-# W = reshape(W, (M, C1, Co, C2))
-#
-# function f(X, Y, W)
-#     @tullio Z1[c2, co, m, b] := W[m, c1, co, c2] * X[c1, m, b]
-#     @tullio Z2[co, m, b]     := Z1[c2, co, m, b] * Y[c2, m, b]
-# end
-# @btime CUDA.@sync $f($X, $Y, $W)
-# @btime CUDA.@sync $grad($f, $X, $Y, $W)
-#
-# println()
-# function f(X, Y, W)
-#     @tullio Z1[c1, co, m, b] := W[m, c1, co, c2] * Y[c2, m, b]
-#     @tullio Z2[co, m, b]     := Z1[c1, co, m, b] * X[c1, m, b]
-# end
-# @btime CUDA.@sync $f($X, $Y, $W)
-# @btime CUDA.@sync $grad($f, $X, $Y, $W)
+println("###")
+W = reshape(W, (M, C1, Co, C2))
+
+function f(X, Y, W)
+    @tullio Z1[m, c2, co, b] := W[m, c1, co, c2] * X[m, c1, b]
+    @tullio Z2[m, co, b]     := Z1[m, c2, co, b] * Y[m, c2, b]
+end
+@btime CUDA.@sync $f($X, $Y, $W)
+@btime CUDA.@sync $grad($f, $X, $Y, $W)
+
+println()
+function f(X, Y, W)
+    @tullio Z1[m, c1, co, b] := W[m, c1, co, c2] * Y[m, c2, b]
+    @tullio Z2[m, co, b]     := Z1[m, c1, co, b] * X[m, c1, b]
+end
+@btime CUDA.@sync $f($X, $Y, $W)
+@btime CUDA.@sync $grad($f, $X, $Y, $W)
 
 #############
 
@@ -901,6 +901,35 @@ println("###")
 end
 
 """
+julia> include("examples/cuda_perf.jl")
+#==================#                                
+### Tullio Bilinear tests (2 calls) ###
+# with x/y[M, C, B]                                 
+#==================#                                
+###                                                 
+### M at front                                      
+###                                                 
+  19.213 ms (294 allocations: 14.02 KiB)
+  56.433 ms (761 allocations: 37.61 KiB)
+
+  18.873 ms (294 allocations: 14.02 KiB)
+  56.466 ms (761 allocations: 37.61 KiB)
+###                                                 
+  19.101 ms (294 allocations: 14.02 KiB)
+  56.750 ms (762 allocations: 37.78 KiB)
+
+  19.569 ms (294 allocations: 14.02 KiB)
+  56.835 ms (761 allocations: 37.61 KiB)
+###                                                 
+  19.278 ms (294 allocations: 14.02 KiB)
+  56.990 ms (761 allocations: 37.61 KiB)
+
+  19.262 ms (294 allocations: 14.02 KiB)
+  56.374 ms (761 allocations: 37.61 KiB)
+###                                                 
+(CUDA.@allocated(f(X, Y, W)) / 1024) / 1024 = 51.5625 # mb
+(CUDA.@allocated(grad(f, X, Y, W)) / 1024) / 1024 = 144.125 # mb
+
 
 """
 #
