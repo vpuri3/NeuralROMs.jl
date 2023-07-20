@@ -10,7 +10,7 @@ function normalize_trajectories(y, ŷ)
     Y = reshape(y, (C, N, B))
     Ŷ = reshape(ŷ, (C, N, B))
 
-    # normalize every [c, N1, ..., Nd, b] trajectory
+    # normalize every [c, :, b] trajectory
     Ŷm = 1 # size [C, B]
 
     Y = Y ./ Ŷm
