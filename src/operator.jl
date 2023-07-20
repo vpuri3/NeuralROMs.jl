@@ -115,7 +115,7 @@ end
 
 function Lux.initialparameters(rng::Random.AbstractRNG, l::OpConv)
 
-    dims  = (l.ch_in, l.ch_out, prod(l.modes))
+    dims  = (prod(l.modes), l.ch_in, l.ch_out)
     scale = one(Float32) / (l.ch_in * l.ch_out)
 
     (;
@@ -133,13 +133,13 @@ function (l::OpConv{D})(x::AbstractArray, p, st::NamedTuple) where{D}
     @assert size(x, 1) == l.ch_in "got $(size(x, 1)) == $(l.ch_in)"
     Ns = size(x)[2:D+1] # transform dimensions
 
-    # transform, truncate
+    # permute, transform, truncate
     x̂_tr, Ks = __opconv(x, l.transform, l.modes)
 
     # apply weight
     ŷ_tr = opconv_wt(x̂_tr, p.W)
 
-    # pad, inv-transform
+    # pad, inv-transform, unpermute
     y = opconv__(ŷ_tr, l.transform, l.modes, Ks, Ns)
 
     return y, st
@@ -181,7 +181,7 @@ end
 
 function Lux.initialparameters(rng::Random.AbstractRNG, l::OpConvBilinear)
 
-    dims  = (l.ch_in1, l.ch_in2, l.ch_out, prod(l.modes))
+    dims  = (prod(l.modes), l.ch_out, l.ch_in1, l.ch_in2)
     scale = one(Float32) / (l.ch_in1 * l.ch_in2 * l.ch_out)
 
     (;
@@ -209,14 +209,14 @@ function (l::OpConvBilinear{D})((x, y)::NTuple{2, AbstractArray}, p, st::NamedTu
 
     Ns = size(x)[2:D+1] # transform dimensions
 
-    # transform, truncate
+    # permute, transform, truncate
     x̂_tr, Ks = __opconv(x, l.transform, l.modes)
     ŷ_tr, Ks = __opconv(y, l.transform, l.modes)
 
     # apply weight
     ẑ_tr = opconv_wt(x̂_tr, ŷ_tr, p.W)
 
-    # pad, inv-transform
+    # pad, inv-transform, unpermute
     z = opconv__(ẑ_tr, l.transform, l.modes, Ks, Ns)
 
     return z, st
@@ -238,36 +238,20 @@ Returns `x̂` [C, M, B] where `M = prod(modes)`
 """
 function __opconv(x, transform, modes::NTuple{D, Int}) where{D}
 
-    # transform
-    x̂ = transform[1](x, 2:D+1) # [Ci, K1...Kd, B]
-
-    # truncate
-    x̂_tr = view(x̂, :, map(d -> 1:d, modes)..., :) # [Ci, M1...Md, B]
-
-    x̂_tr, size(x̂)[2:D+1]
-end
-
-function __opconv(x::AbstractGPUArray, transform, modes::NTuple{D, Int}) where{D}
-
     N = ndims(x)
     perm1 = ((2:D+1)..., 1, N)
-    perm2 = (D+1, (1:D)..., N)
+    # perm2 = (D+1, (1:D)..., N)
 
-    #============================================#
-    # move transform dims to front
+    # permute (move transform dims to front)
     x = permutedims(x, perm1) # [N1...Nd, Ci, B] <- [Ci, N1...Nd, B]
 
     # transform
     x̂ = transform[1](x, 1:D)  # [K1...Kd, Ci, B]
 
-    # unpermute
-    x̂ = permutedims(x̂, perm2) # [Ci, K1...Kd, B] <- [K1...Kd, Ci, B]
-    #============================================#
-
     # truncate
-    x̂_tr = view(x̂, :, map(d -> 1:d, modes)..., :) # [Ci, M1...Md, B]
+    x̂_tr = view(x̂, map(d -> 1:d, modes)..., :, :) # [M1...Md, Ci, B]
 
-    x̂_tr, size(x̂)[2:D+1]
+    x̂_tr, size(x̂)[1:D]
 end
 
 """
@@ -276,42 +260,21 @@ $SIGNATURES
 """
 function opconv__(ŷ_tr, transform, modes::NTuple{D, Int}, Ks, Ns) where{D}
 
-    Co = size(ŷ_tr)[1]   # channel len
-    B  = size(ŷ_tr)[end] # batch   len
-
-    # pad frequency modes
-    ŷ = pad_array(ŷ_tr, (Co, Ks..., B)) # [Co, K1...Kd, B]
-
-    # inverse transform
-    transform[2](ŷ, Ns[1], 2:D+1)       # [Co, N1...Nd, B]
-end
-
-"""
-$SIGNATURES
-
-"""
-function opconv__(ŷ_tr::AbstractGPUArray, transform, modes::NTuple{D, Int}, Ks, Ns) where{D}
-
-    Co = size(ŷ_tr)[1]   # channel len
+    Co = size(ŷ_tr)[D+1] # channel len
     B  = size(ŷ_tr)[end] # batch   len
 
     N = ndims(ŷ_tr)
-    perm1 = ((2:D+1)..., 1, N)
+    # perm1 = ((2:D+1)..., 1, N)
     perm2 = (D+1, (1:D)..., N)
 
     # pad frequency modes
-    ŷ = pad_array(ŷ_tr, (Co, Ks..., B)) # [Co, K1...Kd, B] <- [Co, M1...Md, B]
-
-    #============================================#
-    # permute
-    ŷ = permutedims(ŷ, perm1)           # [K1...Kd, Co, B] <- [Co, K1...Kd, B]
+    ŷ = pad_array(ŷ_tr, (Ks..., Co, B)) # [K1...Kd, Co, B] <- [M1...Md, Co, B]
 
     # inverse transform
     y = transform[2](ŷ, Ns[1], 1:D)     # [N1...Nd, Co, B]
 
     # unpermute
     permutedims(y, perm2)               # [C, N1...Nd, B] <- [N1...Nd, C, B]
-    #============================================#
 end
 
 """
@@ -322,60 +285,52 @@ Unique linear transform for each mode.
 
 # Operations
 - reshape: `[Ci, M, B] <- [Ci, M1...Md, B]` where `M = prod(M1...Md)`
-- apply weight:
+- apply weight
 - reshape: `[Co, M1...Md, B] <- [Co, M, B]`
 """
 function opconv_wt(x, W)
 
     D = ndims(x) - 2
 
-    modes = size(x)[2:D+1]
-    Ci, Co = size(W)[1:2]
+    modes = size(x)[1:D]
+    M, Ci, Co = size(W)
     B = size(x)[end]
 
-    @assert size(x, 1) == Ci
+    @assert size(x, D+1) == Ci "got $(size(x, 1)) == $Ci"
+    @assert M == prod(modes)   "got $M == $(prod(modes))"
 
     # reshape
-    X = reshape(x, (Ci, prod(modes), B))              # [Ci, M, B]
+    X = reshape(x, (prod(modes), Ci, B))              # [M, Ci, B]
 
     # apply weight
-    @tullio Y[co, m, b] := W[ci, co, m] * X[ci, m, b] # [Co, M, B]
+    @tullio Y[m, co, b] := W[m, ci, co] * X[m, ci, b] # [M, Co, B]
 
     # un-reshape
-    reshape(Y, (Co, modes..., B))
+    reshape(Y, (modes..., Co, B))
 end
 
 function opconv_wt(x, y, W)
 
     D = ndims(x) - 2
 
-    modes = size(x)[2:D+1]
-    C1, C2, Co = size(W)[1:3]
+    modes = size(x)[1:D]
+    M, Co, C1, C2 = size(W)
     B = size(x)[end]
 
-    @assert size(x, 1) == C1  "got $(size(x, 1)) == $C1"
-    @assert size(y, 1) == C2  "got $(size(y, 1)) == $C2"
+    @assert size(x, D+1) == C1  "got $(size(x, D+1)) == $C1"
+    @assert size(y, D+1) == C2  "got $(size(y, D+1)) == $C2"
     @assert size(y)[end] == B "got $(size(y)[end]) == $B"
+    @assert M == prod(modes)  "got $M == $(prod(modes))"
 
     # reshape
-    X = reshape(x, (C1, prod(modes), B)) # [C1, M, B]
-    Y = reshape(y, (C2, prod(modes), B)) # [C2, M, B]
+    X = reshape(x, (prod(modes), C1, B)) # [M, C1, B]
+    Y = reshape(y, (prod(modes), C2, B)) # [M, C2, B]
 
-    # apply weight to get [Co, M, B]
-    # see examples/cuda_perf.jl for triage
-
-    #
-    # @tullio Z[co, m, b] := X[c1, m, b] * W[co, c1, c2, m] * Y[c2, m, b]
-
-    #
-    # @tullio Z1[co, c1, m, b] := W[co, c1, c2, m] * Y[c2, m, b]
-    # @tullio Z2[co, m, b]     := Z1[co, c1, m, b] * X[c1, m, b]
-
-    #
-    @tullio Z1[c2, co, m, b] := W[c1, c2, co, m] * X[c1, m, b]
-    @tullio Z2[co, m, b]     := Z1[c2, co, m, b] * Y[c2, m, b]
+    # apply weight to get [Co, M, B] see examples/cuda_perf.jl for kernel triage
+    @tullio Z1[m, co, c2, b] := W[m, co, c1, c2] * X[m, c1, b]
+    @tullio Z2[m, co, b]     := Z1[m, co, c2, b] * Y[m, c2, b] # [M, Co, B]
 
     # un-reshape
-    reshape(Z2, (Co, modes..., B))
+    reshape(Z2, (modes..., Co, B))
 end
 #

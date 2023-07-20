@@ -76,7 +76,7 @@ maxiters  = E .* (1.00,) .|> Int
 dir = joinpath(@__DIR__, "dump")
 
 model, _ = train_model(rng, NN, __data, data__, _V, opt;
-               learning_rates, maxiters, dir, cbstep = 1, device = gpu)
+               learning_rates, maxiters, dir, cbstep = 1, device = gpu, make_plots = false)
 end
 
 ###
