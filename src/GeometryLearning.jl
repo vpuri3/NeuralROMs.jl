@@ -52,6 +52,7 @@ export
        Atten,
        Diag,
        PermutedBatchNorm,
+       SplitRows,
 
        # transforms
        FourierTransform,

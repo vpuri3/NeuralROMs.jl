@@ -194,53 +194,6 @@ function combine_data2D(data, K = size(data[1], 2))
     (x1, u1)
 end
 
-function split_data1D(data)
-    x, ν, f, u = data
-
-    N, K = size(x)
-
-    x1 = zeros(2, N, K) # x, ν
-    x2 = zeros(1, N, K) # f
-    u1 = zeros(1, N, K) # u
-
-    x1[1, :, :] = x
-    x1[2, :, :] = ν
-
-    x2[1, :, :] = f
-
-    u1[1, :, :] = u
-
-    ((x1, x2), u1)
-end
-
-function split_data2D(data, K = size(data[1], 2))
-    x, y, ν, f, u = data
-
-    N, Kmax = size(x)
-    n = sqrt(N) |> Integer
-    K = min(K, Kmax)
-
-    Ks = if K == Kmax
-        1:K
-    else
-        rand(1:Kmax, K)
-    end
-
-    x1 = zeros(3, n, n, K) # ν, x, y
-    x2 = zeros(1, n, n, K) # f
-    u1 = zeros(1, n, n, K) # u
-
-    x1[1, :, :, :] = x[:, Ks] |> vec
-    x1[2, :, :, :] = y[:, Ks] |> vec
-    x1[3, :, :, :] = ν[:, Ks] |> vec
-    #
-    x2[1, :, :, :] = f[:, Ks] |> vec
-    #
-    u1[1, :, :, :] = u[:, Ks] |> vec
-
-    ((x1, x2), u1)
-end
-
 #=
 using Plots, Random
 

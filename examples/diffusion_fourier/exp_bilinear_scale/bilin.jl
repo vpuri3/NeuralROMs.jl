@@ -48,13 +48,13 @@ Random.seed!(rng, 199)
 _V, _data, _, _ = datagen1D(rng, N, K1, K2) # train
 V_, data_, _, _ = datagen1D(rng, N, K1, K2; mode = :test) # test
 
+__data = combine_data1D(_data)
+data__ = combine_data1D(data_)
+
 ###
 # FNO model
 ###
 if false
-
-__data = combine_data1D(_data)
-data__ = combine_data1D(data_)
 
 w = 16    # width
 m = (32,) # modes
@@ -87,23 +87,24 @@ end
 
 if true
 
-__data = split_data1D(_data)
-data__ = split_data1D(data_)
-
-w1 = 16    # width nonlin
-w2 = 16    # width linear
-m = (32,) # modes
-c1 = size(__data[1][1], 1) # in  channel nonlin
-c2 = size(__data[1][2], 1) # in  channel linear
+# fixed params
+c1 = 2     # in  channel nonlin
+c2 = 1     # in  channel linear
 o  = size(__data[2]   , 1) # out channel
 
+# hyper params
+w1 = 16   # width nonlin
+w2 = 16   # width linear
+wo = 8    # width project
+m = (32,) # modes
+
+split = SplitRows(1:2, 3)
 nonlin = Chain(PermutedBatchNorm(c1, 3), Dense(c1, w1, tanh), OpKernel(w1, w1, m, tanh))
 linear = Dense(c2, w2, use_bias = false)
 bilin  = OpConvBilinear(w1, w2, o, m)
 # bilin  = OpKernelBilinear(w1, w2, o, m) # errors
-# bilin  = Bilinear((w1, w2) => o)
 
-NN = linear_nonlinear(nonlin, linear, bilin)
+NN = linear_nonlinear(split, nonlin, linear, bilin)
 
 opt = Optimisers.Adam()
 learning_rates = (1f-3,)

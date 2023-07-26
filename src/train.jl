@@ -45,7 +45,7 @@ function train_model(
     mkpath(dir)
 
     for data in (_data, data_)
-        @assert data[1] isa AbstractArray || data[1] isa NTuple{2, AbstractArray}
+        @assert data[1] isa AbstractArray
         @assert data[2] isa AbstractArray
     end
 
@@ -113,33 +113,16 @@ function train_model(
 
     # transfer to host device and free stuff
     if device == Lux.gpu
-        if _data[1] isa AbstractArray
-            CUDA.unsafe_free!(_devicedata[1])
-            CUDA.unsafe_free!(devicedata_[2])
-        else
-            CUDA.unsafe_free!.(_devicedata[1])
-            CUDA.unsafe_free!.(devicedata_[1])
-        end
-
-        CUDA.unsafe_free!(_devicedata[2])
-        CUDA.unsafe_free!(devicedata_[2])
+        CUDA.unsafe_free!.(_devicedata)
+        CUDA.unsafe_free!.(devicedata_)
     end
 
     p, st = (p, st) |> Lux.cpu
 
     # visualization
     if make_plots
-        plt_train = plot_training(ITER, _LOSS, LOSS_)
-        png(plt_train, joinpath(dir, "plt_training"))
-
-        if ndims(V) == 1
-            plts = visualize(V, _data, data_, NN, p, st; nsamples)
-
-            png(plts[1],   joinpath(dir, "plt_traj_train"))
-            png(plts[2],   joinpath(dir, "plt_traj_test"))
-            png(plts[3],   joinpath(dir, "plt_r2_train"))
-            png(plts[4],   joinpath(dir, "plt_r2_test"))
-        end
+        plot_training(ITER, _LOSS, LOSS_; dir)
+        visualize(V, _data, data_, NN, p, st; nsamples, dir)
     end
 
     model = NN, p, st
@@ -317,7 +300,7 @@ function optimize(loss, p, st, maxiter;
     p, st, opt_st
 end
 
-function plot_training(ITER, _LOSS, LOSS_)
+function plot_training(ITER, _LOSS, LOSS_; dir = nothing)
     z = findall(iszero, ITER)
 
     # fix ITER to account for multiple training loops
@@ -338,6 +321,10 @@ function plot_training(ITER, _LOSS, LOSS_)
 
     vline!(plt, ITER[z[2:end]], c = :black, w = 2.0, label = nothing)
 
+    if !isnothing(dir)
+        png(plt, joinpath(dir, "plt_training"))
+    end
+
     plt
 end
 
@@ -351,8 +338,9 @@ function visualize(V::Spaces.AbstractSpace{<:Any, 1},
     NN::Lux.AbstractExplicitLayer,
     p,
     st;
-    nsamples = 5)
-
+    nsamples = 5,
+    dir = nothing,
+)
     x, = points(V)
 
     _x, _ŷ = _data
@@ -424,6 +412,18 @@ function visualize(V::Spaces.AbstractSpace{<:Any, 1},
     plot!(_p1, _l, _l, w = 4.0, c = :red)
     plot!(p1_, l_, l_, w = 4.0, c = :red)
 
-    _p0, p0_, _p1, p1_
+    plts = _p0, p0_, _p1, p1_
+
+    if !isnothing(dir)
+        png(plts[1],   joinpath(dir, "plt_traj_train"))
+        png(plts[2],   joinpath(dir, "plt_traj_test"))
+        png(plts[3],   joinpath(dir, "plt_r2_train"))
+        png(plts[4],   joinpath(dir, "plt_r2_test"))
+    end
+
+    plts
+end
+
+function visualize(V::Spaces.AbstractSpace{<:Any, 2}, args...; kwargs...)
 end
 #

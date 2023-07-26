@@ -22,6 +22,49 @@ function PermutedBatchNorm(c, num_dims) # assumes channel_dim = 1
 end
 
 """
+SplitRows
+
+Split rows of ND array, into `Tuple` of ND arrays.
+"""
+struct SplitRows{T} <: Lux.AbstractExplicitLayer
+    splits::T
+end
+function SplitRows(splits...)
+    SplitRows(splits)
+end
+Lux.initialparameters(::Random.AbstractRNG, ::SplitRows) = (;)
+Lux.initialstates(::Random.AbstractRNG, ::SplitRows) = (;)
+Lux.parameterlength(::SplitRows) = 0
+Lux.statelength(::SplitRows) = 0
+
+function (l::SplitRows)(x::AbstractArray, _, st)
+    len = sum(length.(l.splits))
+
+    @assert eltype(len) === Int64 "SplitRows only accepts splits eltype Int64"
+    @assert len == size(x, 1) "cannot split array of size $(size(x)) with splits
+    $(l.splits) in the first dimension."
+
+    xs = ()
+    cols = Tuple(Colon() for _ in 2:ndims(x))
+
+    for split in l.splits
+        if split isa Integer
+            split = split:split
+        end
+
+        # https://github.com/JuliaGPU/CUDA.jl/issues/2009
+        # _x = view(x, split, cols...)
+        _x = getindex(x, split, cols...)
+
+        @assert size(_x) == (length(split), size(x)[2:end]...) "got $(size(_x))"
+
+        xs = (xs..., _x)
+    end
+
+    xs, st
+end
+
+"""
 Diagonal layer
 """
 struct Diag{L, I} <: Lux.AbstractExplicitLayer

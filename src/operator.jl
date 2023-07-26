@@ -63,10 +63,11 @@ x2 → linear → y2 ↗
 - Call `bilin`  as `bilin((y1, y2), p, st)`
 
 """
-function linear_nonlinear(nonlinear, linear, bilinear, project = NoOpLayer())
+function linear_nonlinear(split, nonlin, linear, bilinear, project = NoOpLayer())
 
     Chain(
-        Parallel(nothing, nonlinear, linear),
+        split,
+        Parallel(nothing, nonlin, linear),
         bilinear,
         project,
     )
