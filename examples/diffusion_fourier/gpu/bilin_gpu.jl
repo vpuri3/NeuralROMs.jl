@@ -51,7 +51,7 @@ V_, data_, _, _ = datagen(rng, N, K1, K2) # test
 ###
 # nonlienar FNO model
 ###
-if false
+if true
 
 __data = combine_data(_data)
 data__ = combine_data(data_)

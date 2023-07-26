@@ -6,11 +6,10 @@ Generate solution data to diffusion equation
 for changing ν, f
 """
 
-using FourierSpaces, LinearAlgebra
-using NNlib
+using FourierSpaces, LinearAlgebra, LinearSolve, BSON
 
 """ data """
-function datagen(rng, N, K1, K2; mode = :train)
+function datagen1D(rng, N, K1, K2; mode = :train)
 
     K0 = K1 * K2
 
@@ -27,18 +26,12 @@ function datagen(rng, N, K1, K2; mode = :train)
     V1 = make_transform(V, x1)
     V2 = make_transform(V, x2)
 
-    F0 = transformOp(V0)
-    F1 = transformOp(V1)
-    F2 = transformOp(V2)
+    # F0 = transformOp(V0)
+    # F1 = transformOp(V1)
+    # F2 = transformOp(V2)
 
     ν = 10 .+ 100 .^ rand(rng, Float32, N, K1)
     f = 0 .+ 1000 .^ rand(rng, Float32, N, K2)
-
-    # scale1 = 2 * rand(rng, 1, K1)
-    # scale2 = 1 * rand(rng, 1, K2)
-    #
-    # ν = ν .* scale1
-    # f = f .* scale2
 
     # truncation op
     # X0 = truncationOp(V0, (0.50,))
@@ -64,10 +57,6 @@ function datagen(rng, N, K1, K2; mode = :train)
     @assert ν2[:, 1] == ν2[:, end]
 
     # arbitrarily scale forcing
-    # TODO -
-    # - multiple scales of motion
-    # - establish superposition (experiment)
-    # - frequency (performance on unit scaled high freq, low freq data)
     if mode == :test
         fscale0 = 10 * rand(rng, 1, K0)
         fscale1 = 10 * rand(rng, 1, K1)
@@ -100,41 +89,176 @@ function datagen(rng, N, K1, K2; mode = :train)
     V, data0, data1, data2
 end
 
-function combine_data(data)
+function datagen2D(rng, N, K1, K2; mode = :train)
+
+    K0 = K1 * K2
+
+    V = FourierSpace(N, N; domain = FourierDomain(2)) |> Float32
+    x, y = points(V)
+
+    # get ν, f
+    ν = 10 .+ 100  .^ rand(rng, Float32, N * N, K1)
+    f = 0  .+ 1000 .^ rand(rng, Float32, N * N, K2)
+    f = f .- sum(f, dims = 1) / (N * N)
+
+    # make spaces
+    V1 = make_transform(V, similar(ν))
+    V2 = make_transform(V, similar(f))
+
+    F1 = transformOp(V1)
+    F2 = transformOp(V2)
+
+    # rm high-freq modes
+    ν = truncationOp(V1, (0.15, 0.15)) * ν
+    f = truncationOp(V2, (0.50, 0.50)) * f
+
+    @assert all(>(1f0), ν)
+    @assert all(<(1f2), ν)
+
+    # data arrays
+    x0 = kron(x, ones(Float32, K0)')
+    y0 = kron(y, ones(Float32, K0)')
+    ν0 = kron(ν, ones(Float32, K2)')
+    f0 = kron(ones(Float32, K1)', f)
+    u0 = ones(Float32, N * N, K0)
+
+    # diffusion op
+    discr = Collocation()
+
+    for i in axes(u0, 2)
+        _ν = ν0[:, i]
+        _f = f0[:, i]
+
+        A = diffusionOp(_ν, V, discr)
+        A = cache_operator(A, x)
+
+        # prob = LinearProblem(A, _f; u0 = view(u0, :, i))
+        prob = LinearProblem(A, _f)
+        sol = solve(prob, KrylovJL_GMRES(), reltol = 1f-4)
+        @show sol.iters
+        @show resid = norm(A * sol.u - _f, 2) / (N * N)
+
+        u0[:, i] = sol.u
+    end
+
+    # V0 = make_transform(V, x0)
+    # A0 = diffusionOp(ν0, V, discr)
+
+    data0 = (x0, y0, ν0, f0, u0) # var   ν, var   f
+
+    @assert all(isequal((N * N, K0)), size.(data0)) "got $(size.(data0))"
+
+    V, data0
+end
+
+function combine_data1D(data)
     x, ν, f, u = data
 
     N, K = size(x)
 
     x1 = zeros(3, N, K) # x, ν, f
-    y  = zeros(1, N, K) # u
+    u1 = zeros(1, N, K) # u
 
     x1[1, :, :] = x
     x1[2, :, :] = ν
     x1[3, :, :] = f
 
-    y[1, :, :] = u
+    u1[1, :, :] = u
 
-    (x1, y)
+    (x1, u1)
 end
 
-function split_data(data)
+function combine_data2D(data, K = size(data[1], 2))
+    x, y, ν, f, u = data
+
+    N, Kmax = size(x)
+    n = sqrt(N) |> Integer
+    K = min(K, Kmax)
+
+    Ks = if K == Kmax
+        1:K
+    else
+        rand(1:Kmax, K)
+    end
+
+    x1 = zeros(4, n, n, K) # x, y, ν, f
+    u1 = zeros(1, n, n, K) # u
+
+    x1[1, :, :, :] = x[:, Ks] |> vec
+    x1[2, :, :, :] = y[:, Ks] |> vec
+    x1[3, :, :, :] = ν[:, Ks] |> vec
+    x1[4, :, :, :] = f[:, Ks] |> vec
+    #
+    u1[1, :, :, :] = u[:, Ks] |> vec
+
+    (x1, u1)
+end
+
+function split_data1D(data)
     x, ν, f, u = data
 
     N, K = size(x)
 
-    x1 = zeros(2, N, K) # ν, x
+    x1 = zeros(2, N, K) # x, ν
     x2 = zeros(1, N, K) # f
-    y  = zeros(1, N, K) # u
+    u1 = zeros(1, N, K) # u
 
     x1[1, :, :] = x
     x1[2, :, :] = ν
 
     x2[1, :, :] = f
 
-    y[1, :, :] = u
+    u1[1, :, :] = u
 
-    ((x1, x2), y)
+    ((x1, x2), u1)
 end
+
+function split_data2D(data, K = size(data[1], 2))
+    x, y, ν, f, u = data
+
+    N, Kmax = size(x)
+    n = sqrt(N) |> Integer
+    K = min(K, Kmax)
+
+    Ks = if K == Kmax
+        1:K
+    else
+        rand(1:Kmax, K)
+    end
+
+    x1 = zeros(3, n, n, K) # ν, x, y
+    x2 = zeros(1, n, n, K) # f
+    u1 = zeros(1, n, n, K) # u
+
+    x1[1, :, :, :] = x[:, Ks] |> vec
+    x1[2, :, :, :] = y[:, Ks] |> vec
+    x1[3, :, :, :] = ν[:, Ks] |> vec
+    #
+    x2[1, :, :, :] = f[:, Ks] |> vec
+    #
+    u1[1, :, :, :] = u[:, Ks] |> vec
+
+    ((x1, x2), u1)
+end
+
+#=
+using Plots, Random
+
+N  = 32
+K1 = 32
+K2 = 32
+
+rng = Random.default_rng()
+Random.seed!(rng, 127)
+
+V, _data = datagen2D(rng, N, K1, K2)
+V, data_ = datagen2D(rng, N, K1, K2)
+
+# x, y, ν, f, u = data
+# plot(u[:, 10], V)
+
+BSON.@save joinpath(@__DIR__, "data2D_N$(N).bson") _data data_
+=#
 
 #=
 using Plots, Random
@@ -147,7 +271,7 @@ K0 = K1 * K2
 rng = Random.default_rng()
 Random.seed!(rng, 127)
 
-V, data0, data1, data2 = datagen(rng, N, K1, K2)
+V, data0, data1, data2 = datagen1D(rng, N, K1, K2)
 
 x0, ν0, f0, u0 = data0
 x1, ν1, f1, u1 = data1

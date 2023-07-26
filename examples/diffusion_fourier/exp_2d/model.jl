@@ -13,7 +13,7 @@ forcing is learned separately.
 using GeometryLearning
 
 # PDE stack
-using LinearAlgebra
+using LinearAlgebra, FourierSpaces
 
 # ML stack
 using Lux, Random, Optimisers
@@ -33,36 +33,35 @@ using FFTW, LinearAlgebra
 BLAS.set_num_threads(2)
 FFTW.set_num_threads(8)
 
-include("../datagen.jl")
-
 # parameters
-N  = 128  # problem size
-K1 = 32   # ν-samples
-K2 = 32   # f-samples
-E  = 200  # epochs
+N = 32   # problem size
+K = 1024 # batch size
+E = 300  # epochs
+
+V = FourierSpace(N, N)
+
+# get data
+include("../datagen.jl")
+BSON.@load joinpath(@__DIR__, "..", "data2D_N$(N).bson") _data data_
 
 rng = Random.default_rng()
-Random.seed!(rng, 199)
-
-# datagen
-_V, _data, _, _ = datagen1D(rng, N, K1, K2) # train
-V_, data_, _, _ = datagen1D(rng, N, K1, K2; mode = :test) # test
+Random.seed!(rng, 201)
 
 ###
 # FNO model
 ###
 if false
 
-__data = combine_data1D(_data)
-data__ = combine_data1D(data_)
+__data = combine_data2D(_data, K)
+data__ = combine_data2D(data_, K)
 
-w = 16    # width
-m = (32,) # modes
+w = 12        # width
+m = (16, 16,) # modes
 c = size(__data[1], 1) # in  channels
 o = size(__data[2], 1) # out channels
 
 NN = Lux.Chain(
-    # PermutedBatchNorm(c, 3),
+    PermutedBatchNorm(c, 4),
     Dense(c , w, tanh),
     OpKernel(w, w, m, tanh),
     OpKernel(w, w, m, tanh),
@@ -76,7 +75,7 @@ maxiters  = E .* (0.10, 0.90,) .|> Int
 dir = joinpath(@__DIR__, "exp_FNO_nonlin")
 device = Lux.gpu
 
-FNO_nonlin = train_model(rng, NN, __data, data__, _V, opt;
+FNO_nonlin = train_model(rng, NN, __data, data__, V, opt;
         learning_rates, maxiters, dir, cbstep = 1, device)
 
 end
@@ -87,18 +86,28 @@ end
 
 if true
 
-__data = split_data1D(_data)
-data__ = split_data1D(data_)
+__data = split_data2D(_data)
+data__ = split_data2D(data_)
 
 w1 = 16    # width nonlin
 w2 = 16    # width linear
-m = (32,) # modes
+m = (16, 16,) # modes
 c1 = size(__data[1][1], 1) # in  channel nonlin
 c2 = size(__data[1][2], 1) # in  channel linear
 o  = size(__data[2]   , 1) # out channel
 
-nonlin = Chain(PermutedBatchNorm(c1, 3), Dense(c1, w1, tanh), OpKernel(w1, w1, m, tanh))
-linear = Dense(c2, w2, use_bias = false)
+nonlin = Chain(
+        PermutedBatchNorm(c1, 4),
+        Dense(c1, w1, tanh),
+        OpKernel(w1, w1, m, tanh),
+        OpKernel(w1, w1, m, tanh),
+    )
+linear = Chain(
+        Dense(c2, w2, use_bias = false),
+        OpKernel(w1, w1, m),
+        OpKernel(w1, w1, m),
+    )
+# linear = Dense(c2, w2, use_bias = false)
 bilin  = OpConvBilinear(w1, w2, o, m)
 # bilin  = OpKernelBilinear(w1, w2, o, m) # errors
 # bilin  = Bilinear((w1, w2) => o)
@@ -111,7 +120,7 @@ maxiters  = E .* (1.00,) .|> Int
 dir = joinpath(@__DIR__, "exp_FNO_linear_nonlinear")
 device = Lux.gpu
 
-model, _ = train_model(rng, NN, __data, data__, _V, opt;
+model, _ = train_model(rng, NN, __data, data__, V, opt;
         learning_rates, maxiters, dir, cbstep = 1, device)
 
 end

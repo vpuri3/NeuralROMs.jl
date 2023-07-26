@@ -14,13 +14,13 @@ function OpKernel(ch_in::Int, ch_out::Int, modes::NTuple{D, Int},
     activation = identity;
     transform = nothing,
     init = Lux.glorot_uniform,
+    use_bias = false,
 ) where{D}
 
     activation = fastify(activation)
 
     conv = OpConv(ch_in, ch_out, modes; transform, init)
-    # loc = Dense(ch_in, ch_out; use_bias = false, init_weight = init)
-    loc = Dense(ch_in, ch_out; init_weight = init)
+    loc = Dense(ch_in, ch_out; init_weight = init, use_bias)
 
     Chain(
         Lux.Parallel(+, loc, conv),
