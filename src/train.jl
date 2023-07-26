@@ -130,11 +130,11 @@ function train_model(
     # visualization
     if make_plots
         plt_train = plot_training(ITER, _LOSS, LOSS_)
+        png(plt_train, joinpath(dir, "plt_training"))
 
         if ndims(V) == 1
             plts = visualize(V, _data, data_, NN, p, st; nsamples)
 
-            png(plt_train, joinpath(dir, "plt_training"))
             png(plts[1],   joinpath(dir, "plt_traj_train"))
             png(plts[2],   joinpath(dir, "plt_traj_test"))
             png(plts[3],   joinpath(dir, "plt_r2_train"))

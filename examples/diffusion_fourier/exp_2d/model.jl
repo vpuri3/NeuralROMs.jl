@@ -50,7 +50,7 @@ Random.seed!(rng, 201)
 ###
 # FNO model
 ###
-if false
+if true
 
 __data = combine_data2D(_data, K)
 data__ = combine_data2D(data_, K)
@@ -104,8 +104,8 @@ nonlin = Chain(
     )
 linear = Chain(
         Dense(c2, w2, use_bias = false),
-        OpKernel(w1, w1, m),
-        OpKernel(w1, w1, m),
+        OpKernel(w2, w2, m),
+        # OpKernel(w2, w2, m),
     )
 # linear = Dense(c2, w2, use_bias = false)
 bilin  = OpConvBilinear(w1, w2, o, m)
