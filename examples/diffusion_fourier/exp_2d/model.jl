@@ -57,7 +57,7 @@ data__ = combine_data2D(data_, K)
 ###
 # FNO model
 ###
-if false
+if true
 
 w = 12        # width
 m = (16, 16,) # modes
@@ -79,7 +79,7 @@ maxiters  = E .* (0.10, 0.90,) .|> Int
 dir = joinpath(@__DIR__, "exp_FNO_nonlin")
 device = Lux.gpu
 
-FNL_nl = train_model(rng, NN, __data, data__, V, opt;
+FNO_nl = train_model(rng, NN, __data, data__, V, opt;
         learning_rates, maxiters, dir, cbstep = 1, device)
 
 end
@@ -96,10 +96,10 @@ c2 = 1     # in  channel linear
 o  = size(__data[2]   , 1) # out channel
 
 # hyper params
-w1 = 16       # width nonlin
+w1 = 20       # width nonlin
 w2 = 16       # width linear
 wo = 8        # width project
-m = (16, 16,) # modes
+m = (12, 14,) # modes
 # m = (24, 24,) # modes # errors
 
 split = SplitRows(1:3, 4)
@@ -121,10 +121,10 @@ project = Dense(wo, o, use_bias = false)
 NN = linear_nonlinear(split, nonlin, linear, bilin, project)
 
 opt = Optimisers.Adam()
-# learning_rates = (1f-4,)
-# maxiters  = E .* (0.50,) .|> Int
-learning_rates = (1f-4, 1f-0)
-maxiters  = E .* (0.50, 0.50) .|> Int
+learning_rates = (1f-4,)
+maxiters  = E .* (0.05,) .|> Int
+# learning_rates = (1f-4, 1f-0)
+# maxiters  = E .* (0.50, 0.50) .|> Int
 dir = joinpath(@__DIR__, "exp_FNO_linear_nonlinear")
 device = Lux.gpu
 

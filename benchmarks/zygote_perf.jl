@@ -1,6 +1,6 @@
 using Zygote, BenchmarkTools, Setfield
 
-function zygote_anon_perf(N)
+function zygote_perf(N)
     p = rand(N * N)
     st = (;a = rand(N), b = rand(N))
 
@@ -15,50 +15,28 @@ function zygote_anon_perf(N)
         l, st
     end
 
-    println("### PULLBACK + Fix2 ###")
-    loss2 = Base.Fix2(loss, st) # can be updated with @set! loss2.x = st
-
-    println("# ROUND 1")
-    @time @set! loss2.x = st
-    @time (l, st), pb = Zygote.pullback(loss2, p)
-    @time gr = pb((one.(l), nothing))[1]
-
-    println("# ROUND 2")
-    @time @set! loss2.x = st
-    @time (l, st), pb = Zygote.pullback(loss2, p)
-    @time gr = pb((one.(l), nothing))[1]
-
-    println("# ROUND 3")
-    @time @set! loss2.x = st
-    @time (l, st), pb = Zygote.pullback(loss2, p)
-    @time gr = pb((one.(l), nothing))[1]
-
-    println("# BTIME")
-    @btime @set! $(loss2.x) = $st
-    @btime a, pb = Zygote.pullback($loss2, $p)
-    @btime gr = $pb((one.($l), nothing))[1]
-
     println()
     println("### Zygote.PULLBACK + ANON ###")
     println()
 
-    println("# ROUND 1")
-    @time (l, st), pb = Zygote.pullback(p -> loss(p, st), p)
-    @time pb((one.(l), nothing))[1]
-
-    println("# ROUND 2")
-    @time (l, st), pb = Zygote.pullback(p -> loss(p, st), p)
-    @time pb((one.(l), nothing))[1]
+    (l, st), pb = Zygote.pullback(p -> loss(p, st), p)
+    pb((one.(l), nothing))[1]
 
     println("# ROUND 3")
-    @time (l, st), pb = Zygote.pullback(p -> loss(p, st), p)
-    @time pb((one.(l), nothing))[1]
+    # @btime (l, st), pb = Zygote.pullback(p -> loss(p, $st), $p)
+    @btime $pb((one.($l), nothing))[1]
+
+    println("### PULLBACK + Fix2 ###")
+    loss2 = Base.Fix2(loss, st) # can be updated with @set! loss2.x = st
+
+    @btime @set! $(loss2.x) = $st
+    @btime a, pb = Zygote.pullback($loss2, $p)
+    @btime gr = $pb((one.($l), nothing))[1]
 
     return
 end
 
-# zygote_anon_perf(10)
-
+# zygote_perf(10)
 
 ###
 # Tain loop
@@ -77,7 +55,6 @@ function loop_fix2(N, E)
 
         l, st
     end
-
 
     function grad(p, st)
         loss2 = Base.Fix2(loss, st)
@@ -126,5 +103,7 @@ function loop_anon(N, E)
     return
 end
 
-@btime loop_anon(10, 20)
-@btime loop_fix2(10, 20)
+const N, E = 10, 20
+
+@btime loop_anon(N, E)
+@btime loop_fix2(N, E)
