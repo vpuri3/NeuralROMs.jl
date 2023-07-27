@@ -29,19 +29,22 @@ end
 
 module Losses
 
-struct Loss{Tdata, Tst}
+struct Loss{Tdata, Tst, F}
     data::Tdata
     st::Tst
+    lossfun::F
 end
 
 function (L::Loss)(p)
-    (x, y), st = L.data, L.st
+    (x, ŷ), st = L.data, L.st
 
-    l = sum(p * x .+ st.a, dims = 1) - y |> sum
+    y = sum(p * x .+ st.a, dims = 1)
     st = (;a = st.a .+ 1f0, b = st.b .+ 1f0)
 
-    l, st # Lux interface
+    L.lossfun(y, ŷ), st # Lux interface
 end
+
+mse(y, ŷ) = sum(ŷ - y)
 
 end
 
@@ -59,7 +62,7 @@ function loop_struct(E, p, st, loader)
 
     for _ in 1:E
         for batch in loader
-            loss = Losses.Loss(batch, st) # move this out
+            loss = Losses.Loss(batch, st, Losses.mse) # move this out
 
             _, gr, st = grad(loss, p)
             p -= 1f-2 * gr

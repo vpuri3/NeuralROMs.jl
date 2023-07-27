@@ -15,7 +15,7 @@ is equal to `length(V)`.
 
 # Keyword Arguments
 - `opts`: `NTuple` of optimizers
-- `maxiters`: Number of iterations for each optimization cycle
+- `nepochs`: Number of epochs for each optimization cycle
 - `cbstep`: prompt `callback` function every `cbstep` epochs
 - `dir`: directory to save model, plots
 - `io`: io for printing stats
@@ -23,46 +23,60 @@ is equal to `length(V)`.
 function train_model(
     rng::Random.AbstractRNG,
     NN::Lux.AbstractExplicitLayer,
-    _data::NTuple{2, Any},
-    data_::NTuple{2, Any},
+    _data::NTuple{2, AbstractArray},
+    data_::NTuple{2, AbstractArray},
     V::Spaces.AbstractSpace,
     opt::Optimisers.AbstractRule = Optimisers.Adam();
+    batchsize::Int = 32,
     learning_rates::NTuple{N, Float32} = (1f-3,),
-    maxiters::NTuple{N} = (100,),
-    cbstep::Int = 10,
+    nepochs::NTuple{N} = (100,),
+    cbstep::Int = 1,
     dir = "",
     name = "model",
     nsamples = 5,
     io::IO = stdout,
     p = nothing,  # initial parameters
     st = nothing, # initial state
-    lossfun = GeometryLearning.mse,
+    lossfun = mse,
     device = Lux.cpu,
     make_plots = true,
 ) where{N}
 
+    @assert length(learning_rates) == length(nepochs)
+
     # make directory for saving model
     mkpath(dir)
 
-    for data in (_data, data_)
-        @assert data[1] isa AbstractArray
-        @assert data[2] isa AbstractArray
+    # create data loaders
+    _loader = DataLoader(_data; batchsize, rng, shuffle = true)
+    loader_ = DataLoader(data_; batchsize, rng, shuffle = true)
+
+    if device == Lux.gpu
+        _loader, loader_ = (_loader, loader_) .|> CuIterator
     end
 
-    _devicedata, devicedata_ = (_data, data_) |> device
+    # full batch statistics functions
+    _stats = (p, st; io = io) -> statistics(NN, p, st, _loader; io)
+    stats_ = (p, st; io = io) -> statistics(NN, p, st, loader_; io)
 
-    @assert length(learning_rates) == length(maxiters)
+    # full batch losses for CB
+    _loss = (p, st) -> fullbatch_metric(NN, p, st, _loader, lossfun, true)
+    loss_ = (p, st) -> fullbatch_metric(NN, p, st, loader_, lossfun, true)
 
-    # utility functions
-    _model, _loss, _stats = model_setup(NN, _devicedata; lossfun)
-    model_, loss_, stats_ = model_setup(NN, devicedata_; lossfun)
+    # callback functions
+    EPOCH = Int[]
+    _LOSS = Float32[]
+    LOSS_ = Float32[]
 
-    # analysis callback
+    # callback for printing statistics
     CB = (p, st; io = io) -> callback(p, st; io, _loss, _stats, loss_, stats_)
 
-    # if initial parameters not provided,
-    # get model parameters with rng
+    # callback for training
+    cb = (p, st, epoch, nepoch; io = io) -> callback(p, st; io,
+                                                _loss, _LOSS, loss_, LOSS_,
+                                                EPOCH, epoch, nepoch, step = cbstep)
 
+    # parameters
     _p, _st = Lux.setup(rng, NN)
     # _p = _p |> ComponentArray # not nice for real + complex
 
@@ -74,34 +88,25 @@ function train_model(
     # print stats
     CB(p, st)
 
-    # training callback
-    ITER  = Int[]
-    _LOSS = Float32[]
-    LOSS_ = Float32[]
-
-    cb = (p, st, iter, maxiter; io = io) -> callback(p, st; io,
-                                                _loss, _LOSS, loss_, LOSS_,
-                                                ITER, iter, maxiter, step = cbstep)
-
-        println(io, "#======================#")
-        println(io, "Starting Trainig Loop")
-        println(io, "Optimizer: $opt")
-        println(io, "#======================#")
+    println(io, "#======================#")
+    println(io, "Starting Trainig Loop")
+    println(io, "Optimizer: $opt")
+    println(io, "#======================#")
 
     # set up optimizer
     opt_st = nothing
 
-    for i in eachindex(maxiters)
+    for i in eachindex(nepochs)
         learning_rate = learning_rates[i]
-        maxiter = maxiters[i]
+        nepoch = nepochs[i]
 
         @set! opt.eta = learning_rate
 
         println(io, "#======================#")
-        println(io, "Learning Rate: $learning_rate, ITERS: $maxiter")
+        println(io, "Learning Rate: $learning_rate, EPOCHS: $nepoch")
         println(io, "#======================#")
 
-        @time p, st, opt_st = optimize(_loss, p, st, maxiter; opt, opt_st, cb)
+        @time p, st, opt_st = optimize(NN, p, st, _loader, nepoch; lossfun, opt, opt_st, cb, io)
 
         CB(p, st)
     end
@@ -111,76 +116,117 @@ function train_model(
     CB(p, st; io = statsfile)
     close(statsfile)
 
-    # transfer to host device and free stuff
-    if device == Lux.gpu
-        CUDA.unsafe_free!.(_devicedata)
-        CUDA.unsafe_free!.(devicedata_)
-    end
-
+    # transfer model to host device
     p, st = (p, st) |> Lux.cpu
 
     # visualization
     if make_plots
-        plot_training(ITER, _LOSS, LOSS_; dir)
+        plot_training(EPOCH, _LOSS, LOSS_; dir)
         visualize(V, _data, data_, NN, p, st; nsamples, dir)
     end
 
     model = NN, p, st
-    STATS = ITER, _LOSS, LOSS_
+    STATS = EPOCH, _LOSS, LOSS_
  
     BSON.@save joinpath(dir, "$name.bson") _data data_ model
 
     model, STATS
 end
 
+struct Loss{TNN, Tst, Tdata, Tl}
+    NN::TNN
+    st::Tst
+    data::Tdata
+    lossfun::Tl
+end
+
+function (L::Loss)(p)
+    x, ŷ = L.data
+
+    y, st = L.NN(x, p, L.st)
+    L.lossfun(y, ŷ), st # Lux interface
+end
+
+function fullbatch_metric(NN, p, st, loader, metric, ismean = false)
+    L = 0f0
+    N = 0
+
+    for (x, ŷ) in loader
+        y = NN(x, p, st)[1]
+        l = metric(y, ŷ)
+
+        if ismean
+            n = length(ŷ)
+            N += n
+            L += l * n
+        else
+            L += l
+        end
+    end
+
+    ismean ? L / N : L
+end
+
 """
 $SIGNATURES
 
 """
-function model_setup(NN::Lux.AbstractExplicitLayer, data; lossfun = mse)
+function statistics(NN::Lux.AbstractExplicitLayer, p, st, loader;
+    io::Union{Nothing, IO} = stdout
+)
+    N = 0
+    SUM   = 0f0
+    VAR   = 0f0
+    ABSER = 0f0
+    SQRER = 0f0
 
-    x, ŷ = data
+    MAXER = 0f0
 
-    function model(p, st)
-        NN(x, p, st)[1]
-    end
-
-    function loss(p, st)
-        y = NN(x, p, st)[1]
-
-        lossfun(y, ŷ), st
-    end
-
-    function stats(p, st; io::Union{Nothing, IO} = stdout)
-        y = model(p, st)
+    for (x, ŷ) in loader
+        y, _ = NN(x, p, st)
         Δy = y - ŷ
 
-        R2 = rsquare(y, ŷ)
-        MSE = mse(y, ŷ)
+        N += length(ŷ)
+        SUM += sum(y)
 
-        meanAE = norm(Δy, 1) / length(ŷ)
-        maxAE  = norm(Δy, Inf)
-
-        rel   = Δy ./ ŷ
-        meanRE = norm(rel, 1) / length(ŷ)
-        maxRE  = norm(rel, Inf)
-
-        if !isnothing(io)
-            str = ""
-            str *= string("R² score:       ", round(R2    , digits=8), "\n")
-            str *= string("mean SQR error: ", round(MSE   , digits=8), "\n")
-            str *= string("mean ABS error: ", round(meanAE, digits=8), "\n")
-            str *= string("max  ABS error: ", round(maxAE , digits=8), "\n")
-            str *= string("mean REL error: ", round(meanRE, digits=8), "\n")
-            str *= string("max  REL error: ", round(maxRE , digits=8))
-
-            println(io, str)
-        end
-
-        R2, MSE, meanAE, maxAE, meanRE, maxRE
+        ABSER += sum(abs , Δy)
+        SQRER += sum(abs2, Δy)
+        MAXER  = max(MAXER, norm(Δy, Inf))
     end
 
-    model, loss, stats
+    ȳ   = SUM / N
+    MSE = SQRER / N
+
+    meanAE = ABSER / N
+    maxAE  = MAXER
+
+    # variance
+    for (x, ŷ) in loader
+        y, _ = NN(x, p, st)
+        Δy = y - ŷ
+
+        VAR += sum(abs2, y .- ȳ) / N
+    end
+
+    R2 = 1f0 - MSE / (VAR + eps(Float32))
+
+    # rel   = Δy ./ ŷ
+    # meanRE = norm(rel, 1) / length(ŷ)
+    # maxRE  = norm(rel, Inf)
+
+    if !isnothing(io)
+        str = ""
+        str *= string("R² score:       ", round(R2    , digits=8), "\n")
+        str *= string("mean SQR error: ", round(MSE   , digits=8), "\n")
+        str *= string("mean ABS error: ", round(meanAE, digits=8), "\n")
+        str *= string("max  ABS error: ", round(maxAE , digits=8), "\n")
+        # str *= string("mean REL error: ", round(meanRE, digits=8), "\n")
+        # str *= string("max  REL error: ", round(maxRE , digits=8))
+
+        println(io, str)
+    end
+
+    R2, MSE, meanAE, maxAE #, meanRE, maxRE
 end
 
 """
@@ -190,14 +236,14 @@ $SIGNATURES
 function callback(p, st; io::Union{Nothing, IO} = stdout,
                   _loss = nothing, _LOSS = nothing, _stats = nothing,
                   loss_ = nothing, LOSS_ = nothing, stats_ = nothing,
-                  iter = nothing, step = 0, maxiter = 0, ITER = nothing,
+                  epoch = nothing, step = 0, nepoch = 0, EPOCH = nothing,
                  )
 
-    str = if !isnothing(iter)
+    str = if !isnothing(epoch)
         step = iszero(step) ? 10 : step
 
-        if iter % step == 0 || iter == 1 || iter == maxiter
-            "Iter $iter: "
+        if epoch % step == 0 || epoch == 1 || epoch == nepoch
+            "Epoch [$epoch / $nepoch]"
         else
             return
         end
@@ -205,9 +251,9 @@ function callback(p, st; io::Union{Nothing, IO} = stdout,
         ""
     end
 
-    # log iter
-    if !isnothing(ITER) & !isnothing(iter)
-        push!(ITER, iter)
+    # log epochs
+    if !isnothing(EPOCH) & !isnothing(epoch)
+        push!(EPOCH, epoch)
     end
 
     # log training loss
@@ -231,11 +277,11 @@ function callback(p, st; io::Union{Nothing, IO} = stdout,
     isnothing(io) && return
 
     if !isnothing(_l)
-        str *= string("TRAIN LOSS: ", round(_l, digits=8), " ")
+        str *= string("\t TRAIN LOSS: ", round(_l, digits=8))
     end
 
     if !isnothing(l_)
-        str *= string("TEST LOSS: ", round(l_, digits=8), " ")
+        str *= string("\t TEST LOSS: ", round(l_, digits=8))
     end
 
     println(io, str)
@@ -265,65 +311,75 @@ Train parameters `p` to minimize `loss` using optimization strategy `opt`.
 
 # Arguments
 - Loss signature: `loss(p, st) -> y, st`
-- Callback signature: `cb(p, st iter, maxiter) -> nothing` 
+- Callback signature: `cb(p, st epoch, nepochs) -> nothing` 
 """
-function optimize(loss, p, st, maxiter;
+function optimize(NN, p, st, loader, nepochs;
+    lossfun = mse,
     opt = Optimisers.Adam(),
     opt_st = nothing,
-    cb = nothing
+    cb = nothing,
+    io::Union{Nothing, IO} = stdout,
 )
 
-    function grad(p, st)
-        loss2 = Base.Fix2(loss, st)
-        (l, st), pb = Zygote.pullback(loss2, p)
-        g = pb((one.(l), nothing))[1]
+    function grad(loss, p)
+        (l, st), pb = Zygote.pullback(loss, p)
+        gr = pb((one.(l), nothing))[1]
 
-        l, g, st
+        l, gr, st
     end
 
     # print stats
-    !isnothing(cb) && cb(p, st, 0, maxiter)
+    !isnothing(cb) && cb(p, st, 0, nepochs; io)
 
-    # dry run
-    grad(p, st)
+    # warm up
+    loss = Loss(NN, st, first(loader), lossfun)
+    l, _, _ = grad(loss, p)
 
     # init optimizer
     opt_st = isnothing(opt_st) ? Optimisers.setup(opt, p) : opt_st
 
-    for iter in 1:maxiter
-        _, g, st = grad(p, st)
-        opt_st, p = Optimisers.update(opt_st, p, g)
+    for epoch in 1:nepochs
+        for batch in loader
+            loss = Loss(NN, st, batch, lossfun)
 
-        !isnothing(cb) && cb(p, st, iter, maxiter)
+            l, g, st = grad(loss, p)
+            opt_st, p = Optimisers.update(opt_st, p, g)
+
+            println(io, "Epoch [$epoch / $nepochs] \t Batch loss: $l")
+        end
+
+        println(io, "#=======================#")
+        !isnothing(cb) && cb(p, st, epoch, nepochs; io)
+        println(io, "#=======================#")
     end
 
     p, st, opt_st
 end
 
-function plot_training(ITER, _LOSS, LOSS_; dir = nothing)
-    z = findall(iszero, ITER)
+function plot_training(EPOCH, _LOSS, LOSS_; dir = nothing)
+    z = findall(iszero, EPOCH)
 
-    # fix ITER to account for multiple training loops
+    # fix EPOCH to account for multiple training loops
     if length(z) > 1
             for i in 2:length(z)-1
             idx =  z[i]:z[i+1] - 1
-            ITER[idx] .+= ITER[z[i] - 1]
+            EPOCH[idx] .+= EPOCH[z[i] - 1]
         end
-        ITER[z[end]:end] .+= ITER[z[end] - 1]
+        EPOCH[z[end]:end] .+= EPOCH[z[end] - 1]
     end
 
     plt = plot(title = "Training Plot", yaxis = :log,
                xlabel = "Epochs", ylabel = "Loss (MSE)",
                ylims = (minimum(_LOSS) / 10, maximum(LOSS_) * 10))
 
-    plot!(plt, ITER, _LOSS, w = 2.0, c = :green, label = "Train Dataset")
-    plot!(plt, ITER, LOSS_, w = 2.0, c = :red, label = "Test Dataset")
+    plot!(plt, EPOCH, _LOSS, w = 2.0, c = :green, label = "Train Dataset")
+    plot!(plt, EPOCH, LOSS_, w = 2.0, c = :red, label = "Test Dataset")
 
-    vline!(plt, ITER[z[2:end]], c = :black, w = 2.0, label = nothing)
+    vline!(plt, EPOCH[z[2:end]], c = :black, w = 2.0, label = nothing)
 
     if !isnothing(dir)
         png(plt, joinpath(dir, "plt_training"))
-    end
+            end
 
     plt
 end

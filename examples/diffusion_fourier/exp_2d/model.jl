@@ -34,13 +34,11 @@ BLAS.set_num_threads(2)
 FFTW.set_num_threads(8)
 
 # parameters
-N = 64   # problem size
-K = 64 # batch size
-E = 300  # epochs
+# N = 32  # problem size
+# E = 300 # epochs
 
-N = 32   # problem size
-K = 512 # batch size
-E = 300  # epochs
+N = 64  # problem size
+E = 300 # epochs
 
 V = FourierSpace(N, N)
 
@@ -49,23 +47,22 @@ include("../datagen.jl")
 BSON.@load joinpath(@__DIR__, "..", "data2D_N$(N).bson") _data data_
 
 rng = Random.default_rng()
-Random.seed!(rng, 8705)
+Random.seed!(rng, 345)
 
-__data = combine_data2D(_data, K)
-data__ = combine_data2D(data_, K)
+__data = combine_data2D(_data)
+data__ = combine_data2D(data_)
 
 ###
 # FNO model
 ###
-if true
+if false
 
 w = 12        # width
-m = (16, 16,) # modes
+m = (12, 12,) # modes
 c = size(__data[1], 1) # in  channels
 o = size(__data[2], 1) # out channels
 
 NN = Lux.Chain(
-    PermutedBatchNorm(c, 4),
     Dense(c , w, tanh),
     OpKernel(w, w, m, tanh),
     OpKernel(w, w, m, tanh),
@@ -74,13 +71,14 @@ NN = Lux.Chain(
 )
 
 opt = Optimisers.Adam()
+batchsize = 64
 learning_rates = (1f-2, 1f-3,)
-maxiters  = E .* (0.10, 0.90,) .|> Int
+nepochs  = E .* (0.10, 0.90,) .|> Int
 dir = joinpath(@__DIR__, "exp_FNO_nonlin")
 device = Lux.gpu
 
 FNO_nl = train_model(rng, NN, __data, data__, V, opt;
-        learning_rates, maxiters, dir, cbstep = 1, device)
+        batchsize, learning_rates, nepochs, dir, device)
 
 end
 
@@ -96,40 +94,37 @@ c2 = 1     # in  channel linear
 o  = size(__data[2]   , 1) # out channel
 
 # hyper params
-w1 = 20       # width nonlin
-w2 = 16       # width linear
+w1 = 8       # width nonlin
+w2 = 8       # width linear
 wo = 8        # width project
-m = (12, 14,) # modes
-# m = (24, 24,) # modes # errors
+m = (12, 12,) # modes
 
 split = SplitRows(1:3, 4)
-
 nonlin = Chain(
         Dense(c1, w1, tanh),
         OpKernel(w1, w1, m, tanh),
-        Dense(w1, w1, tanh)
+        OpKernel(w1, w1, m, tanh),
     )
 linear = Chain(
         Dense(c2, w2, use_bias = false),
+        OpConv(w2, w2, m)
     )
 bilin  = OpConvBilinear(w1, w2, wo, m)
 # bilin  = OpKernelBilinear(w1, w2, o, m) # errors
 
 project = Dense(wo, o, use_bias = false)
-# project = NoOpLayer()
 
 NN = linear_nonlinear(split, nonlin, linear, bilin, project)
 
 opt = Optimisers.Adam()
-learning_rates = (1f-4,)
-maxiters  = E .* (0.05,) .|> Int
-# learning_rates = (1f-4, 1f-0)
-# maxiters  = E .* (0.50, 0.50) .|> Int
+batchsize = 128
+learning_rates = (1f-3, 1f-3)
+nepochs  = E .* (0.10, 0.90) .|> Int
 dir = joinpath(@__DIR__, "exp_FNO_linear_nonlinear")
 device = Lux.gpu
 
 FNO_bl, _ = train_model(rng, NN, __data, data__, V, opt;
-        learning_rates, maxiters, dir, cbstep = 1, device)
+        batchsize, learning_rates, nepochs, dir, device)
 
 end
 

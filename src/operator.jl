@@ -104,6 +104,9 @@ struct OpConv{D, F, I} <: Lux.AbstractExplicitLayer
     end
 end
 
+"""
+$SIGNATURES
+"""
 function OpConv(ch_in::Int, ch_out::Int, modes::NTuple{D, Int};
     init = Lux.glorot_uniform,
     transform = nothing,

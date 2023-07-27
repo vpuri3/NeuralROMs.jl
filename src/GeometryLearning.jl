@@ -8,6 +8,7 @@ using FourierSpaces: linspace
 
 # ML Stack
 using Lux
+using MLUtils
 using Optimisers
 
 # autodiff

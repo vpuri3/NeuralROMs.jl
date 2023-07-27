@@ -1,19 +1,17 @@
-TRAIN LOSS: 0.00066248 TEST LOSS: 0.06346428 
+	 TRAIN LOSS: 0.00020697	 TEST LOSS: 0.04468583
 #======================#
 TRAIN STATS
-R² score:       0.99740183
-mean SQR error: 0.00066248
-mean ABS error: 0.01958712
-max  ABS error: 0.28597713
-mean REL error: 0.6583311
-max  REL error: 174655.38
+R² score:       0.99919323
+mean SQR error: 0.00020697
+mean ABS error: 0.01120044
+max  ABS error: 0.22001018
+
 #======================#
 #======================#
 TEST  STATS
-R² score:       0.78821313
-mean SQR error: 0.06346428
-mean ABS error: 0.19903997
-max  ABS error: 1.2542816
-mean REL error: 4.2372494
-max  REL error: 445819.12
+R² score:       0.81013878
+mean SQR error: 0.04468583
+mean ABS error: 0.16512277
+max  ABS error: 1.39032332
+
 #======================#
