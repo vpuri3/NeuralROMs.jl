@@ -38,7 +38,7 @@ FFTW.set_num_threads(8)
 # E = 300 # epochs
 
 N = 64  # problem size
-E = 300 # epochs
+E = 200 # epochs
 
 V = FourierSpace(N, N)
 
@@ -55,7 +55,7 @@ data__ = combine_data2D(data_)
 ###
 # FNO model
 ###
-if false
+if true
 
 w = 12        # width
 m = (12, 12,) # modes
@@ -71,7 +71,7 @@ NN = Lux.Chain(
 )
 
 opt = Optimisers.Adam()
-batchsize = 64
+batchsize = 128
 learning_rates = (1f-2, 1f-3,)
 nepochs  = E .* (0.10, 0.90,) .|> Int
 dir = joinpath(@__DIR__, "exp_FNO_nonlin")
@@ -118,8 +118,8 @@ NN = linear_nonlinear(split, nonlin, linear, bilin, project)
 
 opt = Optimisers.Adam()
 batchsize = 128
-learning_rates = (1f-3, 1f-3)
-nepochs  = E .* (0.10, 0.90) .|> Int
+learning_rates = (1f-3,)
+nepochs  = E .* (1.00,) .|> Int
 dir = joinpath(@__DIR__, "exp_FNO_linear_nonlinear")
 device = Lux.gpu
 

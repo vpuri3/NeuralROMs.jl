@@ -60,8 +60,8 @@ function train_model(
     stats_ = (p, st; io = io) -> statistics(NN, p, st, loader_; io)
 
     # full batch losses for CB
-    _loss = (p, st) -> fullbatch_metric(NN, p, st, _loader, lossfun, true)
-    loss_ = (p, st) -> fullbatch_metric(NN, p, st, loader_, lossfun, true)
+    _loss = (p, st) -> anybatch_metric(NN, p, st, _loader, lossfun)
+    loss_ = (p, st) -> anybatch_metric(NN, p, st, loader_, lossfun)
 
     # callback functions
     EPOCH = Int[]
@@ -133,18 +133,11 @@ function train_model(
     model, STATS
 end
 
-struct Loss{TNN, Tst, Tdata, Tl}
-    NN::TNN
-    st::Tst
-    data::Tdata
-    lossfun::Tl
-end
-
-function (L::Loss)(p)
-    x, ŷ = L.data
-
-    y, st = L.NN(x, p, L.st)
-    L.lossfun(y, ŷ), st # Lux interface
+#===============================================================#
+function anybatch_metric(NN, p, st, loader, metric)
+    x, ŷ = first(loader)
+    y = NN(x, p, st)[1]
+    metric(y, ŷ)
 end
 
 function fullbatch_metric(NN, p, st, loader, metric, ismean = false)
@@ -304,6 +297,21 @@ function callback(p, st; io::Union{Nothing, IO} = stdout,
     return
 end
 
+#===============================================================#
+struct Loss{TNN, Tst, Tdata, Tl}
+    NN::TNN
+    st::Tst
+    data::Tdata
+    lossfun::Tl
+end
+
+function (L::Loss)(p)
+    x, ŷ = L.data
+
+    y, st = L.NN(x, p, L.st)
+    L.lossfun(y, ŷ), st # Lux interface
+end
+
 """
 $SIGNATURES
 
@@ -345,9 +353,12 @@ function optimize(NN, p, st, loader, nepochs;
             l, g, st = grad(loss, p)
             opt_st, p = Optimisers.update(opt_st, p, g)
 
-            println(io, "Epoch [$epoch / $nepochs] \t Batch loss: $l")
+            println(io, "Epoch [$epoch / $nepochs]" * "\t Batch loss: $l")
+
+            # GC.gc(false)
         end
 
+        # todo: make this async
         println(io, "#=======================#")
         !isnothing(cb) && cb(p, st, epoch, nepochs; io)
         println(io, "#=======================#")
@@ -356,6 +367,7 @@ function optimize(NN, p, st, loader, nepochs;
     p, st, opt_st
 end
 
+#===============================================================#
 function plot_training(EPOCH, _LOSS, LOSS_; dir = nothing)
     z = findall(iszero, EPOCH)
 
@@ -482,4 +494,5 @@ end
 
 function visualize(V::Spaces.AbstractSpace{<:Any, 2}, args...; kwargs...)
 end
+#===============================================================#
 #
