@@ -2,7 +2,7 @@
 using HDF5, Random
 using CalculustCore: ndgrid
 
-function darcy2D(filename, K = 1024, rng = Random.default_rng())
+function darcy2D(filename, _K = 1024, K_ = 256, rng = Random.default_rng())
     file = h5open(filename, "r")
 
     ν = read(file["nu"])           # [128, 128, 10000]
@@ -12,18 +12,18 @@ function darcy2D(filename, K = 1024, rng = Random.default_rng())
     u = read(file["tensor"])       # [128, 128, 1, 10000]
 
     N = length(x)
-    Kmax = size(u,)[end]
-    Ks = rand(rng, 1:Kmax, 2K)
-    _I = Ks[begin:K]
-    I_ = Ks[K+1:end]
+    Kmax = size(u)[end]
+    Ks = rand(rng, 1:Kmax, _K + K_)
+    _I = Ks[begin:_K]
+    I_ = Ks[_K+1:end]
 
     x, y = ndgrid(x, y)
 
-    _x = zeros(3, N, N, K)
-    x_ = zeros(3, N, N, K)
+    _x = zeros(3, N, N, _K)
+    x_ = zeros(3, N, N, K_)
 
-    _u = zeros(1, N, N, K)
-    u_ = zeros(1, N, N, K)
+    _u = zeros(1, N, N, _K)
+    u_ = zeros(1, N, N, K_)
 
     _x[1, :, :, :] .= x
     _x[2, :, :, :] .= y

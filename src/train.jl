@@ -311,6 +311,13 @@ function (L::Loss)(p)
     L.lossfun(y, ŷ), st # Lux interface
 end
 
+function grad(loss::Loss, p)
+    (l, st), pb = Zygote.pullback(loss, p)
+    gr = pb((one.(l), nothing))[1]
+
+    l, st, gr
+end
+
 """
 $SIGNATURES
 
@@ -328,20 +335,18 @@ function optimize(NN, p, st, loader, nepochs;
     io::Union{Nothing, IO} = stdout,
 )
 
-    function grad(loss, p)
-        (l, st), pb = Zygote.pullback(loss, p)
-        gr = pb((one.(l), nothing))[1]
-
-        l, gr, st
-    end
-
     # print stats
     !isnothing(cb) && cb(p, st, 0, nepochs; io)
+
+    function loss(x, ŷ, p, st)
+        y, st = NN(x, p, st)
+        lossfun(y, ŷ), st
+    end
 
     # warm up
     begin
         loss = Loss(NN, st, first(loader), lossfun)
-        _, _, _ = grad(loss, p)
+        grad(loss, p)
     end
 
     # init optimizer
@@ -350,13 +355,12 @@ function optimize(NN, p, st, loader, nepochs;
     for epoch in 1:nepochs
         for batch in loader
             loss = Loss(NN, st, batch, lossfun)
-
-            l, g, st = grad(loss, p)
-            opt_st, p = Optimisers.update(opt_st, p, g)
+            l, st, g = grad(loss, p)
+            opt_st, p = Optimisers.update!(opt_st, p, g)
 
             println(io, "Epoch [$epoch / $nepochs]" * "\t Batch loss: $l")
 
-            # GC.gc(false)
+            GC.gc(false)
         end
         # GC.gc(true)
 

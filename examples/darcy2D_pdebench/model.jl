@@ -37,14 +37,17 @@ rng = Random.default_rng()
 Random.seed!(rng, 345)
 
 N = 128
-K = 512 # trajectories
-E = 200 # epochs
+E = 300 # epochs
+
+# trajectories
+_K = 4096
+K_ = 512
 
 # get data
 dir = @__DIR__
 filename = joinpath(dir, "2D_DarcyFlow_beta0.01_Train.hdf5")
 include(joinpath(dir, "darcy.jl"))
-_data, data_ = darcy2D(filename, K, rng)
+_data, data_ = darcy2D(filename, _K, K_, rng)
 
 V = FourierSpace(N, N)
 
@@ -70,7 +73,7 @@ opt = Optimisers.Adam()
 batchsize = 32
 learning_rates = (1f-2, 1f-3,)
 nepochs  = E .* (0.10, 0.90,) .|> Int
-dir = joinpath(@__DIR__, "FNO2")
+dir = joinpath(@__DIR__, "FNO4")
 device = Lux.gpu
 
 FNO_nl = train_model(rng, NN, _data, data_, V, opt;
