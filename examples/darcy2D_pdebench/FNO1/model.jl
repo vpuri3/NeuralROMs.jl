@@ -37,7 +37,7 @@ rng = Random.default_rng()
 Random.seed!(rng, 345)
 
 N = 128
-K = 512 # trajectories
+K = 256 # trajectories
 E = 200 # epochs
 
 # get data
@@ -51,6 +51,7 @@ V = FourierSpace(N, N)
 ###
 # FNO model
 ###
+if true
 
 w = 32        # width
 m = (32, 32,) # modes
@@ -58,12 +59,12 @@ c = size(_data[1], 1) # in  channels
 o = size(_data[2], 1) # out channels
 
 NN = Lux.Chain(
-    Dense(c, w, tanh),
+    Dense(c , w, tanh),
     OpKernel(w, w, m, tanh),
     OpKernel(w, w, m, tanh),
     OpKernel(w, w, m, tanh),
     OpKernel(w, w, m, tanh),
-    Dense(w, o),
+    Dense(w , o),
 )
 
 opt = Optimisers.Adam()
@@ -75,6 +76,8 @@ device = Lux.gpu
 
 FNO_nl = train_model(rng, NN, _data, data_, V, opt;
         batchsize, learning_rates, nepochs, dir, device)
+
+end
 
 nothing
 #

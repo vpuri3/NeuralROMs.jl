@@ -60,8 +60,8 @@ function train_model(
     stats_ = (p, st; io = io) -> statistics(NN, p, st, loader_; io)
 
     # full batch losses for CB
-    _loss = (p, st) -> anybatch_metric(NN, p, st, _loader, lossfun)
-    loss_ = (p, st) -> anybatch_metric(NN, p, st, loader_, lossfun)
+    _loss = (p, st) -> batch_metric(NN, p, st, _loader, lossfun)
+    loss_ = (p, st) -> batch_metric(NN, p, st, loader_, lossfun)
 
     # callback functions
     EPOCH = Int[]
@@ -106,7 +106,7 @@ function train_model(
         println(io, "Learning Rate: $learning_rate, EPOCHS: $nepoch")
         println(io, "#======================#")
 
-        @time p, st, opt_st = optimize(NN, p, st, _loader, nepoch; lossfun, opt, opt_st, cb, io)
+        CUDA.@time p, st, opt_st = optimize(NN, p, st, _loader, nepoch; lossfun, opt, opt_st, cb, io)
 
         CB(p, st)
     end
@@ -134,7 +134,7 @@ function train_model(
 end
 
 #===============================================================#
-function anybatch_metric(NN, p, st, loader, metric)
+function batch_metric(NN, p, st, loader, metric)
     x, ŷ = first(loader)
     y = NN(x, p, st)[1]
     metric(y, ŷ)
@@ -194,9 +194,8 @@ function statistics(NN::Lux.AbstractExplicitLayer, p, st, loader;
     maxAE  = MAXER
 
     # variance
-    for (x, ŷ) in loader
+    for (x, _) in loader
         y, _ = NN(x, p, st)
-        Δy = y - ŷ
 
         VAR += sum(abs2, y .- ȳ) / N
     end
@@ -340,8 +339,10 @@ function optimize(NN, p, st, loader, nepochs;
     !isnothing(cb) && cb(p, st, 0, nepochs; io)
 
     # warm up
-    loss = Loss(NN, st, first(loader), lossfun)
-    l, _, _ = grad(loss, p)
+    begin
+        loss = Loss(NN, st, first(loader), lossfun)
+        _, _, _ = grad(loss, p)
+    end
 
     # init optimizer
     opt_st = isnothing(opt_st) ? Optimisers.setup(opt, p) : opt_st
