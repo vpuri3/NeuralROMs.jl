@@ -357,6 +357,7 @@ function optimize(NN, p, st, loader, nepochs;
 
             # GC.gc(false)
         end
+        # GC.gc(true)
 
         # todo: make this async
         println(io, "#=======================#")

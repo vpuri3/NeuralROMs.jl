@@ -86,7 +86,7 @@ end
 # Bilinear (linear / nonlin) model
 ###
 
-if true
+if false
 
 # fixed params
 c1 = 3     # in  channel nonlin

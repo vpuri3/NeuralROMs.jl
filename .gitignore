@@ -2,3 +2,5 @@
 /docs/Manifest.toml
 /docs/build/
 *.bson
+*.hdf5
+*.h5
