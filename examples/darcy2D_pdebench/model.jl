@@ -30,8 +30,8 @@ import Lux: cpu, gpu
 using Tullio, Zygote
 
 using FFTW, LinearAlgebra
-BLAS.set_num_threads(2)
-FFTW.set_num_threads(8)
+BLAS.set_num_threads(20)
+FFTW.set_num_threads(40)
 
 rng = Random.default_rng()
 Random.seed!(rng, 345)
@@ -40,8 +40,8 @@ N = 128
 E = 300 # epochs
 
 # trajectories
-_K = 4096
-K_ = 512
+_K = 512
+K_ = 128
 
 # get data
 dir = @__DIR__
@@ -70,7 +70,7 @@ NN = Lux.Chain(
 )
 
 opt = Optimisers.Adam()
-batchsize = 32
+batchsize = 128
 learning_rates = (1f-2, 1f-3,)
 nepochs  = E .* (0.10, 0.90,) .|> Int
 dir = joinpath(@__DIR__, "FNO4")

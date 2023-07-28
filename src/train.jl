@@ -360,7 +360,7 @@ function optimize(NN, p, st, loader, nepochs;
 
             println(io, "Epoch [$epoch / $nepochs]" * "\t Batch loss: $l")
 
-            GC.gc(false)
+            # GC.gc(false)
         end
         # GC.gc(true)
 
