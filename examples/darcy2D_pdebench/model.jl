@@ -37,7 +37,7 @@ rng = Random.default_rng()
 Random.seed!(rng, 345)
 
 N = 128
-E = 300 # epochs
+E = 10 # epochs
 
 # trajectories
 _K = 512
@@ -70,7 +70,7 @@ NN = Lux.Chain(
 )
 
 opt = Optimisers.Adam()
-batchsize = 128
+batchsize = 32
 learning_rates = (1f-2, 1f-3,)
 nepochs  = E .* (0.10, 0.90,) .|> Int
 dir = joinpath(@__DIR__, "FNO4")

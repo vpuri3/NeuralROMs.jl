@@ -930,7 +930,6 @@ julia> include("examples/cuda_perf.jl")
 (CUDA.@allocated(f(X, Y, W)) / 1024) / 1024 = 51.5625 # mb
 (CUDA.@allocated(grad(f, X, Y, W)) / 1024) / 1024 = 144.125 # mb
 
-
 """
 #
 

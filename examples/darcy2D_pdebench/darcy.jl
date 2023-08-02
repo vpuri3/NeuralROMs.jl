@@ -19,11 +19,11 @@ function darcy2D(filename, _K = 1024, K_ = 256, rng = Random.default_rng())
 
     x, y = ndgrid(x, y)
 
-    _x = zeros(3, N, N, _K)
-    x_ = zeros(3, N, N, K_)
+    _x = zeros(Float32, 3, N, N, _K)
+    x_ = zeros(Float32, 3, N, N, K_)
 
-    _u = zeros(1, N, N, _K)
-    u_ = zeros(1, N, N, K_)
+    _u = zeros(Float32, 1, N, N, _K)
+    u_ = zeros(Float32, 1, N, N, K_)
 
     _x[1, :, :, :] .= x
     _x[2, :, :, :] .= y
