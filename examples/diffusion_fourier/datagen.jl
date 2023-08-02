@@ -156,8 +156,8 @@ function combine_data1D(data)
 
     N, K = size(x)
 
-    x1 = zeros(3, N, K) # x, ν, f
-    u1 = zeros(1, N, K) # u
+    x1 = zeros(Float32, 3, N, K) # x, ν, f
+    u1 = zeros(Float32, 1, N, K) # u
 
     x1[1, :, :] = x
     x1[2, :, :] = ν
@@ -181,8 +181,8 @@ function combine_data2D(data, K = size(data[1], 2))
         rand(1:Kmax, K)
     end
 
-    x1 = zeros(4, n, n, K) # x, y, ν, f
-    u1 = zeros(1, n, n, K) # u
+    x1 = zeros(Float32, 4, n, n, K) # x, y, ν, f
+    u1 = zeros(Float32, 1, n, n, K) # u
 
     x1[1, :, :, :] = x[:, Ks] |> vec
     x1[2, :, :, :] = y[:, Ks] |> vec
