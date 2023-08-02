@@ -330,7 +330,8 @@ function opconv_wt(x, y, W)
     X = reshape(x, (prod(modes), C1, B)) # [M, C1, B]
     Y = reshape(y, (prod(modes), C2, B)) # [M, C2, B]
 
-    # apply weight to get [Co, M, B] see examples/cuda_perf.jl for kernel triage
+    # apply weight to get [Co, M, B]
+    # see examples/cuda_perf.jl for Tullio kernel triage
     @tullio Z1[m, co, c2, b] := W[m, co, c1, c2] * X[m, c1, b]
     @tullio Z2[m, co, b]     := Z1[m, co, c2, b] * Y[m, c2, b] # [M, Co, B]
 

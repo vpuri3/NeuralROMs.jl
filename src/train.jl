@@ -23,8 +23,8 @@ is equal to `length(V)`.
 function train_model(
     rng::Random.AbstractRNG,
     NN::Lux.AbstractExplicitLayer,
-    _data::NTuple{2, AbstractArray},
-    data_::NTuple{2, AbstractArray},
+    _data::NTuple{2, AbstractArray{Float32}},
+    data_::NTuple{2, AbstractArray{Float32}},
     V::Spaces.AbstractSpace,
     opt::Optimisers.AbstractRule = Optimisers.Adam();
     batchsize::Int = 32,
@@ -33,7 +33,7 @@ function train_model(
     cbstep::Int = 1,
     dir = "",
     name = "model",
-    nsamples = 5,
+    nsamples::Int = 5,
     io::IO = stdout,
     p = nothing,  # initial parameters
     st = nothing, # initial state
@@ -362,9 +362,7 @@ function optimize(NN, p, st, loader, nepochs;
 
             # GC.gc(false)
         end
-        # GC.gc(true)
 
-        # todo: make this async
         println(io, "#=======================#")
         !isnothing(cb) && cb(p, st, epoch, nepochs; io)
         println(io, "#=======================#")
