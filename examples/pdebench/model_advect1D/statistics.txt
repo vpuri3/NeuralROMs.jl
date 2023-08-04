@@ -1,0 +1,17 @@
+	 TRAIN LOSS: 0.00099117	 TEST LOSS: 0.00092707
+#======================#
+TRAIN STATS
+R² score:       0.99806416
+mean SQR error: 0.00117229
+mean ABS error: 0.02344544
+max  ABS error: 0.66115034
+
+#======================#
+#======================#
+TEST  STATS
+R² score:       0.99797934
+mean SQR error: 0.00123691
+mean ABS error: 0.02392825
+max  ABS error: 0.45756277
+
+#======================#

@@ -30,33 +30,33 @@ import Lux: cpu, gpu
 using Tullio, Zygote
 
 using FFTW, LinearAlgebra
-BLAS.set_num_threads(20)
-FFTW.set_num_threads(40)
+BLAS.set_num_threads(4)
+FFTW.set_num_threads(8)
 
 rng = Random.default_rng()
-Random.seed!(rng, 345)
+Random.seed!(rng, 1123)
 
-N = 128
-E = 10 # epochs
+N = 1024
+E = 20 # epochs
 
 # trajectories
-_K = 512
+_K = 1024
 K_ = 128
 
 # get data
 dir = @__DIR__
-filename = joinpath(dir, "2D_DarcyFlow_beta0.01_Train.hdf5")
-include(joinpath(dir, "darcy.jl"))
-_data, data_ = darcy2D(filename, _K, K_, rng)
+filename = joinpath(dir, "1D_Burgers_Sols_Nu0.01.hdf5")
+include(joinpath(dir, "pdebench.jl"))
+_data, data_ = burgers1D(filename, _K, K_, rng)
 
-V = FourierSpace(N, N)
+V = FourierSpace(N)
 
 ###
 # FNO model
 ###
 
-w = 32        # width
-m = (32, 32,) # modes
+w = 32    # width
+m = (16,) # modes
 c = size(_data[1], 1) # in  channels
 o = size(_data[2], 1) # out channels
 
@@ -71,13 +71,13 @@ NN = Lux.Chain(
 
 opt = Optimisers.Adam()
 batchsize = 32
-learning_rates = (1f-2, 1f-3,)
-nepochs  = E .* (0.10, 0.90,) .|> Int
-dir = joinpath(@__DIR__, "FNO4")
-device = Lux.gpu
+learning_rates = (1f-2, 1f-3, 1f-4, 1f-5)
+nepochs  = E .* (0.25, 0.25, 0.25, 0.25) .|> Int
+dir = joinpath(@__DIR__, "model_burgers1D")
+device = Lux.cpu
 
-FNO_nl = train_model(rng, NN, _data, data_, V, opt;
-        batchsize, learning_rates, nepochs, dir, device)
+model, ST = train_model(rng, NN, _data, data_, V, opt;
+    batchsize, learning_rates, nepochs, dir, device)
 
 nothing
 #

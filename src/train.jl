@@ -35,8 +35,8 @@ function train_model(
     name = "model",
     nsamples::Int = 5,
     io::IO = stdout,
-    p = nothing,  # initial parameters
-    st = nothing, # initial state
+    p = nothing,        # initial parameters
+    st = nothing,       # initial state
     lossfun = mse,
     device = Lux.cpu,
     make_plots = true,
@@ -106,10 +106,16 @@ function train_model(
         println(io, "Learning Rate: $learning_rate, EPOCHS: $nepoch")
         println(io, "#======================#")
 
-        CUDA.@time p, st, opt_st = optimize(NN, p, st, _loader, nepoch; lossfun, opt, opt_st, cb, io)
+        if device == Lux.gpu
+            CUDA.@time p, st, opt_st = optimize(NN, p, st, _loader, nepoch; lossfun, opt, opt_st, cb, io)
+        else
+            @time p, st, opt_st = optimize(NN, p, st, _loader, nepoch; lossfun, opt, opt_st, cb, io)
+        end
 
         CB(p, st)
     end
+
+    # TODO - output a train.log file with timings
 
     # save statistics
     statsfile = open(joinpath(dir, "statistics.txt"), "w")

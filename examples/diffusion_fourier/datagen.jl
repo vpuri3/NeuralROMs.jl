@@ -8,7 +8,8 @@ for changing ν, f
 
 using FourierSpaces, LinearAlgebra, LinearSolve, BSON
 
-""" data """
+using Plots, Random
+
 function datagen1D(rng, N, K1, K2; mode = :train)
 
     K0 = K1 * K2
@@ -188,80 +189,62 @@ function combine_data2D(data, K = size(data[1], 2))
     x1[2, :, :, :] = y[:, Ks] |> vec
     x1[3, :, :, :] = ν[:, Ks] |> vec
     x1[4, :, :, :] = f[:, Ks] |> vec
-    #
+
     u1[1, :, :, :] = u[:, Ks] |> vec
 
     (x1, u1)
 end
 
-#=
-using Plots, Random
+function makedata2D(rng, N, K1, K2, name; nplts = 5)
 
-N  = 32
-K1 = 32
-K2 = 32
+    V, _data = datagen2D(rng, N, K1, K2)
+    V, data_ = datagen2D(rng, N, K1, K2)
 
-rng = Random.default_rng()
-Random.seed!(rng, 127)
+    # x, y, ν, f, u = data
+    # plot(u[:, 10], V)
 
-V, _data = datagen2D(rng, N, K1, K2)
-V, data_ = datagen2D(rng, N, K1, K2)
+    BSON.@save name _data data_
+end
 
-# x, y, ν, f, u = data
-# plot(u[:, 10], V)
+function makedata1D(rng, N, K1, K2; nplts = 5, dir = @__DIR__)
+    K0 = K1 * K2
 
-BSON.@save joinpath(@__DIR__, "data2D_N$(N).bson") _data data_
-=#
+    V, data0, data1, data2 = datagen1D(rng, N, K1, K2)
 
-#=
-using Plots, Random
+    x0, ν0, f0, u0 = data0
+    x1, ν1, f1, u1 = data1
+    x2, ν2, f2, u2 = data2
 
-N  = 128    # problem size
-K1 = 100     # X-samples
-K2 = 100     # X-samples
-K0 = K1 * K2
+    x  = points(V)[1]
 
-rng = Random.default_rng()
-Random.seed!(rng, 127)
+    #==========================#
+    I0 = rand(1:K0, nplts)
+    p0 = plot(x, u0[:, I0], w = 2.0, legend = nothing, title = "u(ν, f)")
+    png(p0, joinpath(dir, "plt_u0"))
 
-V, data0, data1, data2 = datagen1D(rng, N, K1, K2)
+    #==========================#
+    I1 = rand(1:K1, nplts)
+    p1 = plot(x, u1[:, I1], w = 2.0, legend = nothing, title = "u(ν, f₀)")
+    png(p1, joinpath(dir, "plt_u1"))
 
-x0, ν0, f0, u0 = data0
-x1, ν1, f1, u1 = data1
-x2, ν2, f2, u2 = data2
+    p1 = plot(x, f1[:, I1], w = 2.0, legend = nothing, title = "f₀(x)")
+    png(p1, joinpath(dir, "plt_f1"))
 
-nplts = 5
+    p1 = plot(x, ν1[:, I1], w = 2.0, legend = nothing, title = "ν(x)")
+    png(p1, joinpath(dir, "plt_nu1"))
 
-dir = @__DIR__
+    #==========================#
+    I2 = rand(1:K2, nplts)
+    p2 = plot(x, u2[:, I2], w = 2.0, legend = nothing, title = "u(ν₀, f)")
+    png(p2, joinpath(dir, "plt_u2"))
 
-x  = points(V)[1]
+    p2 = plot(x, f2[:, I2], w = 2.0, legend = nothing, title = "f(x)")
+    png(p2, joinpath(dir, "plt_f2"))
 
-I0 = rand(1:K0, nplts)
-p0 = plot(x, u0[:, I0], w = 2.0, legend = nothing, title = "u(ν, f)")
-png(p0, joinpath(dir, "plt_u0"))
+    p2 = plot(x, ν2[:, I2], w = 2.0, legend = nothing, title = "ν₀(x)")
+    png(p2, joinpath(dir, "plt_nu2"))
 
-##########
-I1 = rand(1:K1, nplts)
-p1 = plot(x, u1[:, I1], w = 2.0, legend = nothing, title = "u(ν, f₀)")
-png(p1, joinpath(dir, "plt_u1"))
+    nothing
+end
 
-p1 = plot(x, f1[:, I1], w = 2.0, legend = nothing, title = "f₀(x)")
-png(p1, joinpath(dir, "plt_f1"))
-
-p1 = plot(x, ν1[:, I1], w = 2.0, legend = nothing, title = "ν(x)")
-png(p1, joinpath(dir, "plt_nu1"))
-
-##########
-I2 = rand(1:K2, nplts)
-p2 = plot(x, u2[:, I2], w = 2.0, legend = nothing, title = "u(ν₀, f)")
-png(p2, joinpath(dir, "plt_u2"))
-
-p2 = plot(x, f2[:, I2], w = 2.0, legend = nothing, title = "f(x)")
-png(p2, joinpath(dir, "plt_f2"))
-
-p2 = plot(x, ν2[:, I2], w = 2.0, legend = nothing, title = "ν₀(x)")
-png(p2, joinpath(dir, "plt_nu2"))
-
-##########
 nothing
-=#

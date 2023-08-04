@@ -46,6 +46,7 @@ Random.seed!(rng, 199)
 
 # datagen
 _V, _data, _, _ = datagen1D(rng, N, K1, K2) # train
+# V_, data_, _, _ = datagen1D(rng, N, K1, K2) # train
 V_, data_, _, _ = datagen1D(rng, N, K1, K2; mode = :test) # test
 
 __data = combine_data1D(_data)
@@ -62,7 +63,7 @@ c = size(__data[1], 1) # in  channels
 o = size(__data[2], 1) # out channels
 
 NN = Lux.Chain(
-    # PermutedBatchNorm(c, 3),
+    PermutedBatchNorm(c, 3),
     Dense(c , w, tanh),
     OpKernel(w, w, m, tanh),
     OpKernel(w, w, m, tanh),
@@ -71,13 +72,14 @@ NN = Lux.Chain(
 )
 
 opt = Optimisers.Adam()
+batchsize = size(__data[1])[end]
 learning_rates = (1f-2, 1f-3,)
-maxiters  = E .* (0.10, 0.90,) .|> Int
+nepochs  = E .* (0.10, 0.90,) .|> Int
 dir = joinpath(@__DIR__, "exp_FNO_nonlin")
 device = Lux.gpu
 
 FNO_nonlin = train_model(rng, NN, __data, data__, _V, opt;
-        learning_rates, maxiters, dir, cbstep = 1, device)
+        batchsize, learning_rates, nepochs, dir, cbstep = 1, device)
 
 end
 
@@ -90,7 +92,7 @@ if true
 # fixed params
 c1 = 2     # in  channel nonlin
 c2 = 1     # in  channel linear
-o  = size(__data[2]   , 1) # out channel
+o  = size(__data[2], 1) # out channel
 
 # hyper params
 w1 = 16   # width nonlin
@@ -107,13 +109,14 @@ bilin  = OpConvBilinear(w1, w2, o, m)
 NN = linear_nonlinear(split, nonlin, linear, bilin)
 
 opt = Optimisers.Adam()
+batchsize = size(__data[1])[end]
 learning_rates = (1f-3,)
-maxiters  = E .* (1.00,) .|> Int
+nepochs  = E .* (1.00,) .|> Int
 dir = joinpath(@__DIR__, "exp_FNO_linear_nonlinear")
 device = Lux.gpu
 
 model, _ = train_model(rng, NN, __data, data__, _V, opt;
-        learning_rates, maxiters, dir, cbstep = 1, device)
+        batchsize, learning_rates, nepochs, dir, cbstep = 1, device)
 
 end
 

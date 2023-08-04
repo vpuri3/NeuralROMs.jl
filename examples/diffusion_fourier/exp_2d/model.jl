@@ -55,7 +55,7 @@ data__ = combine_data2D(data_, 128)
 ###
 # FNO model
 ###
-if false
+if true
 
 w = 16        # width
 m = (16, 16,) # modes
@@ -88,7 +88,7 @@ end
 # Bilinear (linear / nonlin) model
 ###
 
-if true
+if false
 
 # fixed params
 c1 = 3     # in  channel nonlin
