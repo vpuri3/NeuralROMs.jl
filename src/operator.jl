@@ -22,9 +22,12 @@ function OpKernel(ch_in::Int, ch_out::Int, modes::NTuple{D, Int},
     conv = OpConv(ch_in, ch_out, modes; transform, init)
     loc = Dense(ch_in, ch_out; init_weight = init, use_bias)
 
+    # Parallel(+, loc, conv), # x -> lox(x) + conv(x)
+
     Chain(
-        Lux.Parallel(+, loc, conv),
-        Lux.WrappedFunction(activation),
+        BranchLayer(loc, conv),      # x        -> (loc(x), conv(x))
+        WrappedFunction(sum),        # (x1, x2) -> x1 + x2
+        WrappedFunction(activation), # x        -> act(x)
     )
 end
 
@@ -37,12 +40,15 @@ function OpKernelBilinear(ch_in1::Int, ch_in2::Int, ch_out::Int,
 
     activation = fastify(activation)
 
+    null = NoOpLayer()
     conv = OpConvBilinear(ch_in1, ch_in2, ch_out, modes; transform, init)
     loc  = Bilinear((ch_in1, ch_in2) => ch_out; init_weight = init, use_bias = false)
 
+    # Parallel(+, null, null),
     Chain(
-        Lux.Parallel(.+, loc, conv),
-        Lux.WrappedFunction(activation),
+        BranchLayer(loc, conv),      # x        -> (loc(x), conv(x))
+        WrappedFunction(sum),        # (x1, x2) -> x1 + x2
+        WrappedFunction(activation), # x        -> act(x)
     )
 end
 
@@ -66,9 +72,9 @@ x2 → linear → y2 ↗
 function linear_nonlinear(split, nonlin, linear, bilinear, project = NoOpLayer())
 
     Chain(
-        split,
-        Parallel(nothing, nonlin, linear),
-        bilinear,
+        split,                             # x -> (x1, x2)
+        Parallel(nothing, nonlin, linear), # (x1, x2) -> (f(x1), g(x2))
+        bilinear,                          # (f(x1), g(x2)) -> y
         project,
     )
 end

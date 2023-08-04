@@ -45,7 +45,7 @@ K_ = 64
 
 # get data
 dir = @__DIR__
-filename = joinpath(dir, "1D_Burgers_Sols_Nu0.01.hdf5")
+filename = joinpath(dir, "1D_Burgers_Sols_Nu0.001.hdf5")
 include(joinpath(dir, "pdebench.jl"))
 _data, data_ = burgers1D(filename, _K, K_, rng)
 
@@ -83,7 +83,7 @@ nepochs  = E .* (0.25, 0.25, 0.25, 0.25) .|> Int
 # learning_rates = (1f-3, 5f-4, 2.5f-4, 1.25f-4)
 # nepochs  = E .* (0.25, 0.25, 0.25, 0.25) .|> Int
 
-dir = joinpath(@__DIR__, "model_burgers1D")
+dir = joinpath(@__DIR__, "dump")
 device = Lux.cpu
 
 model, ST = train_model(rng, NN, _data, data_, V, opt;
