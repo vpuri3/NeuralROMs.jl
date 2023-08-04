@@ -60,8 +60,8 @@ function train_model(
     stats_ = (p, st; io = io) -> statistics(NN, p, st, loader_; io)
 
     # full batch losses for CB
-    _loss = (p, st) -> batch_metric(NN, p, st, _loader, lossfun)
-    loss_ = (p, st) -> batch_metric(NN, p, st, loader_, lossfun)
+    _loss = (p, st) -> minibatch_metric(NN, p, st, _loader, lossfun)
+    loss_ = (p, st) -> minibatch_metric(NN, p, st, loader_, lossfun)
 
     # callback functions
     EPOCH = Int[]
@@ -140,7 +140,7 @@ function train_model(
 end
 
 #===============================================================#
-function batch_metric(NN, p, st, loader, metric)
+function minibatch_metric(NN, p, st, loader, metric)
     x, ŷ = first(loader)
     y = NN(x, p, st)[1]
     metric(y, ŷ)
@@ -195,6 +195,7 @@ function statistics(NN::Lux.AbstractExplicitLayer, p, st, loader;
 
     ȳ   = SUM / N
     MSE = SQRER / N
+    RMSE = sqrt(MSE)
 
     meanAE = ABSER / N
     maxAE  = MAXER
@@ -214,10 +215,11 @@ function statistics(NN::Lux.AbstractExplicitLayer, p, st, loader;
 
     if !isnothing(io)
         str = ""
-        str *= string("R² score:       ", round(R2    , digits=8), "\n")
-        str *= string("mean SQR error: ", round(MSE   , digits=8), "\n")
-        str *= string("mean ABS error: ", round(meanAE, digits=8), "\n")
-        str *= string("max  ABS error: ", round(maxAE , digits=8), "\n")
+        str *= string("R² score:                   ", round(R2    , digits=8), "\n")
+        str *= string("MSE (mean SQR error):       ", round(MSE   , digits=8), "\n")
+        str *= string("RMSE (root mean SQR error): ", round(RMSE  , digits=8), "\n")
+        str *= string("MAE (mean ABS error):       ", round(meanAE, digits=8), "\n")
+        str *= string("maxAE (max ABS error)       ", round(maxAE , digits=8), "\n")
         # str *= string("mean REL error: ", round(meanRE, digits=8), "\n")
         # str *= string("max  REL error: ", round(maxRE , digits=8))
 
