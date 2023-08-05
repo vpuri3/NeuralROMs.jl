@@ -60,7 +60,7 @@ m = (16,) # modes
 c = size(_data[1], 1) # in  channels
 o = size(_data[2], 1) # out channels
 
-NN = Lux.Chain(
+NN = Lux.Chain( # todo - double check parameter size
     Dense(c, w, tanh),
     OpKernel(w, w, m, tanh),
     OpKernel(w, w, m, tanh),
