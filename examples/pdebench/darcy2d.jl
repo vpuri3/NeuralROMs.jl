@@ -30,18 +30,18 @@ import Lux: cpu, gpu
 using Tullio, Zygote
 
 using FFTW, LinearAlgebra
-BLAS.set_num_threads(20)
-FFTW.set_num_threads(40)
+BLAS.set_num_threads(4)
+FFTW.set_num_threads(8)
 
 rng = Random.default_rng()
 Random.seed!(rng, 345)
 
 N = 128
-E = 10 # epochs
+E = 40
 
 # trajectories
-_K = 512
-K_ = 128
+_K = 128
+K_ = 32
 
 # get data
 dir = @__DIR__
@@ -70,14 +70,16 @@ NN = Lux.Chain(
 )
 
 opt = Optimisers.Adam()
-batchsize = 32
-learning_rates = (1f-2, 1f-3,)
-nepochs  = E .* (0.10, 0.90,) .|> Int
+batchsize = 16
+learning_rates = (1f-2, 1f-3, 5f-4, 2.5f-4,)
+nepochs  = E .* (0.25, 0.25, 0.25, 0.25,) .|> Int
 dir = joinpath(@__DIR__, "model_darcy2D")
-device = Lux.gpu
+device = Lux.cpu # Lux.gpu
 
 model, ST = train_model(rng, NN, _data, data_, V, opt;
     batchsize, learning_rates, nepochs, dir, device)
 
-nothing
+plot_training(ST...)
+
+# nothing
 #

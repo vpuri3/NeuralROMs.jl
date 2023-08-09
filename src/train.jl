@@ -59,20 +59,26 @@ function train_model(
     _stats = (p, st; io = io) -> statistics(NN, p, st, _loader; io)
     stats_ = (p, st; io = io) -> statistics(NN, p, st, loader_; io)
 
-    # full batch losses for CB
+    # full batch losses for cb_stats
     _loss = (p, st) -> minibatch_metric(NN, p, st, _loader, lossfun)
     loss_ = (p, st) -> minibatch_metric(NN, p, st, loader_, lossfun)
 
     # callback functions
     EPOCH = Int[]
     _LOSS = Float32[]
+    _LOSS_MINIBATCH = Float32[]
     LOSS_ = Float32[]
 
     # callback for printing statistics
-    CB = (p, st; io = io) -> callback(p, st; io, _loss, _stats, loss_, stats_)
+    cb_stats = (p, st; io = io) -> callback(p, st; io, _loss, _stats, loss_, stats_)
+
+    # cb_batch = 
+
+    # early stopping: (need fullbatch validation loss for early stopping?)
+    # https://github.com/jeffheaton/app_deep_learning/blob/main/t81_558_class_03_4_early_stop.ipynb
 
     # callback for training
-    cb = (p, st, epoch, nepoch; io = io) -> callback(p, st; io,
+    cb_epoch = (p, st, epoch, nepoch; io = io) -> callback(p, st; io,
                                                 _loss, _LOSS, loss_, LOSS_,
                                                 EPOCH, epoch, nepoch, step = cbstep)
 
@@ -86,7 +92,7 @@ function train_model(
     p, st = (p, st) |> device
 
     # print stats
-    CB(p, st)
+    cb_stats(p, st)
 
     println(io, "#======================#")
     println(io, "Starting Trainig Loop")
@@ -107,19 +113,19 @@ function train_model(
         println(io, "#======================#")
 
         if device == Lux.gpu
-            CUDA.@time p, st, opt_st = optimize(NN, p, st, _loader, nepoch; lossfun, opt, opt_st, cb, io)
+            CUDA.@time p, st, opt_st = optimize(NN, p, st, _loader, nepoch; lossfun, opt, opt_st, cb_epoch, io)
         else
-            @time p, st, opt_st = optimize(NN, p, st, _loader, nepoch; lossfun, opt, opt_st, cb, io)
+            @time p, st, opt_st = optimize(NN, p, st, _loader, nepoch; lossfun, opt, opt_st, cb_epoch, io)
         end
 
-        CB(p, st)
+        cb_stats(p, st)
     end
 
     # TODO - output a train.log file with timings
 
     # save statistics
     statsfile = open(joinpath(dir, "statistics.txt"), "w")
-    CB(p, st; io = statsfile)
+    cb_stats(p, st; io = statsfile)
     close(statsfile)
 
     # transfer model to host device
@@ -339,12 +345,13 @@ function optimize(NN, p, st, loader, nepochs;
     lossfun = mse,
     opt = Optimisers.Adam(),
     opt_st = nothing,
-    cb = nothing,
+    cb_batch = nothing,
+    cb_epoch = nothing,
     io::Union{Nothing, IO} = stdout,
 )
 
     # print stats
-    !isnothing(cb) && cb(p, st, 0, nepochs; io)
+    !isnothing(cb_epoch) && cb_epoch(p, st, 0, nepochs; io)
 
     function loss(x, ŷ, p, st)
         y, st = NN(x, p, st)
@@ -367,12 +374,13 @@ function optimize(NN, p, st, loader, nepochs;
             opt_st, p = Optimisers.update!(opt_st, p, g)
 
             println(io, "Epoch [$epoch / $nepochs]" * "\t Batch loss: $l")
-
-            # GC.gc(false)
+            !isnothing(cb_batch) && cb_batch(p, st, step)
         end
 
+        # TODO - add stopping criteria for GD
+
         println(io, "#=======================#")
-        !isnothing(cb) && cb(p, st, epoch, nepochs; io)
+        !isnothing(cb_epoch) && cb_epoch(p, st, epoch, nepochs; io)
         println(io, "#=======================#")
     end
 
@@ -396,7 +404,7 @@ function plot_training(EPOCH, _LOSS, LOSS_; dir = nothing)
                xlabel = "Epochs", ylabel = "Loss (MSE)",
                ylims = (minimum(_LOSS) / 10, maximum(LOSS_) * 10))
 
-    plot!(plt, EPOCH, _LOSS, w = 2.0, c = :green, label = "Train Dataset")
+    plot!(plt, EPOCH, _LOSS, w = 2.0, c = :green, label = "Train Dataset") # (; ribbon = (lower, upper))
     plot!(plt, EPOCH, LOSS_, w = 2.0, c = :red, label = "Test Dataset")
 
     vline!(plt, EPOCH[z[2:end]], c = :black, w = 2.0, label = nothing)

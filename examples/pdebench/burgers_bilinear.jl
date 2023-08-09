@@ -37,7 +37,7 @@ rng = Random.default_rng()
 Random.seed!(rng, 983254)
 
 N = 1024
-E = 100
+E = 20
 
 # trajectories
 _K = 512
@@ -59,8 +59,8 @@ V = FourierSpace(N)
 ###
 
 #============================#
-w = 32    # width
-l = 8
+w = 16     # width
+l = 4
 m = (128,) # modes
 c = size(_data[1], 1) # in  channels
 o = size(_data[2], 1) # out channels
@@ -70,10 +70,12 @@ root = Chain(
     OpKernel(w, w, m, relu),
     OpKernel(w, w, m, relu),
 )
+
 branch = Chain(
     OpKernel(w, w, m, relu), # use_bias = true
     OpKernel(w, w, m, relu),
 )
+
 fuse = OpConvBilinear(w, w, l, m)
 
 project = Chain(
@@ -91,7 +93,7 @@ NN = Chain(
 #============================#
 
 opt = Optimisers.Adam()
-batchsize = 32
+batchsize = 64
 
 learning_rates = (1f-2, 1f-3, 1f-4, 1f-5)
 nepochs  = E .* (0.25, 0.25, 0.25, 0.25) .|> Int
