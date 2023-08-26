@@ -30,18 +30,18 @@ import Lux: cpu, gpu
 using Tullio, Zygote
 
 using FFTW, LinearAlgebra
-BLAS.set_num_threads(4)
-FFTW.set_num_threads(8)
+BLAS.set_num_threads(12)
+FFTW.set_num_threads(24)
 
 rng = Random.default_rng()
 Random.seed!(rng, 345)
 
 N = 128
-E = 40
+E = 100
 
 # trajectories
-_K = 128
-K_ = 32
+_K = 512
+K_ = 128
 
 # get data
 dir = @__DIR__
@@ -55,31 +55,32 @@ V = FourierSpace(N, N)
 # FNO model
 ###
 
-w = 32        # width
+w = 64        # width
 m = (32, 32,) # modes
 c = size(_data[1], 1) # in  channels
 o = size(_data[2], 1) # out channels
+act = Lux.relu
 
 NN = Lux.Chain(
-    Dense(c, w, tanh),
-    OpKernel(w, w, m, tanh),
-    OpKernel(w, w, m, tanh),
-    OpKernel(w, w, m, tanh),
-    OpKernel(w, w, m, tanh),
+    Dense(c, w, act),
+    OpKernel(w, w, m, act),
+    OpKernel(w, w, m, act),
+    OpKernel(w, w, m, act),
+    OpKernel(w, w, m, act),
     Dense(w, o),
 )
 
 opt = Optimisers.Adam()
-batchsize = 16
+batchsize = 32
 learning_rates = (1f-2, 1f-3, 5f-4, 2.5f-4,)
 nepochs  = E .* (0.25, 0.25, 0.25, 0.25,) .|> Int
 dir = joinpath(@__DIR__, "model_darcy2D")
-device = Lux.cpu # Lux.gpu
+device = Lux.gpu
 
 model, ST = train_model(rng, NN, _data, data_, V, opt;
     batchsize, learning_rates, nepochs, dir, device)
 
-plot_training(ST...)
+plot_training(ST...) |> display
 
-# nothing
+nothing
 #

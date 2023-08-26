@@ -30,8 +30,8 @@ import Lux: cpu, gpu
 using Tullio, Zygote
 
 using FFTW, LinearAlgebra
-BLAS.set_num_threads(2)
-FFTW.set_num_threads(8)
+BLAS.set_num_threads(12)
+FFTW.set_num_threads(24)
 
 include("../datagen.jl")
 
@@ -64,15 +64,15 @@ o = size(__data[2], 1) # out channels
 
 NN = Lux.Chain(
     PermutedBatchNorm(c, 3),
-    Dense(c , w, tanh),
-    OpKernel(w, w, m, tanh),
-    OpKernel(w, w, m, tanh),
-    OpKernel(w, w, m, tanh),
+    Dense(c , w, Lux.relu),
+    OpKernel(w, w, m, Lux.relu),
+    OpKernel(w, w, m, Lux.relu),
+    OpKernel(w, w, m, Lux.relu),
     Dense(w , o)
 )
 
 opt = Optimisers.Adam()
-batchsize = size(__data[1])[end]
+batchsize = 128 #size(__data[1])[end]
 learning_rates = (1f-2, 1f-3,)
 nepochs  = E .* (0.10, 0.90,) .|> Int
 dir = joinpath(@__DIR__, "exp_FNO_nonlin")
@@ -109,18 +109,20 @@ bilin  = OpConvBilinear(w1, w2, o, m)
 NN = linear_nonlinear(split, nonlin, linear, bilin)
 
 opt = Optimisers.Adam()
-batchsize = 256 # size(__data[1])[end] # 1024
+batchsize = 128 # size(__data[1])[end] # 1024
 learning_rates = (1f-3,)
 nepochs = E .* (1.00,) .|> Int
 # learning_rates = (1f-3, 5f-4, 2.5f-4, 1.25f-4,)
 # nepochs        = E .* (0.25, 0.25, 0.25, 0.25,) .|> Int
 dir = joinpath(@__DIR__, "exp_FNO_linear_nonlinear")
-device = Lux.cpu
+device = Lux.gpu
 
 model, ST = train_model(rng, NN, __data, data__, _V, opt;
         batchsize, learning_rates, nepochs, dir, cbstep = 1, device)
 
 end
+
+plot_training(ST...) |> display
 
 nothing
 #

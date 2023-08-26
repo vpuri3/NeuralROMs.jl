@@ -74,8 +74,8 @@ function train_model(
 
     # cb_batch = 
 
-    # early stopping: (need fullbatch validation loss for early stopping?)
-    # https://github.com/jeffheaton/app_deep_learning/blob/main/t81_558_class_03_4_early_stop.ipynb
+    # TODO: early stopping: (need fullbatch validation loss for early stopping?)
+    # TODO: https://github.com/jeffheaton/app_deep_learning/blob/main/t81_558_class_03_4_early_stop.ipynb
 
     # callback for training
     cb_epoch = (p, st, epoch, nepoch; io = io) -> callback(p, st; io,
@@ -121,7 +121,7 @@ function train_model(
         cb_stats(p, st)
     end
 
-    # TODO - output a train.log file with timings
+    # TODO: output a train.log file with timings
 
     # save statistics
     statsfile = open(joinpath(dir, "statistics.txt"), "w")
