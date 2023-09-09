@@ -32,7 +32,6 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
 FourierSpaces = "0.2.3"
-Lux = "0.4.55"
 julia = "1.6"
 
 [extras]
