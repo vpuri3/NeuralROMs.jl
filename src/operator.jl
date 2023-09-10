@@ -119,6 +119,10 @@ function OpConv(ch_in::Int, ch_out::Int, modes::NTuple{D, Int};
 ) where{D}
 
     transform = isnothing(transform) ? (FFTW.rfft, FFTW.irfft) : transform
+    # TODO
+    if isnothing(transform)
+        transform = FourierTransform(mesh...)
+    end
 
     OpConv(ch_in, ch_out, modes, transform, init)
 end
@@ -129,7 +133,7 @@ function Lux.initialparameters(rng::Random.AbstractRNG, l::OpConv)
     scale = one(Float32) / (l.ch_in * l.ch_out)
 
     (;
-     W = scale * l.init(rng, ComplexF32, dims...),
+        W = scale * l.init(rng, ComplexF32, dims...), # TODO eltype(l.transform)
     )
 end
 
