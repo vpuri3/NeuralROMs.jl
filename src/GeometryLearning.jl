@@ -4,7 +4,6 @@ using DocStringExtensions
 
 # PDE stack
 using FourierSpaces
-using FourierSpaces: linspace
 
 # ML Stack
 using Lux

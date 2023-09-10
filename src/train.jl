@@ -121,7 +121,8 @@ function train_model(
         cb_stats(p, st)
     end
 
-    # TODO: output a train.log file with timings
+    # TODO - output a train.log file with timings
+    # add ProgressMeters.jl
 
     # save statistics
     statsfile = open(joinpath(dir, "statistics.txt"), "w")
