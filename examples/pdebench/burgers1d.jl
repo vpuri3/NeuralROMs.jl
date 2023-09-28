@@ -40,8 +40,8 @@ N = 1024
 E = 100 # epochs
 
 # trajectories
-_K = 512
-K_ = 64
+_K = 1024
+K_ = 128
 
 # get data
 dir = @__DIR__
@@ -58,7 +58,7 @@ V = FourierSpace(N)
 # FNO model
 ###
 
-w = 16    # width
+w = 32    # width
 m = (128,) # modes
 c = size(_data[1], 1) # in  channels
 o = size(_data[2], 1) # out channels
@@ -84,7 +84,7 @@ nepochs  = E .* (0.25, 0.25, 0.25, 0.25) .|> Int
 # nepochs  = E .* (0.25, 0.25, 0.25, 0.25) .|> Int
 
 dir = joinpath(@__DIR__, "dump")
-device = Lux.cpu
+device = Lux.gpu
 
 model, ST = train_model(rng, NN, _data, data_, V, opt;
     batchsize, learning_rates, nepochs, dir, device)

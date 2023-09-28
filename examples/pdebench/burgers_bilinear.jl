@@ -30,8 +30,8 @@ import Lux: cpu, gpu, relu
 using Tullio, Zygote
 
 using FFTW, LinearAlgebra
-BLAS.set_num_threads(4)
-FFTW.set_num_threads(8)
+BLAS.set_num_threads(12)
+FFTW.set_num_threads(24)
 
 rng = Random.default_rng()
 Random.seed!(rng, 983254)

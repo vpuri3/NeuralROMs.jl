@@ -25,11 +25,12 @@ function train_model(
     NN::Lux.AbstractExplicitLayer,
     _data::NTuple{2, AbstractArray{Float32}},
     data_::NTuple{2, AbstractArray{Float32}},
-    V::Spaces.AbstractSpace,
+    V::Union{Nothing, Spaces.AbstractSpace},
     opt::Optimisers.AbstractRule = Optimisers.Adam();
     batchsize::Int = 32,
-    learning_rates::NTuple{N, Float32} = (1f-3,),
-    nepochs::NTuple{N} = (100,),
+    batchsize_::Union{Int, Nothing} = nothing,
+    learning_rates = (1f-3,),
+    nepochs = (100,),
     cbstep::Int = 1,
     dir = "",
     name = "model",
@@ -38,9 +39,11 @@ function train_model(
     p = nothing,        # initial parameters
     st = nothing,       # initial state
     lossfun = mse,
-    device = Lux.cpu,
+    device = Lux.cpu_device,
     make_plots = true,
-) where{N}
+    early_stopping = true,
+    format = nothing, # [Nx, Ny, C, K], or [C, Nx, Ny, K] # TODO:
+)
 
     @assert length(learning_rates) == length(nepochs)
 
@@ -48,16 +51,19 @@ function train_model(
     mkpath(dir)
 
     # create data loaders
-    _loader = DataLoader(_data; batchsize, rng, shuffle = true)
-    loader_ = DataLoader(data_; batchsize, rng, shuffle = true)
+    _batchsize = batchsize
+    batchsize_ = isnothing(batchsize_) ? batchsize : batchsize_
 
-    if device == Lux.gpu
+    _loader = DataLoader(_data; batchsize = _batchsize, rng, shuffle = true)
+    loader_ = DataLoader(data_; batchsize = batchsize_, rng, shuffle = true)
+
+    if (device === Lux.gpu) | (device isa Lux.LuxCUDADevice)
         _loader, loader_ = (_loader, loader_) .|> CuIterator
     end
 
     # full batch statistics functions
-    _stats = (p, st; io = io) -> statistics(NN, p, st, _loader; io)
-    stats_ = (p, st; io = io) -> statistics(NN, p, st, loader_; io)
+    _stats = (p, st; io = io) -> statistics(NN, p, st, _loader; io, mode = :train)
+    stats_ = (p, st; io = io) -> statistics(NN, p, st, loader_; io, mode = :test)
 
     # full batch losses for cb_stats
     _loss = (p, st) -> minibatch_metric(NN, p, st, _loader, lossfun)
@@ -75,6 +81,7 @@ function train_model(
     # cb_batch = 
 
     # TODO: early stopping: (need fullbatch validation loss for early stopping?)
+    # TODO: just do early stopping based on minibatch on test data (have larger test batchsize)
     # TODO: https://github.com/jeffheaton/app_deep_learning/blob/main/t81_558_class_03_4_early_stop.ipynb
 
     # callback for training
@@ -100,6 +107,7 @@ function train_model(
     println(io, "#======================#")
 
     # set up optimizer
+    st = Lux.trainmode(st)
     opt_st = nothing
 
     for i in eachindex(nepochs)
@@ -112,7 +120,7 @@ function train_model(
         println(io, "Learning Rate: $learning_rate, EPOCHS: $nepoch")
         println(io, "#======================#")
 
-        if device == Lux.gpu
+        if (device === Lux.gpu) | (device isa Lux.LuxCUDADevice)
             CUDA.@time p, st, opt_st = optimize(NN, p, st, _loader, nepoch; lossfun, opt, opt_st, cb_epoch, io)
         else
             @time p, st, opt_st = optimize(NN, p, st, _loader, nepoch; lossfun, opt, opt_st, cb_epoch, io)
@@ -178,7 +186,8 @@ $SIGNATURES
 
 """
 function statistics(NN::Lux.AbstractExplicitLayer, p, st, loader;
-    io::Union{Nothing, IO} = stdout
+    mode::Symbol = :train,
+    io::Union{Nothing, IO} = stdout,
 )
     N = 0
     SUM   = 0f0
@@ -187,6 +196,14 @@ function statistics(NN::Lux.AbstractExplicitLayer, p, st, loader;
     SQRER = 0f0
 
     MAXER = 0f0
+
+    st = if mode === :train
+        Lux.trainmode(st)
+    elseif mode === :test
+        Lux.testmode(st)
+    else
+        error("mode must be :train or :test")
+    end
 
     for (x, ŷ) in loader
         y, _ = NN(x, p, st)
@@ -416,6 +433,8 @@ function plot_training(EPOCH, _LOSS, LOSS_; dir = nothing)
 
     plt
 end
+
+visualize(::Nothing, args...; kwargs...) = nothing
 
 """
 $SIGNATURES
