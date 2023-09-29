@@ -68,7 +68,6 @@ export
 
        # training
        train_model,
-       model_setup,
        callback,
        optimize,
 

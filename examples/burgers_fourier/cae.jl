@@ -17,7 +17,6 @@ using Plots, BSON
 # accelerator
 using CUDA, LuxCUDA #, KernelAbstractions
 CUDA.allowscalar(false)
-import Lux: cpu, gpu
 
 # misc
 using Tullio, Zygote
@@ -34,152 +33,97 @@ end
 rng = Random.default_rng()
 Random.seed!(rng, 199)
 
-# datagen
-x, V, _data, data_ = begin
-    file = joinpath(@__DIR__, "visc_burg_re01k/data.bson")
+# case directory
+dir = joinpath(@__DIR__, "CAE_stationary")
+
+# get data
+V, _data, data_, metadata = begin
+    file = joinpath(@__DIR__, "burg_visc_re10k_stationary/data.bson")
     data = BSON.load(file)
-    x = data[:x]
-    u = data[:u] # [Nx, Nt, K]
 
-    # skip every other timestep
-    u = @view u[:, :, begin:4:end]
+    u = data[:u] # [Nx, Nb, Nt]
 
-    N = size(u, 1)
-    u = reshape(u, N, 1, :)
+    # get sizes
+    Nx, Nt, Nb = size(u)
 
-    # normalize each trajectory
-    # https://lux.csail.mit.edu/dev/api/Building_Blocks/LuxLib#Normalization
-    l = InstanceNorm(1; affine = false) # arg: channel size = 1
-    p, st = Lux.setup(rng, l)
-    u = l(u, p, st)[1]
+    # normalize arrays
+    mean = sum(u) / length(u)
+    var  = sum(abs2, u .- mean) / length(u)
+    u    = (u .- mean) / sqrt(var)
 
-    _u, u_ = splitobs(u; at = 0.8, shuffle = true)
+    # train/test split
+    _Ib, Ib_ = splitobs(1:Nb; at = 0.8, shuffle = true)
 
-    V = nothing #FourierSpace(N)
+    It = 1:4:Nt |> Array # skip a few time-steps
 
-    x, V, (_u, _u), (u_, u_)
+    _u = @view u[:, _Ib, It]
+    u_ = @view u[:, Ib_, It]
+
+    _u = reshape(_u, Nx, 1, :)
+    u_ = reshape(u_, Nx, 1, :)
+
+    V = nothing # FourierSpace(N)
+
+    metadata = (; mean, var, _Ib, Ib_, It)
+
+    V, (_u, _u), (u_, u_), metadata
 end
 
 # parameters
-if false
-    E = 300 # epochs
-    w = 128 # width
-    l = 64  # latent
-    act = tanh # relu
+E = 200 # epochs
+w = 128 # width
+l = 64  # latent
+act = tanh # relu
 
-    opt = Optimisers.Adam()
-    batchsize  = 100
-    batchsize_ = 200
-    learning_rates = 1f-3 ./ (2 .^ (0:9))
-    nepochs = E/10 * ones(10) .|> Int
-    device = Lux.gpu_device()
-    dir = joinpath(@__DIR__, "CAE_deep")
+opt = Optimisers.Adam()
+batchsize  = 100
+batchsize_ = 200
+learning_rates = 1f-3 ./ (2 .^ (0:9))
+nepochs = E/10 * ones(10) .|> Int
+device = Lux.gpu_device()
 
-    NN = begin
-        encoder = Chain(
-            Conv((2,), 1  =>  8, act; stride = 2),
-            Conv((2,), 8  => 16, act; stride = 2),
-            Conv((2,), 16 => 32, act; stride = 2),
-            Conv((2,), 32 =>  w, act; stride = 2),
-            # BatchNorm(w),
-            Conv((2,), w  =>  w, act; stride = 2),
-            Conv((2,), w  =>  w, act; stride = 2),
-            Conv((2,), w  =>  w, act; stride = 2),
-            Conv((2,), w  =>  w, act; stride = 2),
-            Conv((2,), w  =>  w, act; stride = 2),
-            Conv((2,), w  =>  w, act; stride = 2),
-            flatten,
-            Dense(w, w, act),
-            Dense(w, l),
-        )
+NN = begin
+    encoder = Chain(
+        Conv((2,), 1  =>  8, act; stride = 2),
+        Conv((2,), 8  => 16, act; stride = 2),
+        Conv((2,), 16 => 32, act; stride = 2),
+        Conv((2,), 32 =>  w, act; stride = 2),
+        # BatchNorm(w),
+        Conv((2,), w  =>  w, act; stride = 2),
+        Conv((2,), w  =>  w, act; stride = 2),
+        Conv((2,), w  =>  w, act; stride = 2),
+        Conv((2,), w  =>  w, act; stride = 2),
+        Conv((2,), w  =>  w, act; stride = 2),
+        Conv((2,), w  =>  w, act; stride = 2),
+        flatten,
+        Dense(w, w, act),
+        Dense(w, l),
+    )
 
-        decoder = Chain(
-            Dense(l, w, act),
-            Dense(w, w, act),
-            ReshapeLayer((1, w)),
-            ConvTranspose((2,), w  =>  w, act; stride = 2),
-            ConvTranspose((2,), w  =>  w, act; stride = 2),
-            ConvTranspose((2,), w  =>  w, act; stride = 2),
-            ConvTranspose((2,), w  =>  w, act; stride = 2),
-            ConvTranspose((2,), w  =>  w, act; stride = 2),
-            ConvTranspose((2,), w  =>  w, act; stride = 2),
-            # BatchNorm(w),
-            ConvTranspose((2,), w  => 32, act; stride = 2),
-            ConvTranspose((2,), 32 => 16, act; stride = 2),
-            ConvTranspose((2,), 16 =>  8, act; stride = 2),
-            ConvTranspose((2,), 8  =>  1     ; stride = 2),
-        )
+    decoder = Chain(
+        Dense(l, w, act),
+        Dense(w, w, act),
+        ReshapeLayer((1, w)),
+        ConvTranspose((2,), w  =>  w, act; stride = 2),
+        ConvTranspose((2,), w  =>  w, act; stride = 2),
+        ConvTranspose((2,), w  =>  w, act; stride = 2),
+        ConvTranspose((2,), w  =>  w, act; stride = 2),
+        ConvTranspose((2,), w  =>  w, act; stride = 2),
+        ConvTranspose((2,), w  =>  w, act; stride = 2),
+        # BatchNorm(w),
+        ConvTranspose((2,), w  => 32, act; stride = 2),
+        ConvTranspose((2,), 32 => 16, act; stride = 2),
+        ConvTranspose((2,), 16 =>  8, act; stride = 2),
+        ConvTranspose((2,), 8  =>  1     ; stride = 2),
+    )
 
-        Chain(encoder, decoder)
-    end
-
-    model, ST = train_model(rng, NN, _data, data_, V, opt;
-        batchsize, batchsize_, learning_rates, nepochs, dir,
-        cbstep = 1, device)
-
-    plot_training(ST...) |> display
+    Chain(encoder, decoder)
 end
 
-if true
-    E = 200 # epochs
-    w = 64 # width
-    l = 64 # latent
-    act = tanh # relu
+model, ST = train_model(rng, NN, _data, data_, V, opt;
+    batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata)
 
-    opt = Optimisers.Adam()
-    batchsize  = 100
-    batchsize_ = 200
-    learning_rates = 1f-3 ./ (2 .^ (0:9))
-    nepochs = E/10 * ones(10) .|> Int
-    device = Lux.gpu_device()
-    dir = joinpath(@__DIR__, "CAE_wide")
-
-    NN = begin
-        encoder = Chain(
-            Conv((9,), 1 => w, act; stride = 5, pad = 0),
-            Conv((9,), w => w, act; stride = 5, pad = 0),
-            # BatchNorm(w, act),
-            Conv((9,), w => w, act; stride = 5, pad = 0),
-            Conv((7,), w => w, act; stride = 1, pad = 0),
-            flatten,
-            # Dense(w, w, act),
-            Dense(w, l, act),
-        )
-
-        decoder = Chain(
-            Dense(l, w, act),
-            # Dense(w, w, act),
-            ReshapeLayer((1, w)),
-            ConvTranspose((7,), w => w, act; stride = 1, pad = 0),
-            ConvTranspose((10,),w => w, act; stride = 5, pad = 0),
-            # BatchNorm(w, act),
-            ConvTranspose((9,), w => w, act; stride = 5, pad = 0),
-            ConvTranspose((9,), w => 1,    ; stride = 5, pad = 0),
-        )
-
-        Chain(encoder, decoder)
-    end
-
-    model, ST = train_model(rng, NN, _data, data_, V, opt;
-        batchsize, batchsize_, learning_rates, nepochs, dir,
-        cbstep = 1, device)
-    
-    plot_training(ST...) |> display
-end
+plot_training(ST...) |> display
 
 nothing
-
-    #=
-# DAE paper
-# 4 conv layers, 1 deep layer
-# filter = (25,), stride = 2 (first), 4 (after)
-
-# NN = Chain(...)
-# u = rand(Float32, 1024, 1, 10)
-# # u = rand(Float32, 1, 1, 10)
-# p, st = Lux.setup(rng, NN)
-# @show u |> size
-# @show NN(u, p, st)[1] |> size
-
-    =#
 #

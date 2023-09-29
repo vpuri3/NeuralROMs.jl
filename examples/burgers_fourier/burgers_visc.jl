@@ -4,26 +4,13 @@ using FourierSpaces
 using CUDA, OrdinaryDiffEq, LinearAlgebra, Random
 using Plots, BSON
 
-Random.seed!(0)
+Random.seed!(1)
 CUDA.allowscalar(false)
 
 N = 1024
-Nmodes = 3
-ν = 1f-3
+K = 100
+ν = 1f-4
 p = nothing
-
-function uIC(V::FourierSpace)
-    x = points(V)[1]
-    X = truncationOp(V, (Nmodes / N,))
-
-    u0 = if x isa CUDA.CuArray
-        X * CUDA.rand(size(x)...)
-    else
-        X * rand(size(x)...)
-    end
-
-    u0
-end
 
 odecb = begin
     function affect!(int)
@@ -35,25 +22,35 @@ odecb = begin
     DiscreteCallback((u,t,int) -> true, affect!, save_positions=(false,false))
 end
 
-function burgers_visc1d(N, ν, p;
-    uIC=uIC,
+function burgers_visc1d(N, K, ν, p;
     tspan=(0.f0, 10.f0),
-    nsims=10,
-    nsave=100,
+    tsave=100,
     odealg=SSPRK43(),
     device = cpu,
 )
 
     """ space discr """
-    V = FourierSpace(N) |> device
+    domain = IntervalDomain(-1, 1; periodic = true)
+    V = FourierSpace(N; domain) |> Float32
     discr = Collocation()
 
+    (k,) = modes(V)
     (x,) = points(V)
 
     """ IC """
-    u0 = [uIC(V) for i=1:nsims]
-    u0 = hcat(u0...)
+    u0 = rand(Float32, N, K)
     V = make_transform(V, u0; p=p)
+    u0 = begin
+        F = transformOp(V)
+        u0h = F * u0
+        # u0h[1, :] .= 0
+        u0h[10:end, :] .= 0
+        F \ u0h
+    end
+
+    """ move to device """
+    V  = V  |> device
+    u0 = u0 |> device
 
     """ operators """
     function burgers!(v, u, p, t)
@@ -73,7 +70,7 @@ function burgers_visc1d(N, ν, p;
     odefunc = cache_operator(A-C+F, u0)
 
     """ time discr """
-    tsave = range(tspan...; length=nsave)
+    tsave = range(tspan...; length=tsave)
     prob = ODEProblem(odefunc, u0, tspan, p; reltol=1f-6, abstol=1f-6)
 
     """ solve """
@@ -88,9 +85,9 @@ function burgers_visc1d(N, ν, p;
     (sol, V), (x, u, t,)
 end
 
-(sol, V), (x, u, t) = burgers_visc1d(N, ν, p; device = gpu, nsims = 100)
+(sol, V), (x, u, t) = burgers_visc1d(N, K, ν, p; device = gpu)
 
-dir = joinpath(@__DIR__, "visc_burg_re01k")
+dir = joinpath(@__DIR__, "burg_visc_re10k_traveling")
 mkpath(dir)
 
 name = joinpath(dir, "data.bson")
@@ -99,7 +96,7 @@ BSON.@save name x u
 for k in 1:10
     uk = @view u[:, k, :]
     anim = animate(uk, V, t, legend=false, linewidth=2, color=:black, xlabel="x", ylabel="u(x,t)")
-    gif(anim, joinpath(dir, "traj_$(k).gif"), fps=20)
+    gif(anim, joinpath(dir, "traj_$(k).gif"), fps=15)
 end
 
 nothing

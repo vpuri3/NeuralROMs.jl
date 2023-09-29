@@ -43,6 +43,7 @@ function train_model(
     make_plots = true,
     early_stopping = true,
     format = nothing, # [Nx, Ny, C, K], or [C, Nx, Ny, K] # TODO:
+    metadata = nothing,
 )
 
     @assert length(learning_rates) == length(nepochs)
@@ -149,7 +150,7 @@ function train_model(
     model = NN, p, st
     STATS = EPOCH, _LOSS, LOSS_
  
-    BSON.@save joinpath(dir, "$name.bson") _data data_ model
+    BSON.@save joinpath(dir, "$name.bson") model metadata
 
     model, STATS
 end
