@@ -1,6 +1,6 @@
 #
 using LinearAlgebra, Lux, BSON, Plots
-using MLUtils, GeometryLearning
+using MLUtils
 
 #======================================================#
 function post_process_CAE(datafile, modelfile, outdir)
@@ -40,7 +40,7 @@ function post_process_CAE(datafile, modelfile, outdir)
     for k in 1:5
         udata = @view _Udata[:, k, :]
         upred = @view _Upred[:, k, :]
-        anim = animate1D(udata, upred, x, t; linewidth=2, xlabel="x", ylabel="u(x,t)")
+        anim = _animate(udata, upred, x, t; linewidth=2, xlabel="x", ylabel="u(x,t)")
         gif(anim, joinpath(outdir, "train$(k).gif"), fps=15)
 
         # add energy plot here
@@ -49,7 +49,7 @@ function post_process_CAE(datafile, modelfile, outdir)
     for k in 1:5
         udata = @view Udata_[:, k, :]
         upred = @view Upred_[:, k, :]
-        anim = animate1D(udata, upred, x, t; linewidth=2, xlabel="x", ylabel="u(x,t)")
+        anim = _animate(udata, upred, x, t; linewidth=2, xlabel="x", ylabel="u(x,t)")
         gif(anim, joinpath(outdir, "test$(k).gif"), fps=15)
 
         # add energy plot here
@@ -64,6 +64,25 @@ function post_process_CAE(datafile, modelfile, outdir)
 
     nothing
 end
+
+#======================================================#
+function _animate(u::AbstractMatrix, v::AbstractMatrix, x::AbstractVector,
+    t::AbstractVector; kwargs...)
+
+    ylims = begin
+        mi = minimum(u)
+        ma = maximum(u)
+        buf = (ma - mi) / 5
+    (mi - buf, ma + buf)
+    end
+    kw = (; ylims, kwargs...)
+    anim = @animate for i in 1:size(u, 2)
+        titlestr = "time = $(round(t[i], digits=8))"
+        plt = plot(x, u[:, i]; kw..., label = "Ground Truth", title = titlestr, c = :black)
+        plot!(plt, x, v[:, i]; kw..., label = "Prediction"  , title = titlestr, c = :red)
+    end
+end
+#======================================================#
 
 datafile = joinpath(@__DIR__, "burg_visc_re10k_stationary", "data.bson")
 modelfile = joinpath(@__DIR__, "CAE_stationary", "model.bson")

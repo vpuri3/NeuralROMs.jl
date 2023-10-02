@@ -8,10 +8,17 @@ function post_process_CAE(datafile, modelfile, outdir)
     # load data
     data = BSON.load(datafile)
     x = data[:x]
-    t = LinRange(0, 10, 100) |> Array
+    t = data[:t]
     Udata = data[:u]
+    mu = data[:mu]
 
     Nx, Nb, Nt = size(Udata)
+
+    # subsample in space
+    Nx = Int(Nx / 8)
+    Ix = 1:8:8192
+    Udata = @view Udata[Ix, :, :]
+    x = @view x[Ix]
 
     # load model
     model = BSON.load(modelfile)
@@ -37,20 +44,24 @@ function post_process_CAE(datafile, modelfile, outdir)
 
     mkpath(outdir)
 
-    for k in 1:5
+    for k in 1:length(_Ib)
         udata = @view _Udata[:, k, :]
         upred = @view _Upred[:, k, :]
-        anim = animate1D(udata, upred, x, t; linewidth=2, xlabel="x", ylabel="u(x,t)")
-        gif(anim, joinpath(outdir, "train$(k).gif"), fps=15)
+        _mu = round(mu[k], digits = 2)
+        anim = animate1D(udata, upred, x, t; linewidth=2, xlabel="x",
+            ylabel="u(x,t)", title = "μ = $_mu, ")
+        gif(anim, joinpath(outdir, "train$(k).gif"), fps=30)
 
         # add energy plot here
     end
 
-    for k in 1:5
+    for k in 1:length(Ib_)
         udata = @view Udata_[:, k, :]
         upred = @view Upred_[:, k, :]
-        anim = animate1D(udata, upred, x, t; linewidth=2, xlabel="x", ylabel="u(x,t)")
-        gif(anim, joinpath(outdir, "test$(k).gif"), fps=15)
+        _mu = round(mu[k], digits = 2)
+        anim = animate1D(udata, upred, x, t; linewidth=2, xlabel="x",
+            ylabel="u(x,t)", title = "μ = $_mu, ")
+        gif(anim, joinpath(outdir, "test$(k).gif"), fps=30)
 
         # add energy plot here
     end
@@ -65,15 +76,9 @@ function post_process_CAE(datafile, modelfile, outdir)
     nothing
 end
 
-datafile = joinpath(@__DIR__, "burg_visc_re10k_stationary", "data.bson")
-modelfile = joinpath(@__DIR__, "CAE_stationary", "model.bson")
-outdir = joinpath(@__DIR__, "Stationary")
-
-post_process_CAE(datafile, modelfile, outdir)
-
-datafile = joinpath(@__DIR__, "burg_visc_re10k_traveling", "data.bson")
-modelfile = joinpath(@__DIR__, "CAE_traveling", "model.bson")
-outdir = joinpath(@__DIR__, "Traveling")
+datafile = joinpath(@__DIR__, "burg_visc_re10k", "data.bson")
+modelfile = joinpath(@__DIR__, "model", "model.bson")
+outdir = joinpath(@__DIR__, "result")
 
 post_process_CAE(datafile, modelfile, outdir)
 

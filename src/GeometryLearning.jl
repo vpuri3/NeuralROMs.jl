@@ -36,6 +36,7 @@ using ComponentArrays
 using Setfield: @set!
 
 include("utils.jl")
+include("vis.jl")
 include("metrics.jl")
 include("train.jl")
 
@@ -45,8 +46,8 @@ include("transform.jl")
 include("operator.jl")
 
 export
-       # utils
-       linspace,
+       # vis
+       animate1D,
 
        # layers
        Atten,
