@@ -33,13 +33,15 @@ end
 rng = Random.default_rng()
 Random.seed!(rng, 199)
 
-# case directory
 dir = joinpath(@__DIR__, "CAE_stationary")
+datadir = joinpath(@__DIR__, "burg_visc_re10k_stationary/data.bson")
+
+# dir = joinpath(@__DIR__, "CAE_traveling")
+# datadir = joinpath(@__DIR__, "burg_visc_re10k_traveling/data.bson")
 
 # get data
 V, _data, data_, metadata = begin
-    file = joinpath(@__DIR__, "burg_visc_re10k_stationary/data.bson")
-    data = BSON.load(file)
+    data = BSON.load(datadir)
 
     u = data[:u] # [Nx, Nb, Nt]
 
@@ -54,17 +56,21 @@ V, _data, data_, metadata = begin
     # train/test split
     _Ib, Ib_ = splitobs(1:Nb; at = 0.8, shuffle = true)
 
-    It = 1:4:Nt |> Array # skip a few time-steps
+    # train on times 0 - 5s
+    _It = 1:2:Int(Nt/2) |> Array
+    It_ = 1:4:Nt        |> Array
 
-    _u = @view u[:, _Ib, It]
-    u_ = @view u[:, Ib_, It]
+    _u = @view u[:, _Ib, _It]
+    u_ = @view u[:, Ib_, It_]
 
     _u = reshape(_u, Nx, 1, :)
     u_ = reshape(u_, Nx, 1, :)
 
     V = nothing # FourierSpace(N)
 
-    metadata = (; mean, var, _Ib, Ib_, It)
+    readme = "Train from time 0-5, test on 0-10."
+
+    metadata = (; mean, var, _Ib, Ib_, _It, readme)
 
     V, (_u, _u), (u_, u_), metadata
 end

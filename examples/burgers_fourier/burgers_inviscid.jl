@@ -7,16 +7,17 @@ using Plots, BSON
 Random.seed!(0)
 CUDA.allowscalar(false)
 
-N = 512
-Nmodes = 32
+N = 1024
+K = 1
 p = nothing
 
-function uIC(V::FourierSpace)
+function uIC(V::FourierSpace; mu = 0.5)
+    N = length(V)
     x = points(V)[1]
 
-    u0 = x * 0 .+ 1
+    u = @. mu / 2 * (sin(2pi * x))
 
-    u0
+    u = x * 0 .+ 1
 end
 
 odecb = begin
@@ -29,19 +30,19 @@ odecb = begin
     DiscreteCallback((u,t,int) -> true, affect!, save_positions=(false,false))
 end
 
-function burgers_visc1d(N, p;
-    uIC=uIC,
-    tspan=(0.f0, 10.f0),
-    nsims=10,
-    nsave=10,
+function burgers_visc1d(N, K, p;
+    tspan=(0.f0, 0.f5),
+    tsave=100,
     odealg=SSPRK43(),
     device = cpu,
 )
 
     """ space discr """
-    V = FourierSpace(N) |> Float32 |> device
+    domain = InvervalDomain(0, 2; periodic = true)
+    V = FourierSpace(N; domain) |> Float32
     discr = Collocation()
 
+    (k,) = modes(V)
     (x,) = points(V)
 
     """ IC """
@@ -65,6 +66,9 @@ function burgers_visc1d(N, p;
     F = forcingOp(zero(u0), V, discr; f_update_func! = forcing!)
 
     odefunc = cache_operator(-C+F, u0)
+
+    V  = V  |> device
+    u0 = u0 |> device
 
     """ time discr """
     tsave = range(tspan...; length=nsave)
