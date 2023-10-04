@@ -9,11 +9,6 @@ function PermutedBatchNorm(c, num_dims) # assumes channel_dim = 1
     perm0 = ((2:num_dims-1)..., 1, num_dims)
     perm1 = (num_dims-1, (1:num_dims-2)..., num_dims)
 
-    # Chain(
-    #     Base.Fix2(PermutedDimsArray, perm0),
-    #     BatchNorm(c),
-    #     Base.Fix2(PermutedDimsArray, perm1),
-    # )
     Chain(
         Base.Fix2(permutedims, perm0),
         BatchNorm(c),

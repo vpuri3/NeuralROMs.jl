@@ -48,6 +48,7 @@ include("operator.jl")
 export
        # vis
        animate1D,
+       plot_1D_surrogate_steady,
 
        # layers
        Atten,
@@ -73,7 +74,6 @@ export
        optimize,
 
        plot_training,
-       visualize,
        mse,
        rsquare
 

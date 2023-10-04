@@ -41,8 +41,8 @@ function train_model(
     lossfun = mse,
     device = Lux.cpu_device,
     make_plots = true,
-    early_stopping = true,
-    format = :CNB, # :NCB = [Nx, Ny, C, K], :CNB = [C, Nx, Ny, K] # TODO
+    patience = 20,
+    # format = :CNB, # :NCB = [Nx, Ny, C, K], :CNB = [C, Nx, Ny, K] # TODO
     metadata = nothing,
 )
 
@@ -81,10 +81,6 @@ function train_model(
 
     # cb_batch = 
 
-    # TODO: early stopping: (need fullbatch validation loss for early stopping?)
-    # TODO: just do early stopping based on minibatch on test data (have larger test batchsize)
-    # TODO: https://github.com/jeffheaton/app_deep_learning/blob/main/t81_558_class_03_4_early_stop.ipynb
-
     # callback for training
     cb_epoch = (p, st, epoch, nepoch; io = io) -> callback(p, st; io,
                                                 _loss, _LOSS, loss_, LOSS_,
@@ -122,16 +118,18 @@ function train_model(
         println(io, "#======================#")
 
         if (device === Lux.gpu) | (device isa Lux.LuxCUDADevice)
-            CUDA.@time p, st, opt_st = optimize(NN, p, st, _loader, nepoch; lossfun, opt, opt_st, cb_epoch, io)
+            CUDA.@time p, st, opt_st = optimize(NN, p, st, _loader, loader_, nepoch;
+                lossfun, opt, opt_st, cb_epoch, io, patience)
         else
-            @time p, st, opt_st = optimize(NN, p, st, _loader, nepoch; lossfun, opt, opt_st, cb_epoch, io)
+            @time p, st, opt_st = optimize(NN, p, st, _loader, loader_, nepoch;
+                lossfun, opt, opt_st, cb_epoch, io, patience)
         end
 
         cb_stats(p, st)
     end
 
     # TODO - output a train.log file with timings
-    # add ProgressMeters.jl
+    # add ProgressMeters.jl, or TensorBoardLogger.jl
 
     # save statistics
     statsfile = open(joinpath(dir, "statistics.txt"), "w")
@@ -141,10 +139,9 @@ function train_model(
     # transfer model to host device
     p, st = (p, st) |> Lux.cpu
 
-    # visualization
+    # training plot
     if make_plots
         plot_training(EPOCH, _LOSS, LOSS_; dir)
-        visualize(V, _data, data_, NN, p, st; nsamples, dir, format)
     end
 
     model = NN, p, st
@@ -215,7 +212,7 @@ function statistics(NN::Lux.AbstractExplicitLayer, p, st, loader;
 
         ABSER += sum(abs , Δy)
         SQRER += sum(abs2, Δy)
-        MAXER  = max(MAXER, norm(Δy, Inf))
+        MAXER  = max(MAXER, norm(Δy, Inf32))
     end
 
     ȳ   = SUM / N
@@ -223,7 +220,7 @@ function statistics(NN::Lux.AbstractExplicitLayer, p, st, loader;
     RMSE = sqrt(MSE)
 
     meanAE = ABSER / N
-    maxAE  = MAXER
+    maxAE  = MAXER # TODO - seems off
 
     # variance
     for (x, _) in loader
@@ -236,7 +233,7 @@ function statistics(NN::Lux.AbstractExplicitLayer, p, st, loader;
 
     # rel   = Δy ./ ŷ
     # meanRE = norm(rel, 1) / length(ŷ)
-    # maxRE  = norm(rel, Inf)
+    # maxRE  = norm(rel, Inf32)
 
     if !isnothing(io)
         str = ""
@@ -360,34 +357,33 @@ Train parameters `p` to minimize `loss` using optimization strategy `opt`.
 - Loss signature: `loss(p, st) -> y, st`
 - Callback signature: `cb(p, st epoch, nepochs) -> nothing` 
 """
-function optimize(NN, p, st, loader, nepochs;
+function optimize(NN, p, st, _loader, loader_, nepochs;
     lossfun = mse,
     opt = Optimisers.Adam(),
     opt_st = nothing,
     cb_batch = nothing,
     cb_epoch = nothing,
     io::Union{Nothing, IO} = stdout,
+    patience = 20,
 )
 
     # print stats
     !isnothing(cb_epoch) && cb_epoch(p, st, 0, nepochs; io)
 
-    function loss(x, ŷ, p, st)
-        y, st = NN(x, p, st)
-        lossfun(y, ŷ), st
-    end
-
     # warm up
     begin
-        loss = Loss(NN, st, first(loader), lossfun)
+        loss = Loss(NN, st, first(_loader), lossfun)
         grad(loss, p)
     end
+
+    # get config for early stopping
+    minconfig = (; count = 0, patience, l = Inf32, p, st, opt_st)
 
     # init optimizer
     opt_st = isnothing(opt_st) ? Optimisers.setup(opt, p) : opt_st
 
     for epoch in 1:nepochs
-        for batch in loader
+        for batch in _loader
             loss = Loss(NN, st, batch, lossfun)
             l, st, g = grad(loss, p)
             opt_st, p = Optimisers.update!(opt_st, p, g)
@@ -396,14 +392,31 @@ function optimize(NN, p, st, loader, nepochs;
             !isnothing(cb_batch) && cb_batch(p, st, step)
         end
 
-        # TODO - add stopping criteria for GD
-
         println(io, "#=======================#")
         !isnothing(cb_epoch) && cb_epoch(p, st, epoch, nepochs; io)
+
+        # early stopping based on mini-batch loss from test set
+        # https://github.com/jeffheaton/app_deep_learning/blob/main/t81_558_class_03_4_early_stop.ipynb
+
+        l, _ = Loss(NN, st, first(loader_), lossfun)(p)
+        if l < minconfig.l
+            println(io, "Improvement in loss found: $(l) < $(minconfig.l)")
+            minconfig = (; minconfig..., count = 0, l, p, st, opt_st)
+        else
+            println(io, "No improvement in loss found in the last $(minconfig.count) epochs.")
+            println(io, "In this epoch, $(l) > $(minconfig.l).")
+            @set! minconfig.count = minconfig.count + 1
+        end
+        if minconfig.count >= minconfig.patience
+            println(io, "Early Stopping triggered after $(epoch) epochs.")
+            break
+        end
+
         println(io, "#=======================#")
+
     end
 
-    p, st, opt_st
+    minconfig.p, minconfig.st, minconfig.opt_st
 end
 
 #===============================================================#
@@ -434,106 +447,6 @@ function plot_training(EPOCH, _LOSS, LOSS_; dir = nothing)
 
     plt
 end
-
-"""
-$SIGNATURES
-
-"""
-function visualize(V::Spaces.AbstractSpace{<:Any, 1},
-    _data::NTuple{2, Any},
-    data_::NTuple{2, Any},
-    NN::Lux.AbstractExplicitLayer,
-    p,
-    st;
-    nsamples = 5,
-    dir = nothing,
-    format = :CNB,
-)
-    x, = points(V)
-
-    _x, _ŷ = _data
-    x_, ŷ_ = data_
-
-    _y = NN(_x, p, st)[1]
-    y_ = NN(x_, p, st)[1]
-
-    N, _K = size(_y)[end-1:end]
-    N, K_ = size(y_)[end-1:end]
-
-    _I = rand(1:_K, nsamples)
-    I_ = rand(1:K_, nsamples)
-    n = 4
-    ms = 4
-
-    cmap = range(HSV(0,1,1), stop=HSV(-360,1,1), length = nsamples + 1)
-
-    # Trajectory plots
-    kw = (; legend = false, xlabel = "x", ylabel = "u(x)")
-
-    _p0 = plot(;title = "Training Comparison", kw...)
-    p0_ = plot(;title = "Testing Comparison" , kw...)
-
-    for i in 1:nsamples
-        c = cmap[i]
-        _i = _I[i]
-        i_ = I_[i]
-
-        kw_data = (; markersize = ms, c = c,)
-        kw_pred = (; s = :solid, w = 2.0, c = c)
-
-        _idx, idx_ = if _y isa AbstractMatrix
-            (Colon(), _i), (Colon(), i_)
-        elseif _y isa AbstractArray{<:Any, 3}
-            # plot only the first output channel
-            # make separate dispatches for visualize later
-            (1, Colon(), _i), (1, Colon(), i_)
-        end
-
-        # training
-        __y = _y[_idx...]
-        __ŷ = _ŷ[_idx...]
-        scatter!(_p0, x[begin:n:end], __ŷ[begin:n:end]; kw_data...)
-        plot!(_p0, x, __y; kw_pred...)
-
-        # testing
-        y__ = y_[idx_...]
-        ŷ__ = ŷ_[idx_...]
-        scatter!(p0_, x[begin:n:end], ŷ__[begin:n:end]; kw_data...)
-        plot!(p0_, x, y__; kw_pred...)
-    end
-
-    # R2 plots
-
-    _R2 = round(rsquare(_y, _ŷ), digits = 8)
-    R2_ = round(rsquare(y_, ŷ_), digits = 8)
-
-    kw = (; legend = false, xlabel = "Data", ylabel = "Prediction", aspect_ratio = :equal)
-
-    _p1 = plot(; title = "Training R² = $_R2", kw...)
-    p1_ = plot(; title = "Testing R² = $R2_", kw...)
-
-    scatter!(_p1, vec(_y), vec(_ŷ), ms = 1)
-    scatter!(p1_, vec(y_), vec(ŷ_), ms = 1)
-
-    _l = [extrema(_y)...]
-    l_ = [extrema(y_)...]
-    plot!(_p1, _l, _l, w = 4.0, c = :red)
-    plot!(p1_, l_, l_, w = 4.0, c = :red)
-
-    plts = _p0, p0_, _p1, p1_
-
-    if !isnothing(dir)
-        png(plts[1],   joinpath(dir, "plt_traj_train"))
-        png(plts[2],   joinpath(dir, "plt_traj_test"))
-        png(plts[3],   joinpath(dir, "plt_r2_train"))
-        png(plts[4],   joinpath(dir, "plt_r2_test"))
-    end
-
-    plts
-end
-
-visualize(V::Spaces.AbstractSpace{<:Any, 2}, args...; kwargs...) = nothing
-visualize(::Nothing, args...; kwargs...) = nothing
 
 #===============================================================#
 #

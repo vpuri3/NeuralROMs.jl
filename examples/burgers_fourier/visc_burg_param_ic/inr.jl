@@ -104,10 +104,10 @@ end
 
 # parameters
 N = size(_data[1], 1)
-E = 300 # epochs
+E = 400 # epochs
 we = 64 # width
 wd = 32 # width
-l  = 4 # latent
+l  = 4  # latent
 act = relu # relu
 
 opt = Optimisers.Adam()
