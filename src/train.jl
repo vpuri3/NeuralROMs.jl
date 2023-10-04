@@ -151,6 +151,7 @@ function train_model(
 
     model, STATS
 end
+#===============================================================#
 
 #===============================================================#
 function minibatch_metric(NN, p, st, loader, metric)
@@ -403,12 +404,11 @@ function optimize(NN, p, st, _loader, loader_, nepochs;
             println(io, "Improvement in loss found: $(l) < $(minconfig.l)")
             minconfig = (; minconfig..., count = 0, l, p, st, opt_st)
         else
-            println(io, "No improvement in loss found in the last $(minconfig.count) epochs.")
-            println(io, "In this epoch, $(l) > $(minconfig.l).")
+            println(io, "No improvement in loss found in the last $(minconfig.count) epochs. Here, $(l) > $(minconfig.l)")
             @set! minconfig.count = minconfig.count + 1
         end
         if minconfig.count >= minconfig.patience
-            println(io, "Early Stopping triggered after $(epoch) epochs.")
+            println(io, "Early Stopping triggered after $(minconf.count) epochs of no improvement.")
             break
         end
 

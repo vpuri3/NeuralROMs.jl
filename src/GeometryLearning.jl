@@ -9,6 +9,7 @@ using FourierSpaces
 using Lux
 using MLUtils
 using Optimisers
+import WeightInitializers: _nfan
 
 # autodiff
 using Zygote
@@ -49,6 +50,12 @@ export
        # vis
        animate1D,
        plot_1D_surrogate_steady,
+
+       # utils
+       # _ntimes,
+       fix_kw,
+       init_siren,
+       scaled_siren_init,
 
        # layers
        Atten,

@@ -24,7 +24,51 @@ function ChainRulesCore.rrule(::typeof(pad_array), x, dims)
     return pad_array(x, dims), pad_array_pullback
 end
 
+"""
+    _ntimes(x, N): x [L, B] --> [L, N, B]
+
+Make `N` copies of the first dimension and store it in second dimension.
+So for every batch
+"""
+function _ntimes(x::AbstractMatrix, N::Int)
+    L, B = size(x)
+    y = repeat(x; outer = (N, 1))
+    reshape(y, L, N, B)
+end
+
+function ChainRulesCore.rrule(::typeof(_ntimes), x, N)
+    y = _ntimes(x, N)
+
+    function ntimes_pb(ȳ)
+        x̄ = sum(ȳ, dims = 2)
+        x̄ = reshape(x̄, size(x))
+        NoTangent(), x̄, NoTangent()
+    end
+
+    y, ntimes_pb
+end
+
 c_glorot_uniform(dims...) = Lux.glorot_uniform(dims...) + Lux.glorot_uniform(dims...) * im
 Lux.glorot_uniform(rng::AbstractRNG, ::Type{<:Real}, dims...) = Lux.glorot_uniform(rng, dims...)
 Lux.glorot_uniform(rng::AbstractRNG, ::Type{<:Complex}, dims...) = c_glorot_uniform(rng, dims...)
+
+function fix_kw(f, sym::Symbol, val)
+    function (args...; kwargs...)
+        @eval nt = (; $sym = $val)
+        f(args...; kwargs..., nt...)
+    end
+end
+
+function init_siren(rng::AbstractRNG, ::Type{T}, dims::Integer...;
+    scale::Real = 1) where{T <: Real}
+
+    scale = T(scale) * sqrt(T(24) / T(_nfan(dims...)[1]))
+    return (rand(rng, T, dims...) .- T(1//2)) * scale
+end
+
+init_siren(dims::Integer...; kw...) = init_siren(default_rng(), Float32, dims...; kw...)
+init_siren(rng::AbstractRNG, dims::Integer...; kw...) = init_siren(rng, Float32, dims...; kw...)
+init_siren(::Type{T}, dims::Integer...; kw...) where{T<:Real} = init_siren(default_rng(), T, dims...; kw...)
+
+scaled_siren_init(s::Real) = fix_kw(init_siren, :scale, s)
 #

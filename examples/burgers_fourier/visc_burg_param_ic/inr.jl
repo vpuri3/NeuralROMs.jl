@@ -136,38 +136,20 @@ NN = begin
     )
 
     decoder = Chain(
-        Dense(l+1, wd, sin),
-        Dense(wd, wd, sin),
-        Dense(wd, wd, sin),
-        Dense(wd, wd, sin),
+        Dense(l+1, wd,sin; init_weight = scaled_siren_init(10), init_bias = rand),
+        Dense(wd, wd, sin; init_weight = init_siren, init_bias = rand),
+        Dense(wd, wd, sin; init_weight = init_siren, init_bias = rand),
+        Dense(wd, wd, sin; init_weight = init_siren, init_bias = rand),
         Dense(wd, 1)
         ;name = :decoder
     )
 
-    function ntimes(x::AbstractMatrix, N::Int)
-        L, B = size(x)
-        y = repeat(x; outer = (N, 1))
-        reshape(y, L, N, B)
-    end
-
-    function ChainRulesCore.rrule(::typeof(ntimes), x, N)
-        y = ntimes(x, N)
-
-        function ntimes_pb(ȳ)
-            x̄ = sum(ȳ, dims = 2)
-            x̄ = reshape(x̄, size(x))
-            NoTangent(), x̄, NoTangent()
-        end
-
-        y, ntimes_pb
-    end
-
-    _ntimes = Base.Fix2(ntimes, N)
+    __ntimes = Base.Fix2(GeometryLearning._ntimes, N)
 
     Chain(
         SplitRows(1, 2; channel_dim = 2),        # u[N, 1, B], x[N, 1, B]
         Parallel(nothing, encoder, NoOpLayer()), # ũ[L, B]   , x[N, 1, B]
-        Parallel(vcat, WrappedFunction(_ntimes), ReshapeLayer((1, N))), # [L,N,B], [1,N,B] -> [L+1,N,B]
+        Parallel(vcat, WrappedFunction(__ntimes), ReshapeLayer((1, N))), # [L,N,B], [1,N,B] -> [L+1,N,B]
         decoder, 
         ReshapeLayer((N, 1)),
     )

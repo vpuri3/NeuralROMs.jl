@@ -1,4 +1,31 @@
 #
+
+# function INR_decoder(
+#     encoder::Lux.AbstractExplicitLayer,
+#     decoder::Lux.AbstractExplicitLayer,
+#     x::AbstractArray,
+#     channel_dim = ndims(x)-1,
+# )
+#
+#     # problem dimension
+#     D = ndims(x) - 2
+#
+#     # channel length
+#     C = size(x, channel_dim)
+#     channel_split = 1:(C-D), (C-D+1):C
+#
+#     Npoints = size(x, )
+#     __ntimes = Base.Fix2(_ntimes, Npoints)
+#
+#     Chain(
+#         SplitRows(channel_split...; channel_dim), # u[N, 1, B], x[N, 1, B]
+#         Parallel(nothing, encoder, NoOpLayer()),  # ũ[L, B]   , x[N, 1, B]
+#         Parallel(vcat, WrappedFunction(__ntimes), ReshapeLayer((1, N))), # [L,N,B], [1,N,B] -> [L+1,N,B]
+#         decoder, 
+#         ReshapeLayer((Npoints, 1)),
+#     )
+# end
+
 """
 $SIGNATURES
 
