@@ -152,6 +152,9 @@ function train_model(
     model, STATS
 end
 #===============================================================#
+function autodecode(arguments)
+
+end
 
 #===============================================================#
 function minibatch_metric(NN, p, st, loader, metric)
@@ -408,7 +411,7 @@ function optimize(NN, p, st, _loader, loader_, nepochs;
             @set! minconfig.count = minconfig.count + 1
         end
         if minconfig.count >= minconfig.patience
-            println(io, "Early Stopping triggered after $(minconf.count) epochs of no improvement.")
+            println(io, "Early Stopping triggered after $(minconfig.count) epochs of no improvement.")
             break
         end
 

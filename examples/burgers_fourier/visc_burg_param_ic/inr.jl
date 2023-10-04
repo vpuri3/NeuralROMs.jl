@@ -144,15 +144,7 @@ NN = begin
         ;name = :decoder
     )
 
-    __ntimes = Base.Fix2(GeometryLearning._ntimes, N)
-
-    Chain(
-        SplitRows(1, 2; channel_dim = 2),        # u[N, 1, B], x[N, 1, B]
-        Parallel(nothing, encoder, NoOpLayer()), # ũ[L, B]   , x[N, 1, B]
-        Parallel(vcat, WrappedFunction(__ntimes), ReshapeLayer((1, N))), # [L,N,B], [1,N,B] -> [L+1,N,B]
-        decoder, 
-        ReshapeLayer((N, 1)),
-    )
+    ImplicitEncoderDecoder(encoder, decoder, (N,), 1)
 end
 
 # p, st = Lux.setup(rng, NN)

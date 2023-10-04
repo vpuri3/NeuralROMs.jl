@@ -62,6 +62,7 @@ export
        Diag,
        PermutedBatchNorm,
        SplitRows,
+       ImplicitEncoderDecoder,
 
        # transforms
        FourierTransform,

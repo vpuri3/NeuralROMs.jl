@@ -3,6 +3,8 @@ fastify(act) = act
 fastify(::typeof(tanh)) = Lux.tanh_fast
 fastify(::typeof(Lux.sigmoid)) = Lux.sigmoid_fast
 
+#===========================================================#
+
 function pad_array(x::AbstractArray{<:Any, N}, dims::NTuple{N}) where{N}
     X = similar(x, dims)
     fill!(X, 0)
@@ -24,16 +26,18 @@ function ChainRulesCore.rrule(::typeof(pad_array), x, dims)
     return pad_array(x, dims), pad_array_pullback
 end
 
-"""
-    _ntimes(x, N): x [L, B] --> [L, N, B]
+#===========================================================#
 
-Make `N` copies of the first dimension and store it in second dimension.
-So for every batch
 """
-function _ntimes(x::AbstractMatrix, N::Int)
+    _ntimes(x, (Nx, Ny)): x [L, B] --> [L, Nx, Ny, B]
+
+Make `Nx ⋅ Ny` copies of the first dimension and store it in the following
+dimensions. Works for any `(Nx, Ny, ...)`.
+"""
+function _ntimes(x::AbstractMatrix, Ns::Union{Int,NTuple{D,Int}}) where{D}
     L, B = size(x)
-    y = repeat(x; outer = (N, 1))
-    reshape(y, L, N, B)
+    y = repeat(x; outer = (prod(Ns), 1))
+    reshape(y, L, Ns..., B)
 end
 
 function ChainRulesCore.rrule(::typeof(_ntimes), x, N)
@@ -48,9 +52,13 @@ function ChainRulesCore.rrule(::typeof(_ntimes), x, N)
     y, ntimes_pb
 end
 
+#===========================================================#
+
 c_glorot_uniform(dims...) = Lux.glorot_uniform(dims...) + Lux.glorot_uniform(dims...) * im
 Lux.glorot_uniform(rng::AbstractRNG, ::Type{<:Real}, dims...) = Lux.glorot_uniform(rng, dims...)
 Lux.glorot_uniform(rng::AbstractRNG, ::Type{<:Complex}, dims...) = c_glorot_uniform(rng, dims...)
+
+#===========================================================#
 
 function fix_kw(f, sym::Symbol, val)
     function (args...; kwargs...)
