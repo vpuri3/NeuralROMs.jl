@@ -28,9 +28,10 @@ Split rows of ND array, into `Tuple` of ND arrays.
 """
 struct SplitRows{T} <: Lux.AbstractExplicitLayer
     splits::T
+    channel_dim::Int
 end
-function SplitRows(splits...)
-    SplitRows(splits)
+function SplitRows(splits...; channel_dim = 1)
+    SplitRows(splits, channel_dim)
 end
 Lux.initialparameters(::Random.AbstractRNG, ::SplitRows) = (;)
 Lux.initialstates(::Random.AbstractRNG, ::SplitRows) = (;)
@@ -40,12 +41,16 @@ Lux.statelength(::SplitRows) = 0
 function (l::SplitRows)(x::AbstractArray, _, st)
     len = sum(length.(l.splits))
 
+    C = l.channel_dim
+    N = ndims(x)
+
     @assert eltype(len) === Int64 "SplitRows only accepts splits eltype Int64"
-    @assert len == size(x, 1) "cannot split array of size $(size(x)) with splits
-    $(l.splits) in the first dimension."
+    @assert len == size(x, C) "Cannot split array of size $(size(x)) with
+        splits $(l.splits) along dimension $(C)."
 
     xs = ()
-    cols = Tuple(Colon() for _ in 2:ndims(x))
+    _cols = Tuple(Colon() for _ in 1:(C-1))
+    cols_ = Tuple(Colon() for _ in (C+1):N)
 
     for split in l.splits
         if split isa Integer
@@ -53,10 +58,10 @@ function (l::SplitRows)(x::AbstractArray, _, st)
         end
 
         # https://github.com/JuliaGPU/CUDA.jl/issues/2009
-        # _x = view(x, split, cols...)
-        _x = getindex(x, split, cols...)
+        # _x = view(x, _cols..., split, cols_...)
+        _x = getindex(x, _cols..., split, cols_...)
 
-        @assert size(_x) == (length(split), size(x)[2:end]...) "got $(size(_x))"
+        @assert size(_x) == (size(x)[1:C-1]..., length(split), size(x)[C+1:end]...) "got $(size(_x))"
 
         xs = (xs..., _x)
     end

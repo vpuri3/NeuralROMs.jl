@@ -42,7 +42,7 @@ function train_model(
     device = Lux.cpu_device,
     make_plots = true,
     early_stopping = true,
-    format = nothing, # [Nx, Ny, C, K], or [C, Nx, Ny, K] # TODO:
+    format = :CNB, # :NCB = [Nx, Ny, C, K], :CNB = [C, Nx, Ny, K] # TODO
     metadata = nothing,
 )
 
@@ -144,7 +144,7 @@ function train_model(
     # visualization
     if make_plots
         plot_training(EPOCH, _LOSS, LOSS_; dir)
-        visualize(V, _data, data_, NN, p, st; nsamples, dir)
+        visualize(V, _data, data_, NN, p, st; nsamples, dir, format)
     end
 
     model = NN, p, st
@@ -435,8 +435,6 @@ function plot_training(EPOCH, _LOSS, LOSS_; dir = nothing)
     plt
 end
 
-visualize(::Nothing, args...; kwargs...) = nothing
-
 """
 $SIGNATURES
 
@@ -449,6 +447,7 @@ function visualize(V::Spaces.AbstractSpace{<:Any, 1},
     st;
     nsamples = 5,
     dir = nothing,
+    format = :CNB,
 )
     x, = points(V)
 
@@ -533,7 +532,8 @@ function visualize(V::Spaces.AbstractSpace{<:Any, 1},
     plts
 end
 
-function visualize(V::Spaces.AbstractSpace{<:Any, 2}, args...; kwargs...)
-end
+visualize(V::Spaces.AbstractSpace{<:Any, 2}, args...; kwargs...) = nothing
+visualize(::Nothing, args...; kwargs...) = nothing
+
 #===============================================================#
 #
