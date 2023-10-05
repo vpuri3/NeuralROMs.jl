@@ -36,11 +36,9 @@ end
 rng = Random.default_rng()
 Random.seed!(rng, 199)
 
-dir = joinpath(@__DIR__, "model_inr")
-datadir = joinpath(@__DIR__, "burg_visc_re10k/data.bson")
-
-# get data
-V, _data, data_, metadata = begin
+#======================================================#
+function makedata_INR(datafile)
+    
     data = BSON.load(datadir)
 
     x = data[:x]
@@ -65,8 +63,7 @@ V, _data, data_, metadata = begin
     x  = (x .- x̄) / sqrt(σx)
 
     # train/test trajectory split
-    _Ib, Ib_ = splitobs(1:Nb; at = 0.5, shuffle = true)
-    # _Ib, Ib_ = [4, 6], [1, 2, 3, 5, 7]
+    # _Ib, Ib_ = splitobs(1:Nb; at = 0.5, shuffle = true)
     _Ib, Ib_ = [1, 4, 7], [2, 3, 5, 6]
 
     # train on times 0.0 - 0.5s
@@ -101,6 +98,11 @@ V, _data, data_, metadata = begin
 
     V, (_x, _u), (x_, u_), metadata
 end
+
+#======================================================#
+datafile = joinpath(@__DIR__, "burg_visc_re10k/data.bson")
+dir = joinpath(@__DIR__, "model_inr")
+V = _data, data_, metadata = makedata_INR(datafile)
 
 # parameters
 N = size(_data[1], 1)

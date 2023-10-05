@@ -3,7 +3,7 @@ using LinearAlgebra, Lux, BSON, Plots
 using MLUtils, GeometryLearning
 
 #======================================================#
-function post_process_CAE(datafile, modelfile, outdir)
+function post_process_INR(datafile, modelfile, outdir)
 
     # load data
     data = BSON.load(datafile)
@@ -86,6 +86,6 @@ datafile = joinpath(@__DIR__, "burg_visc_re10k", "data.bson")
 modelfile = joinpath(@__DIR__, "model_inr", "model.bson")
 outdir = joinpath(@__DIR__, "result_inr")
 
-post_process_CAE(datafile, modelfile, outdir)
+post_process_INR(datafile, modelfile, outdir)
 
 nothing
