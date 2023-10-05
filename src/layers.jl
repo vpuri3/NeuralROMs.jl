@@ -14,6 +14,8 @@ is the expected input width of your encoder. The `encoder` network
 is expected to work with whatever `channel_dim`, `encoder_channels`
 you choose.
 
+NOTE: `channel_dim` is set to 1. So the assumption is `[C, Nx, Ny, B]`
+
 The coordinates are split and the remaining channels are
 passed to `encoder` which compresses each `[:, :, :, 1]` slice into
 a latent vector of length `L`. The output of the encoder is of size
@@ -38,36 +40,42 @@ function ImplicitEncoderDecoder(
     encoder::Lux.AbstractExplicitLayer,
     decoder::Lux.AbstractExplicitLayer,
     Npoints::NTuple{D, Int},
-    encoder_width::Integer; # number of input channels to encoder
-    channel_dim::Integer = D + 1,
-    out_dim::Integer = 1,
+    encoder_width::Integer, # number of input channels to encoder
+    # channel_dim::Integer = D + 1,
 ) where{D}
+
+    channel_dim = D + 1
 
     # channel length
     channel_split = 1:encoder_width, (encoder_width+1):(encoder_width+D)
 
-    __ntimes = Base.Fix2(_ntimes, Npoints)
+    repeat = WrappedFunction(Base.Fix2(_ntimes, Npoints))
+    noop = NoOpLayer()
 
-    Perm1, Perm2 = if (D > 1) | out_dim > 1
-        @warn "haven't tested for D>1 yet. Possibly need to make some changes."
-        @warn "like replacing the `ReshapeLayer`s with `permutedims`."
+    PERM1 = (D+1, 1:D..., D+2) # [Nx, Ny, C, B] -> [C, Nx, Ny, B]
+    PERM2 = (2:D+1..., 1, D+2) # [C, Nx, Ny, B] -> [Nx, Ny, C, B]
 
-        # TODO - replace reshapes with permutedims ??
-        PERM1 = ()
-        PERM2 = ()
-        PermLayer = WrappedFunction(Base.Fix2(permutedims, PERM))
-    else
-        ReshapeLayer((D, Npoints...)), ReshapeLayer(Npoints..., out_dim)
-    end
+    perm1 = PermuteLayer(PERM1)
+    perm2 = PermuteLayer(PERM2)
 
-    Chain(
-        SplitRows(channel_split...; channel_dim), # u[N, 1, B], x[N, 1, B]
-        Parallel(nothing, encoder, NoOpLayer()),  # ũ[L, B]   , x[N, 1, B]
-        Parallel(vcat, WrappedFunction(__ntimes), ReshapeLayer((D, Npoints...))), # [L,N,B], [1,N,B] -> [L+1,N,B]
-        decoder,  # [L+1,N,B] -> [out_dim, N, B]
-        ReshapeLayer((Npoints..., out_dim)),
-        # Base.Fix2(permutedims, PERM),
+    Chain(;
+        split   = SplitRows(channel_split...; channel_dim), # u[N, 1, B], x[N, 1, B]
+        encode  = Parallel(nothing; encoder, noop),         # ũ[L, B]   , x[N, 1, B]
+        assem   = Parallel(vcat, repeat, perm1),            # [L,N,B], [1,N,B] -> [L+1,N,B]
+        decoder = decoder,                                  # [L+1,N,B] -> [out_dim, N, B]
+        perm    = perm2,
     )
+end
+
+function get_encoder_decoder(NN::Lux.AbstractExplicitLayer, p, st)
+    encoder = (NN.layers.encode.layers.encoder, p.encode.encoder, st.encode.encoder)
+    decoder = (NN.layers.decoder, p.decoder, st.decoder)
+    
+    encoder, decoder
+end
+
+function PermuteLayer(perm::NTuple{D, Int}) where{D}
+    WrappedFunction(Base.Fix2(permutedims, perm))
 end
 
 """

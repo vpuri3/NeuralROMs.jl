@@ -131,8 +131,7 @@ NN = begin
         Conv((2,), we => we, act; stride = 2),
         FlattenLayer(),
         Dense(we, we, act),
-        Dense(we, l)
-        ;name = :encoder
+        Dense(we, l),
     )
 
     decoder = Chain(
@@ -140,14 +139,13 @@ NN = begin
         Dense(wd, wd, sin; init_weight = init_siren, init_bias = rand),
         Dense(wd, wd, sin; init_weight = init_siren, init_bias = rand),
         Dense(wd, wd, sin; init_weight = init_siren, init_bias = rand),
-        Dense(wd, 1)
-        ;name = :decoder
+        Dense(wd, 1; use_bias = false),
     )
 
     ImplicitEncoderDecoder(encoder, decoder, (N,), 1)
 end
 
-# p, st = Lux.setup(rng, NN)
+p, st = Lux.setup(rng, NN)
 
 model, ST = train_model(rng, NN, _data, data_, V, opt;
     batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata)
