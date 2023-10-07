@@ -41,7 +41,7 @@ function train_model(
     lossfun = mse,
     device = Lux.cpu_device,
     make_plots = true,
-    patience = 20,
+    patience::Union{Int,Nothing} = nothing,
     # format = :CNB, # :NCB = [Nx, Ny, C, K], :CNB = [C, Nx, Ny, K] # TODO
     metadata = nothing,
 )
@@ -369,8 +369,10 @@ function optimize(NN, p, st, _loader, loader_, nepochs;
     cb_batch = nothing,
     cb_epoch = nothing,
     io::Union{Nothing, IO} = stdout,
-    patience = 20,
+    patience::Union{Int, Nothing} = nothing,
 )
+
+    patience = isnothing(patience) ? Int(nepochs // 4) : patience
 
     # print stats
     !isnothing(cb_epoch) && cb_epoch(p, st, 0, nepochs; io)
@@ -382,7 +384,7 @@ function optimize(NN, p, st, _loader, loader_, nepochs;
     end
 
     # get config for early stopping
-    minconfig = (; count = 0, patience, l = Inf32, p, st, opt_st)
+    minconfig = (; count = 0, l = Inf32, p, st, opt_st)
 
     # init optimizer
     opt_st = isnothing(opt_st) ? Optimisers.setup(opt, p) : opt_st
@@ -411,7 +413,7 @@ function optimize(NN, p, st, _loader, loader_, nepochs;
             println(io, "No improvement in loss found in the last $(minconfig.count) epochs. Here, $(l) > $(minconfig.l)")
             @set! minconfig.count = minconfig.count + 1
         end
-        if minconfig.count >= minconfig.patience
+        if minconfig.count >= patience
             println(io, "Early Stopping triggered after $(minconfig.count) epochs of no improvement.")
             break
         end

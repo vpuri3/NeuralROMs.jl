@@ -67,7 +67,7 @@ function ImplicitEncoderDecoder(
     )
 end
 
-function get_encoder_decoder(NN::Lux.AbstractExplicitLayer, p, st)
+function get_INR_encoder_decoder(NN::Lux.AbstractExplicitLayer, p, st)
     encoder = (NN.layers.encode.layers.encoder, p.encode.encoder, st.encode.encoder)
     decoder = (NN.layers.decoder, p.decoder, st.decoder)
     

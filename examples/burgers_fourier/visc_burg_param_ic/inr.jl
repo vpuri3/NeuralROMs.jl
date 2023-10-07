@@ -39,7 +39,7 @@ Random.seed!(rng, 199)
 #======================================================#
 function makedata_INR(datafile)
     
-    data = BSON.load(datadir)
+    data = BSON.load(datafile)
 
     x = data[:x]
     u = data[:u] # [Nx, Nb, Nt]
@@ -102,24 +102,34 @@ end
 #======================================================#
 datafile = joinpath(@__DIR__, "burg_visc_re10k/data.bson")
 dir = joinpath(@__DIR__, "model_inr")
-V = _data, data_, metadata = makedata_INR(datafile)
+V, _data, data_, metadata = makedata_INR(datafile)
 
 # parameters
 N = size(_data[1], 1)
-E = 400 # epochs
-we = 64 # width
-wd = 32 # width
-l  = 4  # latent
+E = 1000 # epochs
+we = 32  # width
+wd = 64  # width
+l  = 4   # latent
 act = relu # relu
 
 opt = Optimisers.Adam()
 batchsize  = 20
-batchsize_ = 50
+batchsize_ = 100
 learning_rates = 1f-3 ./ (2 .^ (0:9))
 nepochs = E/10 * ones(10) .|> Int
 device = Lux.gpu_device()
 
 NN = begin
+    # encoder = Chain(
+    #     Conv((9,), 1  => we, act; stride = 5),
+    #     Conv((9,), we => we, act; stride = 5),
+    #     Conv((9,), we => we, act; stride = 5),
+    #     Conv((7,), we => we, act; stride = 1),
+    #     flatten,
+    #     Dense(we, we, act),
+    #     Dense(we, l, act),
+    # )
+
     encoder = Chain(
         Conv((2,), 1  =>  8, act; stride = 2),
         Conv((2,), 8  => 16, act; stride = 2),
@@ -137,10 +147,10 @@ NN = begin
     )
 
     decoder = Chain(
-        Dense(l+1, wd,sin; init_weight = scaled_siren_init(10), init_bias = rand),
-        Dense(wd, wd, sin; init_weight = init_siren, init_bias = rand),
-        Dense(wd, wd, sin; init_weight = init_siren, init_bias = rand),
-        Dense(wd, wd, sin; init_weight = init_siren, init_bias = rand),
+        Dense(l+1, wd,sin; init_weight = scaled_siren_init(30), init_bias = rand),
+        Dense(wd, wd, sin; init_weight = scaled_siren_init(1), init_bias = rand),
+        Dense(wd, wd, sin; init_weight = scaled_siren_init(1), init_bias = rand),
+        Dense(wd, wd, sin; init_weight = scaled_siren_init(1), init_bias = rand),
         Dense(wd, 1; use_bias = false),
     )
 
@@ -149,10 +159,10 @@ end
 
 p, st = Lux.setup(rng, NN)
 
-model, ST = train_model(rng, NN, _data, data_, V, opt;
-    batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata)
-
-plot_training(ST...) |> display
+# model, ST = train_model(rng, NN, _data, data_, V, opt;
+#     batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata)
+#
+# plot_training(ST...) |> display
 
 nothing
 #
