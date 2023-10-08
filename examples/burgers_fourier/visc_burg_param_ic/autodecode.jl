@@ -18,12 +18,6 @@ using Plots, BSON
 using CUDA, LuxCUDA, KernelAbstractions
 CUDA.allowscalar(false)
 
-# tensor prod
-using Tullio
-
-# AD
-using Zygote, ChainRulesCore
-
 using FFTW, LinearAlgebra
 begin
     nt = Sys.CPU_THREADS
@@ -37,7 +31,7 @@ rng = Random.default_rng()
 Random.seed!(rng, 199)
 
 #======================================================#
-function makedata_INR(datafile)
+function makedata_autodecode(datafile)
     
     data = BSON.load(datafile)
 
@@ -78,71 +72,67 @@ function makedata_INR(datafile)
     _u = reshape(_u, Nx, :)
     u_ = reshape(u_, Nx, :)
 
-    _x = zeros(Float32, Nx, 2, length(_u)) # [x, idx]
-    x_ = zeros(Float32, Nx, 2, length(u_))
+    _Ns = size(_u, 2) # num_codes
+    Ns_ = size(u_, 2)
+
+    _xyz = zeros(Float32, Nx, _Ns)
+    xyz_ = zeros(Float32, Nx, Ns_)
+
+    _idx = zeros(Int32, Nx, _Ns)
+    idx_ = zeros(Int32, Nx, Ns_)
 
     _y = reshape(_u, 1, :)
     y_ = reshape(u_, 1, :)
 
-    _x[:, 1, :] .= x
-    x_[:, 1, :] .= x
+    _xyz[:, :] .= x
+    xyz_[:, :] .= x
 
-    _x[:, 2, :] .= 1:size(_u, 2)
-    x_[:, 2, :] .= 1:size(u_, 2)
+    _idx[:, :] .= 1:_Ns |> adjoint
+    idx_[:, :] .= 1:Ns_ |> adjoint
 
-    _x = reshape(_x, 2, :)
-    x_ = reshape(x_, 2, :)
-
-    V = nothing # FourierSpace(N)
+    _x = (reshape(_xyz, 1, :), reshape(_idx, 1, :))
+    x_ = (reshape(xyz_, 1, :), reshape(idx_, 1, :))
 
     readme = "Train/test on 0.0-0.5."
 
-    metadata = (; ū, σu, x̄, σx, _Ib, Ib_, _It, readme)
+    metadata = (; ū, σu, x̄, σx, _Ib, Ib_, _It, readme, _Ns, Ns_)
 
-    V, (_x, _y), (x_, y_), metadata
+    (_x, _y), (x_, y_), metadata
 end
 
 #======================================================#
+
 datafile = joinpath(@__DIR__, "burg_visc_re10k/data.bson")
-dir = joinpath(@__DIR__, "model_inr")
-V, _data, data_, metadata = makedata_INR(datafile)
+dir = joinpath(@__DIR__, "model_dec")
+_data, data_, metadata = makedata_autodecode(datafile)
 
 # parameters
-N = size(_data[1], 1)
-E = 1000 # epochs
+E = 5000 # epochs
 w = 64   # width
-l = 4   # latent
-act = relu # relu
+l = 8    # latent
 
 opt = Optimisers.Adam()
-batchsize  = 20
-batchsize_ = 100
+batchsize  = 1024 * 10
+batchsize_ = 1024 * 100
 learning_rates = 1f-3 ./ (2 .^ (0:9))
 nepochs = E/10 * ones(10) .|> Int
 device = Lux.gpu_device()
 
-NN = begin
+decoder = Chain(
+    Dense(l+1, w, sin; init_weight = scaled_siren_init(30), init_bias = rand),
+    Dense(w  , w, sin; init_weight = scaled_siren_init(01), init_bias = rand),
+    Dense(w  , w, sin; init_weight = scaled_siren_init(01), init_bias = rand),
+    Dense(w  , w, sin; init_weight = scaled_siren_init(01), init_bias = rand),
+    Dense(w  , 1; use_bias = false),
+)
 
-    decoder = Chain(
-        Dense(l+1, w, sin), #; init_weight = scaled_siren_init(30), init_bias = rand),
-        Dense(w  , w, sin), #; init_weight = scaled_siren_init(1), init_bias = rand),
-        Dense(w  , w, sin), #; init_weight = scaled_siren_init(1), init_bias = rand),
-        Dense(w  , w, sin), #; init_weight = scaled_siren_init(1), init_bias = rand),
-        Dense(w  , 1; use_bias = false),
-    )
+NN = AutoDecoder(decoder, metadata._Ns, l)
 
-    dim = 1
-    nbatches = size(_data[1], 2)
+model, ST = train_model(rng, NN, _data, _data, opt; # data_ = _data for autodecode
+    batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata)
 
-    AutoDecoder(decoder, dim, nbatches, l) #; init_weight = randn32)
-end
-
-p, st = Lux.setup(rng, NN)
-
-# model, ST = train_model(rng, NN, _data, data_, V, opt;
-#     batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata)
-#
 # plot_training(ST...) |> display
+decoder, code = GeometryLearning.get_autodecoder(model...)
 
 nothing
 #

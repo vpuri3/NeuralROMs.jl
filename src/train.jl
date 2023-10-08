@@ -3,15 +3,9 @@
 $SIGNATURES
 
 # Arguments
-- `V`: function space
 - `NN`: Lux neural network
 - `_data`: training data as `(x, y)`. `x` may be an AbstractArray or a tuple of arrays
 - `data_`: testing data (same requirement as `_data)
-
-Data arrays, `x`, `y` must be `AbstractMatrix`, or `AbstractArray{T,3}`.
-In the former case, the dimensions are assumed to be `(points, batch)`,
-and `(chs, points, batch)` in the latter, where the points dimension
-is equal to `length(V)`.
 
 # Keyword Arguments
 - `opts`: `NTuple` of optimizers
@@ -23,9 +17,8 @@ is equal to `length(V)`.
 function train_model(
     rng::Random.AbstractRNG,
     NN::Lux.AbstractExplicitLayer,
-    _data::NTuple{2, AbstractArray{Float32}},
-    data_::NTuple{2, AbstractArray{Float32}},
-    V::Union{Nothing, Spaces.AbstractSpace},
+    _data::NTuple{2, Any},
+    data_::NTuple{2, Any} = _data,
     opt::Optimisers.AbstractRule = Optimisers.Adam();
     batchsize::Int = 32,
     batchsize_::Union{Int, Nothing} = nothing,
@@ -34,15 +27,14 @@ function train_model(
     cbstep::Int = 1,
     dir = "",
     name = "model",
-    nsamples::Int = 5,
     io::IO = stdout,
     p = nothing,        # initial parameters
     st = nothing,       # initial state
     lossfun = mse,
     device = Lux.cpu_device,
     make_plots = true,
-    patience::Union{Int,Nothing} = nothing,
-    # format = :CNB, # :NCB = [Nx, Ny, C, K], :CNB = [C, Nx, Ny, K] # TODO
+    early_stopping::Union{Bool, Nothing} = nothing,
+    patience::Union{Int, Nothing} = nothing,
     metadata = nothing,
 )
 
@@ -119,10 +111,10 @@ function train_model(
 
         if (device === Lux.gpu) | (device isa Lux.LuxCUDADevice)
             CUDA.@time p, st, opt_st = optimize(NN, p, st, _loader, loader_, nepoch;
-                lossfun, opt, opt_st, cb_epoch, io, patience)
+                lossfun, opt, opt_st, cb_epoch, io, early_stopping, patience)
         else
             @time p, st, opt_st = optimize(NN, p, st, _loader, loader_, nepoch;
-                lossfun, opt, opt_st, cb_epoch, io, patience)
+                lossfun, opt, opt_st, cb_epoch, io, early_stopping, patience)
         end
 
         cb_stats(p, st)
@@ -369,9 +361,11 @@ function optimize(NN, p, st, _loader, loader_, nepochs;
     cb_batch = nothing,
     cb_epoch = nothing,
     io::Union{Nothing, IO} = stdout,
+    early_stopping::Union{Bool, Nothing} = nothing,
     patience::Union{Int, Nothing} = nothing,
 )
 
+    early_stopping = isnothing(early_stopping) ? true : early_stopping
     patience = isnothing(patience) ? Int(nepochs // 4) : patience
 
     # print stats
@@ -404,18 +398,22 @@ function optimize(NN, p, st, _loader, loader_, nepochs;
 
         # early stopping based on mini-batch loss from test set
         # https://github.com/jeffheaton/app_deep_learning/blob/main/t81_558_class_03_4_early_stop.ipynb
-
         l, _ = Loss(NN, st, first(loader_), lossfun)(p)
-        if l < minconfig.l
-            println(io, "Improvement in loss found: $(l) < $(minconfig.l)")
-            minconfig = (; minconfig..., count = 0, l, p, st, opt_st)
+
+        if early_stopping
+            if l < minconfig.l
+                println(io, "Improvement in loss found: $(l) < $(minconfig.l)")
+                minconfig = (; minconfig..., count = 0, l, p, st, opt_st)
+            else
+                println(io, "No improvement in loss found in the last $(minconfig.count) epochs. Here, $(l) > $(minconfig.l)")
+                @set! minconfig.count = minconfig.count + 1
+            end
+            if minconfig.count >= patience
+                println(io, "Early Stopping triggered after $(minconfig.count) epochs of no improvement.")
+                break
+            end
         else
-            println(io, "No improvement in loss found in the last $(minconfig.count) epochs. Here, $(l) > $(minconfig.l)")
-            @set! minconfig.count = minconfig.count + 1
-        end
-        if minconfig.count >= patience
-            println(io, "Early Stopping triggered after $(minconfig.count) epochs of no improvement.")
-            break
+            minconfig = (; minconfig..., count = 0, l, p, st, opt_st)
         end
 
         println(io, "#=======================#")

@@ -75,10 +75,13 @@ function get_INR_encoder_decoder(NN::Lux.AbstractExplicitLayer, p, st)
 end
 
 #======================================================#
+"""
+    AutoDecoder
 
+Assumes input is `(xyz, idx)` of sizes `[D, K]`, `[1, K]` respectively
+"""
 function AutoDecoder(
     decoder::Lux.AbstractExplicitLayer,
-    dim::Int,
     num_batches::Int,
     code_len::Int;
     init_weight = randn32,
@@ -86,25 +89,21 @@ function AutoDecoder(
     code = Embedding(num_batches => code_len; init_weight)
     noop = NoOpLayer()
 
-    channel_dim = 1
-    channel_split = 1:dim, dim+1:dim+1
-
     codex = Chain(;
-        makeint = WrappedFunction(Base.Fix1(map, Int)),
+        vec = WrappedFunction(vec),
         code = code,
     )
 
     Chain(;
-        split   = SplitRows(channel_split...; channel_dim), # [D+1, K] (x, code_idx)
-        assem   = Parallel(vcat; noop, codex),              # [D+L, K] (x, code)
-        decoder = decoder,                                  # [out, K] (out)
+        assem   = Parallel(vcat; noop, codex), # [D+L, K] (x, code)
+        decoder = decoder,                     # [out, K] (out)
     )
 end
 
 function get_autodecoder(NN::Lux.AbstractExplicitLayer, p, st)
     decoder = (NN.layers.decoder, p.decoder, st.decoder)
-    code    = (NN.assem.codex.code, p.assem.codex.code, st.assem.codex.code)
-    
+    code    = (NN.layers.assem.layers.codex.layers.code, p.assem.codex.code, st.assem.codex.code)
+
     decoder, code
 end
 
