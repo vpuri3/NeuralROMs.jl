@@ -75,20 +75,23 @@ function makedata_INR(datafile)
     _u = @view u[Ix, _Ib, _It]
     u_ = @view u[Ix, Ib_, It_]
 
-    _u = reshape(_u, Nx, 1, :)
-    u_ = reshape(u_, Nx, 1, :)
+    _u = reshape(_u, Nx, :)
+    u_ = reshape(u_, Nx, :)
 
-    _Ns = size(_u, 3) # number of snapshots
-    Ns_ = size(u_, 3)
+    _x = zeros(Float32, Nx, 2, length(_u)) # [x, idx]
+    x_ = zeros(Float32, Nx, 2, length(u_))
 
-    _x = zeros(Float32, Nx, 2, _Ns)
-    x_ = zeros(Float32, Nx, 2, Ns_)
+    _y = reshape(_u, 1, :)
+    y_ = reshape(u_, 1, :)
 
-    _x[:, 1, :] = _u
-    x_[:, 1, :] = u_
+    _x[:, 1, :] .= x
+    x_[:, 1, :] .= x
 
-    _x[:, 2, :] .= x
-    x_[:, 2, :] .= x
+    _x[:, 2, :] .= 1:size(_u, 2)
+    x_[:, 2, :] .= 1:size(u_, 2)
+
+    _x = reshape(_x, 2, :)
+    x_ = reshape(x_, 2, :)
 
     V = nothing # FourierSpace(N)
 
@@ -96,7 +99,7 @@ function makedata_INR(datafile)
 
     metadata = (; ū, σu, x̄, σx, _Ib, Ib_, _It, readme)
 
-    V, (_x, _u), (x_, u_), metadata
+    V, (_x, _y), (x_, y_), metadata
 end
 
 #======================================================#

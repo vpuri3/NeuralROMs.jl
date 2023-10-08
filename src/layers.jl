@@ -1,5 +1,5 @@
 #
-
+#======================================================#
 """
     implicit_encoder_decoder
 
@@ -74,10 +74,46 @@ function get_INR_encoder_decoder(NN::Lux.AbstractExplicitLayer, p, st)
     encoder, decoder
 end
 
+#======================================================#
+
+function AutoDecoder(
+    decoder::Lux.AbstractExplicitLayer,
+    dim::Int,
+    num_batches::Int,
+    code_len::Int;
+    init_weight = randn32,
+)
+    code = Embedding(num_batches => code_len; init_weight)
+    noop = NoOpLayer()
+
+    channel_dim = 1
+    channel_split = 1:dim, dim+1:dim+1
+
+    codex = Chain(;
+        makeint = WrappedFunction(Base.Fix1(map, Int)),
+        code = code,
+    )
+
+    Chain(;
+        split   = SplitRows(channel_split...; channel_dim), # [D+1, K] (x, code_idx)
+        assem   = Parallel(vcat; noop, codex),              # [D+L, K] (x, code)
+        decoder = decoder,                                  # [out, K] (out)
+    )
+end
+
+function get_autodecoder(NN::Lux.AbstractExplicitLayer, p, st)
+    decoder = (NN.layers.decoder, p.decoder, st.decoder)
+    code    = (NN.assem.codex.code, p.assem.codex.code, st.assem.codex.code)
+    
+    decoder, code
+end
+
+#======================================================#
 function PermuteLayer(perm::NTuple{D, Int}) where{D}
     WrappedFunction(Base.Fix2(permutedims, perm))
 end
 
+#======================================================#
 """
 $SIGNATURES
 
@@ -95,6 +131,7 @@ function PermutedBatchNorm(c, num_dims) # assumes channel_dim = 1
     )
 end
 
+#======================================================#
 """
 SplitRows
 
@@ -143,6 +180,7 @@ function (l::SplitRows)(x::AbstractArray, _, st)
     xs, st
 end
 
+#======================================================#
 """
 Diagonal layer
 """
@@ -171,6 +209,7 @@ function (l::Diag)(x::AbstractArray, ps, st::NamedTuple)
     return y, st
 end
 
+#======================================================#
 """
 Attention Layer
 
@@ -216,4 +255,5 @@ function (l::Atten)(x::AbstractArray, ps, st::NamedTuple)
 
     return y, st
 end
+#======================================================#
 #

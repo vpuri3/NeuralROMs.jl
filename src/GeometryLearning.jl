@@ -63,6 +63,7 @@ export
        PermutedBatchNorm,
        SplitRows,
        ImplicitEncoderDecoder,
+       AutoDecoder,
 
        # transforms
        FourierTransform,
