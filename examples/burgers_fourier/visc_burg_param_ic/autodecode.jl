@@ -107,9 +107,9 @@ dir = joinpath(@__DIR__, "model_dec")
 _data, data_, metadata = makedata_autodecode(datafile)
 
 # parameters
-E = 5000 # epochs
-w = 64   # width
-l = 8    # latent
+E = 400 # epochs
+w = 64  # width
+l = 4   # latent
 
 opt = Optimisers.Adam()
 batchsize  = 1024 * 10
@@ -119,10 +119,10 @@ nepochs = E/10 * ones(10) .|> Int
 device = Lux.gpu_device()
 
 decoder = Chain(
-    Dense(l+1, w, sin; init_weight = scaled_siren_init(30), init_bias = rand),
-    Dense(w  , w, sin; init_weight = scaled_siren_init(01), init_bias = rand),
-    Dense(w  , w, sin; init_weight = scaled_siren_init(01), init_bias = rand),
-    Dense(w  , w, sin; init_weight = scaled_siren_init(01), init_bias = rand),
+    Dense(l+1, w, sin), #; init_weight = scaled_siren_init(30.0), init_bias = rand),
+    Dense(w  , w, sin), #; init_weight = scaled_siren_init(1.0), init_bias = rand),
+    Dense(w  , w, sin), #; init_weight = scaled_siren_init(1.0), init_bias = rand),
+    Dense(w  , w, sin), #; init_weight = scaled_siren_init(1.0), init_bias = rand),
     Dense(w  , 1; use_bias = false),
 )
 
@@ -131,8 +131,9 @@ NN = AutoDecoder(decoder, metadata._Ns, l)
 model, ST = train_model(rng, NN, _data, _data, opt; # data_ = _data for autodecode
     batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata)
 
-# plot_training(ST...) |> display
+plot_training(ST...) |> display
 decoder, code = GeometryLearning.get_autodecoder(model...)
 
+#======================================================#
 nothing
 #

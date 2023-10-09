@@ -78,5 +78,8 @@ init_siren(dims::Integer...; kw...) = init_siren(Random.default_rng(), Float32, 
 init_siren(rng::AbstractRNG, dims::Integer...; kw...) = init_siren(rng, Float32, dims...; kw...)
 init_siren(::Type{T}, dims::Integer...; kw...) where{T<:Real} = init_siren(Random.default_rng(), T, dims...; kw...)
 
-scaled_siren_init(s::Real) = fix_kw(init_siren, :scale, s)
+# scaled_siren_init(s::Real) = fix_kw(init_siren, :scale, s)
+function scaled_siren_init(scale::Real)
+    (args...; kwargs...) -> init_siren(args...; kwargs..., scale)
+end
 #

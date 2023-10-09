@@ -85,8 +85,14 @@ function AutoDecoder(
     num_batches::Int,
     code_len::Int;
     init_weight = randn32,
+    code = nothing,
 )
-    code = Embedding(num_batches => code_len; init_weight)
+    code = if isnothing(code)
+        Embedding(num_batches => code_len; init_weight)
+    else
+        code
+    end
+
     noop = NoOpLayer()
 
     codex = Chain(;

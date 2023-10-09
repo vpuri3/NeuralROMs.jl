@@ -126,10 +126,10 @@ NN = begin
     Chain(encoder, decoder)
 end
 
-model, ST = train_model(rng, NN, _data, data_, V, opt;
-    batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata)
-
-plot_training(ST...) |> display
+# model, ST = train_model(rng, NN, _data, data_, opt;
+#     batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata)
+#
+# plot_training(ST...) |> display
 
 nothing
 #

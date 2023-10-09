@@ -344,6 +344,7 @@ function grad(loss::Loss, p)
 
     l, st, gr
 end
+#===============================================================#
 
 """
 $SIGNATURES
@@ -366,19 +367,15 @@ function optimize(NN, p, st, _loader, loader_, nepochs;
 )
 
     early_stopping = isnothing(early_stopping) ? true : early_stopping
-    patience = isnothing(patience) ? Int(nepochs // 4) : patience
+    patience = isnothing(patience) ? round(Int, nepochs // 4) : patience
 
     # print stats
     !isnothing(cb_epoch) && cb_epoch(p, st, 0, nepochs; io)
 
-    # warm up
-    begin
-        loss = Loss(NN, st, first(_loader), lossfun)
-        grad(loss, p)
-    end
-
-    # get config for early stopping
-    minconfig = (; count = 0, l = Inf32, p, st, opt_st)
+    # warm up, get minconfig
+    loss = Loss(NN, st, first(_loader), lossfun)
+    l, _, _ = grad(loss, p)
+    minconfig = (; count = 0, l, p, st, opt_st)
 
     # init optimizer
     opt_st = isnothing(opt_st) ? Optimisers.setup(opt, p) : opt_st
@@ -396,10 +393,10 @@ function optimize(NN, p, st, _loader, loader_, nepochs;
         println(io, "#=======================#")
         !isnothing(cb_epoch) && cb_epoch(p, st, epoch, nepochs; io)
 
-        # early stopping based on mini-batch loss from test set
-        # https://github.com/jeffheaton/app_deep_learning/blob/main/t81_558_class_03_4_early_stop.ipynb
         l, _ = Loss(NN, st, first(loader_), lossfun)(p)
 
+        # early stopping based on mini-batch loss from test set
+        # https://github.com/jeffheaton/app_deep_learning/blob/main/t81_558_class_03_4_early_stop.ipynb
         if early_stopping
             if l < minconfig.l
                 println(io, "Improvement in loss found: $(l) < $(minconfig.l)")

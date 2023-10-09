@@ -96,7 +96,7 @@ function burgers_inviscid(N, mu = LinRange(0.6, 1.2, 7)', p = nothing;
 end
 
 N = 8192
-dir = joinpath(@__DIR__, "inviscid_burg")
+dir = joinpath(@__DIR__, "visc_burg_param_ic", "burg_visc_re10k")
 device = gpu
 linsolve = KrylovJL_GMRES()
 odealg = # ImplicitEuler(; linsolve) # SSPRK83() # Tsit5()

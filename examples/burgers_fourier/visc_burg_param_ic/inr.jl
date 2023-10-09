@@ -159,7 +159,7 @@ end
 
 p, st = Lux.setup(rng, NN)
 
-# model, ST = train_model(rng, NN, _data, data_, V, opt;
+# model, ST = train_model(rng, NN, _data, data_, opt;
 #     batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata)
 #
 # plot_training(ST...) |> display
