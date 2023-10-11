@@ -71,8 +71,6 @@ function train_model(
     # callback for printing statistics
     cb_stats = (p, st; io = io) -> callback(p, st; io, _loss, _stats, loss_, stats_)
 
-    # cb_batch = 
-
     # callback for training
     cb_epoch = (p, st, epoch, nepoch; io = io) -> callback(p, st; io,
                                                 _loss, _LOSS, loss_, LOSS_,
@@ -84,6 +82,9 @@ function train_model(
 
     p  = isnothing(p ) ? _p  : p
     st = isnothing(st) ? _st : st
+
+    _p = p |> ComponentArray
+    p = isreal(_p) ? _p : p
 
     p, st = (p, st) |> device
 
@@ -139,14 +140,12 @@ function train_model(
     model = NN, p, st
     STATS = EPOCH, _LOSS, LOSS_
  
-    BSON.@save joinpath(dir, "$name.bson") model metadata
+    # save
+    filename = joinpath(dir, "$name.jld2")
+    isfile(filename) && rm(filename)
+    jldsave(filename; model, metadata)
 
     model, STATS
-end
-#===============================================================#
-
-function autodecode(arguments)
-
 end
 
 #===============================================================#

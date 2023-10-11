@@ -90,8 +90,8 @@ function makedata_autodecode(datafile)
     _idx[:, :] .= 1:_Ns |> adjoint
     idx_[:, :] .= 1:Ns_ |> adjoint
 
-    _x = (reshape(_xyz, 1, :), reshape(_idx, 1, :))
-    x_ = (reshape(xyz_, 1, :), reshape(idx_, 1, :))
+    _x = (reshape(_xyz, 1, :), reshape(_idx, 1, :),) |> reverse
+    x_ = (reshape(xyz_, 1, :), reshape(idx_, 1, :),) |> reverse
 
     readme = "Train/test on 0.0-0.5."
 
@@ -103,39 +103,54 @@ end
 #======================================================#
 
 datafile = joinpath(@__DIR__, "burg_visc_re10k/data.bson")
-dir = joinpath(@__DIR__, "model_dec")
+dir = joinpath(@__DIR__, "model_hyp")
 _data, data_, metadata = makedata_autodecode(datafile)
 
 # parameters
-E = 1000 # epochs
-w = 32  # width
+E = 400 # epochs
 l = 3   # latent
 
 opt = Optimisers.Adam()
 batchsize  = 1024 * 10
 batchsize_ = 1024 * 100
-learning_rates = 1f-3 ./ (2 .^ (0:9))
-nepochs = E/10 * ones(10) .|> Int
+learning_rates = 1f-4 ./ (2 .^ (0:4))
+nepochs = E/5 * ones(5) .|> Int
 device = Lux.gpu_device()
 
-act = sin
-act = elu
+w = 128  # width of weight generator
+e = 16 # width of evaluator
 
-decoder = Chain(
-    Dense(l+1, w, sin), #; init_weight = scaled_siren_init(30.0), init_bias = rand),
-    Dense(w  , w, sin), #; init_weight = scaled_siren_init(1.0), init_bias = rand),
-    Dense(w  , w, elu), #; init_weight = scaled_siren_init(1.0), init_bias = rand),
-    Dense(w  , w, elu), #; init_weight = scaled_siren_init(1.0), init_bias = rand),
-    Dense(w  , 1; use_bias = false),
+#; init_weight = scaled_siren_init(30.0), init_bias = rand),
+
+evaluator = Chain(
+    Dense(1, e, sin),
+    Dense(e, e, sin),
+    Dense(e, e, sin),
+    Dense(e, e, sin),
+    Dense(e, e, sin),
+    Dense(e, 1; use_bias = false),
 )
 
-NN = AutoDecoder(decoder, metadata._Ns, l)
+weight_gen = Chain(
+    Dense(l, w, elu),
+    Dense(w, w, elu),
+    Dense(w, w, elu),
+    Dense(w, w, elu),
+    Dense(w, Lux.parameterlength(evaluator)),
+)
 
-model, ST = train_model(rng, NN, _data, _data, opt; # data_ = _data for autodecode
+code_gen = Chain(;
+    vec  = WrappedFunction(vec),
+    code = Embedding(metadata._Ns => l),
+    gen  = weight_gen,
+)
+
+NN = HyperNet(code_gen, evaluator)
+
+model, ST = train_model(rng, NN, _data, _data, opt;
     batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata)
 
-# plot_training(ST...) |> display
-# decoder, code = GeometryLearning.get_autodecoder(model...)
+plot_training(ST...) |> display
 
 #======================================================#
 nothing

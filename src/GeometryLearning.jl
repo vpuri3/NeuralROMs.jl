@@ -23,7 +23,7 @@ using Plots
 using Colors
 
 # serialization
-using BSON
+using JLD2
 
 # GPU stack
 using CUDA
@@ -64,6 +64,7 @@ export
        SplitRows,
        ImplicitEncoderDecoder,
        AutoDecoder,
+       HyperNet,
 
        # transforms
        FourierTransform,
@@ -84,6 +85,7 @@ export
 
        plot_training,
        mse,
+       pnorm,
        rsquare
 
 end # module

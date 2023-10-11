@@ -112,6 +112,68 @@ function get_autodecoder(NN::Lux.AbstractExplicitLayer, p, st)
 
     decoder, code
 end
+#======================================================#
+"""
+    HyperDecoder
+
+Assumes input is `(xyz, idx)` of sizes `[D, K]`, `[1, K]` respectively
+"""
+function HyperDecoder(
+    weight_gen::Lux.AbstractExplicitLayer,
+    evaluator::Lux.AbstractExplicitLayer,
+    num_batches::Int,
+    code_len::Int;
+    init_weight = randn32,
+    code = nothing,
+)
+    code = if isnothing(code)
+        Embedding(num_batches => code_len; init_weight)
+    else
+        code
+    end
+
+    code_gen = Chain(;
+        vec  = WrappedFunction(vec),
+        code = code,
+        gen  = weight_gen,
+    )
+
+    HyperNet(code_gen, evaluator)
+    nothing
+end
+
+function get_hyperdecoder(NN::Lux.AbstractExplicitLayer, p, st)
+    NN.weight_generator.code, p.weight_generator.code, st.weight_generator.code
+end
+#======================================================#
+struct HyperNet{W <: Lux.AbstractExplicitLayer, C <: Lux.AbstractExplicitLayer, A} <:
+       Lux.AbstractExplicitContainerLayer{(:weight_generator, :core_network)}
+    weight_generator::W
+    core_network::C
+    ca_axes::A
+end
+
+function HyperNet(w::Lux.AbstractExplicitLayer, c::Lux.AbstractExplicitLayer)
+    ca_axes = Lux.initialparameters(Random.default_rng(), c) |> ComponentArray |> getaxes
+    return HyperNet(w, c, ca_axes)
+end
+
+function Lux.initialparameters(rng::AbstractRNG, h::HyperNet)
+    return (weight_generator=Lux.initialparameters(rng, h.weight_generator),)
+end
+
+function (hn::HyperNet)(x, ps, st::NamedTuple)
+    ps_new, st_ = hn.weight_generator(x, ps.weight_generator, st.weight_generator)
+    @set! st.weight_generator = st_
+    return ComponentArray(vec(ps_new), hn.ca_axes), st
+end
+
+function (hn::HyperNet)((x, y)::T, ps, st::NamedTuple) where {T <: Tuple}
+    ps_ca, st = hn(x, ps, st)
+    pred, st_ = hn.core_network(y, ps_ca, st.core_network)
+    @set! st.core_network = st_
+    return pred, st
+end
 
 #======================================================#
 function PermuteLayer(perm::NTuple{D, Int}) where{D}

@@ -1,5 +1,5 @@
 #
-using LinearAlgebra, Lux, BSON, Plots
+using LinearAlgebra, Lux, ComponentArrays, BSON, JLD2, Plots
 using MLUtils, GeometryLearning
 
 #======================================================#
@@ -22,9 +22,10 @@ function post_process_Autodecoder(datafile, modelfile, outdir)
     Xdata = @view Xdata[Ix]
 
     # load model
-    model = BSON.load(modelfile)
-    NN, p, st = model[:model]
-    md = model[:metadata] # (; ū, σu, _Ib, Ib_, _It, It_, readme)
+    model = jldopen(modelfile)
+    NN, p, st = model["model"]
+    md = model["metadata"] # (; ū, σu, _Ib, Ib_, _It, It_, readme)
+    close(model)
 
     _Udata = @view Udata[:, md._Ib, :]
     Udata_ = @view Udata[:, md.Ib_, :]
@@ -76,16 +77,16 @@ function post_process_Autodecoder(datafile, modelfile, outdir)
     nothing
 end
 
+datafile = joinpath(@__DIR__, "burg_visc_re10k", "data.bson")
+modelfile = joinpath(@__DIR__, "model_dec", "model.jld2")
+outdir = joinpath(@__DIR__, "result_dec")
+
+post_process_Autodecoder(datafile, modelfile, outdir)
+
 # datafile = joinpath(@__DIR__, "burg_visc_re10k", "data.bson")
 # modelfile = joinpath(@__DIR__, "model_dec", "model.bson")
 # outdir = joinpath(@__DIR__, "result_dec")
 #
 # post_process_Autodecoder(datafile, modelfile, outdir)
-
-datafile = joinpath(@__DIR__, "burg_visc_re10k", "data.bson")
-modelfile = joinpath(@__DIR__, "model_dec", "model.bson")
-outdir = joinpath(@__DIR__, "result_dec")
-
-post_process_Autodecoder(datafile, modelfile, outdir)
 
 nothing
