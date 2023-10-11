@@ -108,8 +108,8 @@ _data, data_, metadata = makedata_autodecode(datafile)
 
 # parameters
 E = 1000 # epochs
-w = 32  # width
-l = 3   # latent
+w = 32   # width
+l = 3    # latent
 
 opt = Optimisers.Adam()
 batchsize  = 1024 * 10
@@ -118,14 +118,15 @@ learning_rates = 1f-3 ./ (2 .^ (0:9))
 nepochs = E/10 * ones(10) .|> Int
 device = Lux.gpu_device()
 
-act = sin
-act = elu
+E = 3000
+learning_rates = 1f-4 .* (10, 5, 2, 1, 0.5, 0.2,)
+nepochs = E/6 * ones(6) .|> Int
 
 decoder = Chain(
-    Dense(l+1, w, sin), #; init_weight = scaled_siren_init(30.0), init_bias = rand),
-    Dense(w  , w, sin), #; init_weight = scaled_siren_init(1.0), init_bias = rand),
-    Dense(w  , w, elu), #; init_weight = scaled_siren_init(1.0), init_bias = rand),
-    Dense(w  , w, elu), #; init_weight = scaled_siren_init(1.0), init_bias = rand),
+    Dense(l+1, w, sin; init_weight = scaled_siren_init(3f1), init_bias = rand),
+    Dense(w  , w, sin; init_weight = scaled_siren_init(1f0), init_bias = rand),
+    Dense(w  , w, elu; init_weight = scaled_siren_init(1f0), init_bias = rand),
+    Dense(w  , w, elu; init_weight = scaled_siren_init(1f0), init_bias = rand),
     Dense(w  , 1; use_bias = false),
 )
 
