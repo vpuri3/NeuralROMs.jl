@@ -118,7 +118,7 @@ learning_rates = 1f-3 ./ (2 .^ (0:9))
 nepochs = E/10 * ones(10) .|> Int
 device = Lux.gpu_device()
 
-E = 3000
+E = 6_000
 learning_rates = 1f-4 .* (10, 5, 2, 1, 0.5, 0.2,)
 nepochs = E/6 * ones(6) .|> Int
 

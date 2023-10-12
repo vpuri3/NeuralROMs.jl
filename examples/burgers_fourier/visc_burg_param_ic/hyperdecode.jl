@@ -120,12 +120,8 @@ device = Lux.gpu_device()
 w = 128  # width of weight generator
 e = 16 # width of evaluator
 
-#; init_weight = scaled_siren_init(30.0), init_bias = rand),
-
 evaluator = Chain(
     Dense(1, e, sin),
-    Dense(e, e, sin),
-    Dense(e, e, sin),
     Dense(e, e, sin),
     Dense(e, e, sin),
     Dense(e, 1; use_bias = false),
