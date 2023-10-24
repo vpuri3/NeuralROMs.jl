@@ -4,6 +4,13 @@
 
 Mean squared error
 """
+mae(y, ŷ) = sum(abs, ŷ - y) / length(ŷ)
+
+"""
+    mse(ypred, ytrue)
+
+Mean squared error
+"""
 mse(y, ŷ) = sum(abs2, ŷ - y) / length(ŷ)
 
 """

@@ -9,6 +9,8 @@ using FourierSpaces
 using Lux
 using MLUtils
 using Optimisers
+using Optimization
+using OptimizationOptimJL
 import WeightInitializers: _nfan
 
 # autodiff
@@ -35,6 +37,7 @@ using NNlib
 using Tullio
 using ComponentArrays
 using Setfield: @set!
+using IterTools
 
 include("utils.jl")
 include("vis.jl")
@@ -84,6 +87,7 @@ export
        optimize,
 
        plot_training,
+       mae,
        mse,
        pnorm,
        rsquare

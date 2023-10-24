@@ -24,14 +24,13 @@ Train an autoencoder on 1D Burgers data
 
 using GeometryLearning
 
-# PDE stack
-using LinearAlgebra, FourierSpaces
+using LinearAlgebra, ComponentArrays
 
 # ML stack
 using Lux, Random, Optimisers, MLUtils
 
 # vis/analysis, serialization
-using Plots, BSON
+using Plots, BSON, JLD2
 
 # accelerator
 using CUDA, LuxCUDA, KernelAbstractions
@@ -139,9 +138,9 @@ function visualize_error(datafile, modelfile, outdir)
     Xdata = @view Xdata[Ix]
 
     # load model
-    model = BSON.load(modelfile)
-    NN, p, st = model[:model]
-    md = model[:metadata] # (; ū, σu, _Ib, Ib_, _It, It_, readme)
+    model = jldopen(modelfile)
+    NN, p, st = model["model"]
+    md = model["metadata"] # (; ū, σu, _Ib, Ib_, _It, It_, readme)
 
     _Udata = @view Udata[:, md._Ib, :]
     Udata_ = @view Udata[:, md.Ib_, :]
@@ -206,9 +205,9 @@ function post_process_Autodecoders(datafile, outdir, modelfiles...)
     Xdata = @view Xdata[Ix]
 
     # load model
-    models = (BSON.load(modelfile) for modelfile in modelfile)
-    NN, p, st = model[:model]
-    md = model[:metadata] # (; ū, σu, _Ib, Ib_, _It, It_, readme)
+    models = (jldopen(modelfile) for modelfile in modelfile)
+    NN, p, st = model["model"]
+    md = model["metadata"] # (; ū, σu, _Ib, Ib_, _It, It_, readme)
 
     _Udata = @view Udata[:, md._Ib, :]
     Udata_ = @view Udata[:, md.Ib_, :]
@@ -262,67 +261,168 @@ end
 #======================================================#
 
 datafile = joinpath(@__DIR__, "burg_visc_re10k/data.bson")
-modelfile = joinpath(@__DIR__, "model_dec", "model.bson")
+# modelfile = joinpath(@__DIR__, "model_dec", "model_bfgs.jld2")
+modelfile = joinpath(@__DIR__, "model_dec", "model.jld2")
 _data, data_, metadata = makedata_autodecode(datafile)
 
 dir = joinpath(@__DIR__, "model_dec1")
 
 # visualize_error(datafile, modelfile, dir)
 
-# parameters
-E = 400 # epochs
-w = 16  # width
-l = 4   # latent
-
-opt = Optimisers.Adam()
-batchsize  = 1024 * 50
-batchsize_ = 1024 * 100
-learning_rates = 1f-4 ./ (2 .^ (0:4))
-nepochs = E/5 * ones(5) .|> Int
-device = Lux.gpu_device()
-
-# l = 4
-decoder = Chain(
-    Dense(l+1, w, sin; init_weight = scaled_siren_init(30.0), init_bias = rand),
-    Dense(w  , w, sin; init_weight = scaled_siren_init(10.0), init_bias = rand),
-    Dense(w  , w, sin; init_weight = scaled_siren_init(1.0), init_bias = rand),
-    Dense(w  , w, sin; init_weight = scaled_siren_init(1.0), init_bias = rand),
-    Dense(w  , 1; use_bias = false),
-)
-
 #======================================================#
 # use the same code - i.e. learn correction manifold
 #======================================================#
-NN = decoder
-
-_model = BSON.load(modelfile)[:model]
-_, _code = GeometryLearning.get_autodecoder(_model...)
+model0 = jldopen(modelfile)["model"]
+_, _code = GeometryLearning.get_autodecoder(model0...)
 x1 = _data[1][1]
 i1 = _data[1][2] |> vec
 c1, _ =  _code[1](i1, _code[2], _code[3])
-x1 = vcat(x1, c1)
 
 #======================================================#
-# learn new code + manifold. this will increase latent space size.
+# Normalize output
 #======================================================#
-# NN = AutoDecoder(decoder, maximum(i1) |> Int, l)
-# x1 = (_data[1][1], i1)
-
-#======================================================#
-u1 = _data[2] - _model[1](_data[1], _model[2], _model[3])[1]
+u1 = _data[2] - model0[1](_data[1], model0[2], model0[3])[1]
 ū1 = sum(u1) / length(u1)
 σu1= sum(abs2, u1 .- ū1) / length(u1)
 u1 = (u1 .- ū1) / sqrt(σu1)
 
+# # undo normalization
+# u1 = _data[2] - model0[1](_data[1], model0[2], model0[3])[1]
+#======================================================#
+
+# parameters
+l = 3   # latent
+E = 1000
+
+batchsize  = 1024 * 10
+batchsize_ = 1024 * 200
+opts = Optimisers.Adam()
+nepochs = E/5 * ones(5) .|> Int
+learning_rates = 1f-4 ./ (2 .^ (0:4))
+device = Lux.gpu_device()
+
+opts = ntuple(Returns(Optimisers.Adam()), 5)
+learning_rates = (1f-3, 3f-4, 1f-4, 3f-5, 1f-5)
+nepochs = E/5 * ones(5) .|> Int
+
+# lossfun = (x, y) -> mse(x, y) + 1f+1 * pnorm(3)(x, y)
+# lossfun = (x, y) -> mse(x, y) + pnorm(5)(x, y)
+lossfun = mse
+# lossfun = pnorm(4)
+# lossfun = exp_loss
+
+#======================================================#
+# Concat: [x; code] ->_θ u(x)
+#======================================================#
+x1 = vcat(x1, c1)
+
+w = 16
+
+smg(x) = sigmoid_fast(x) * (1 - sigmoid_fast(x)) # sigmoid_grad
+thg(x) = 1 - tanh_fast(x)^2 # tanh grad
+
+decoder = Chain(
+    Dense(l+1, w, elu; init_bias = rand),
+    Dense(w  , w, elu; init_bias = rand),
+    Dense(w  , w, thg; init_bias = rand),
+    Dense(w  , 1),
+)
+
+NN = decoder
+#======================================================#
+# Hyper Network: code -> θ, x ->_θ u(x)
+#======================================================#
+# x1 = (c1, x1)
+# w = 32
+# e = 8
+#
+# w = 512 # width of weight generator
+# e = 16  # width of evaluator
+#
+# evaluator = Chain(
+#     Dense(1, e, sin),
+#     Dense(e, e, sin),
+#     Dense(e, e, elu),
+#     Dense(e, 1; use_bias = false),
+# )
+#
+# weight_gen = Dense(l, Lux.parameterlength(evaluator), elu),
+#
+# NN = HyperNet(weight_gen, evaluator)
+#======================================================#
+# learn new code + manifold. this will increase latent space size.
+#======================================================#
+NN = AutoDecoder(decoder, maximum(i1) |> Int, l)
+x1 = (_data[1][1], i1)
+
+#======================================================#
 _data1 = (x1, u1)
 #======================================================#
 
-model, ST = train_model(rng, NN, _data1, _data1, opt;
-    batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata,
-    lossfun = pnorm(6),
-)
+# model, ST = train_model(rng, NN, _data1, _data1, opt;
+#     batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata,
+#     lossfun,
+# )
 
-plot_training(ST...) |> display
+# plot_training(ST...) |> display
+
+#======================================================#
+using OptimizationOptimJL
+
+p, st = Lux.setup(rng, NN)
+p = ComponentArray(p) |> cu
+st = st               |> cu
+x1, u1 = (x1, u1)     |> cu
+
+function optloss(p; st = st)
+    pred, _ = NN(x1, p, st)
+    lossfun(u1, pred), pred
+end
+
+LOSSES = []
+function callback(p, l, pred)
+    push!(LOSSES, l)
+    ms = mse(pred, u1)
+    ma = mae(pred, u1)
+    mx = maximum(abs.(pred - u1))
+    println("BFGS [] || Loss: $(l) || MSE: $(ms) || MAE: $(ma) || MAXAE: $(mx)")
+    return false
+end
+
+optfun = OptimizationFunction((p, _) -> optloss(p), AutoZygote())
+optprb = OptimizationProblem(optfun, p)
+maxiters = 2000
+
+optalg = BFGS() # LBFGS()
+CUDA.@time optres = solve(optprb, optalg; callback, maxiters)
+@show optres.objective
+@show optres.solve_time
+@show mse(u1, NN(x1, optres.u, st)[1])
+
+#======================================================#
+x0, u0 = _data
+NN0, p0, st0 = model0
+v0 = NN0(x0, p0, st0)[1]
+l  = lossfun(u0, v0)
+ms = mse(u0, v0)
+ma = mae(u0, v0)
+mx = maximum(abs.(u0 - v0))
+println("#=====================#")
+println("Original Model")
+println("Loss: $(l) || MSE: $(ms) || MAE: $(ma) || MAXAE: $(mx)")
+println("#=====================#")
+
+x1 = cpu(x1)
+p  = optres.u     |> cpu
+v1 = v0 + σu1 * NN(x1, p, st)[1] .+ ū1
+l  = lossfun(u0, v1)
+ms = mse(u0, v1)
+ma = mae(u0, v1)
+mx = maximum(abs.(u0 - v1))
+println("#=====================#")
+println("Corrected Model")
+println("Loss: $(l) || MSE: $(ms) || MAE: $(ma) || MAXAE: $(mx)")
+println("#=====================#")
 
 #======================================================#
 nothing

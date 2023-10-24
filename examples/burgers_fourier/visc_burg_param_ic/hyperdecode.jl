@@ -117,20 +117,18 @@ learning_rates = 1f-4 ./ (2 .^ (0:4))
 nepochs = E/5 * ones(5) .|> Int
 device = Lux.gpu_device()
 
-w = 128  # width of weight generator
-e = 16 # width of evaluator
+w = 512 # width of weight generator
+e = 16  # width of evaluator
 
 evaluator = Chain(
     Dense(1, e, sin),
     Dense(e, e, sin),
-    Dense(e, e, sin),
+    Dense(e, e, elu),
     Dense(e, 1; use_bias = false),
 )
 
 weight_gen = Chain(
     Dense(l, w, elu),
-    Dense(w, w, elu),
-    Dense(w, w, elu),
     Dense(w, w, elu),
     Dense(w, Lux.parameterlength(evaluator)),
 )
@@ -143,8 +141,12 @@ code_gen = Chain(;
 
 NN = HyperNet(code_gen, evaluator)
 
+# lossfun = (x, y) -> pnorm(2)(x, y) + pnorm(3)(x, y)
+lossfun = mse
+
 model, ST = train_model(rng, NN, _data, _data, opt;
-    batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata)
+    batchsize, batchsize_, learning_rates, nepochs, dir, device, metadata,
+    lossfun,)
 
 plot_training(ST...) |> display
 

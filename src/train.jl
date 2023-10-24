@@ -1,4 +1,4 @@
-#
+ #
 """
 $SIGNATURES
 
@@ -8,77 +8,67 @@ $SIGNATURES
 - `data_`: testing data (same requirement as `_data)
 
 # Keyword Arguments
-- `opts`: `NTuple` of optimizers
-- `nepochs`: Number of epochs for each optimization cycle
+- `rng`: random nunmber generator
+- `_batchsize/batchsize_`: train/test batch size
+- `opts/nepochs`: `NTuple` of optimizers, # epochs per optimizer
 - `cbstep`: prompt `callback` function every `cbstep` epochs
-- `dir`: directory to save model, plots
+- `dir/name`: directory to save model, plots, model name
 - `io`: io for printing stats
+- `p/st`: initial model parameter, state. if nothing, initialized with `Lux.setup(rng, NN)`
 """
 function train_model(
-    rng::Random.AbstractRNG,
     NN::Lux.AbstractExplicitLayer,
     _data::NTuple{2, Any},
-    data_::NTuple{2, Any} = _data,
-    opt::Optimisers.AbstractRule = Optimisers.Adam();
-    batchsize::Int = 32,
-    batchsize_::Union{Int, Nothing} = nothing,
-    learning_rates = (1f-3,),
-    nepochs = (100,),
-    cbstep::Int = 1,
-    dir = "",
+    data_::NTuple{2, Any} = _data;
+#
+    rng::Random.AbstractRNG = Random.default_rng(),
+#
+    _batchsize::Int = 32,
+    batchsize_::Union{Int} = _batchsize,
+#
+    opts::NTuple{M, Any} = (Optimisers.Adam(1f-3),),
+    nepochs::NTuple{M, Int} = (100,),
+#
+    dir::String = "dump",
     name = "model",
     io::IO = stdout,
-    p = nothing,        # initial parameters
-    st = nothing,       # initial state
+#
+    p = nothing,
+    st = nothing,
     lossfun = mse,
     device = Lux.cpu_device,
-    make_plots = true,
+#
     early_stopping::Union{Bool, Nothing} = nothing,
     patience::Union{Int, Nothing} = nothing,
+#
     metadata = nothing,
-)
-
-    @assert length(learning_rates) == length(nepochs)
+) where{M}
 
     # make directory for saving model
     mkpath(dir)
 
     # create data loaders
-    _batchsize = batchsize
-    batchsize_ = isnothing(batchsize_) ? batchsize : batchsize_
+    _loader  = DataLoader(_data; batchsize = _batchsize, rng, shuffle = true)
+    loader_  = DataLoader(data_; batchsize = batchsize_, rng, shuffle = true)
 
-    _loader = DataLoader(_data; batchsize = _batchsize, rng, shuffle = true)
-    loader_ = DataLoader(data_; batchsize = batchsize_, rng, shuffle = true)
+    # large batchsize train loader for BFGS, callback
+    __loader = DataLoader(_data; batchsize = batchsize_, rng)
 
     if (device === Lux.gpu) | (device isa Lux.LuxCUDADevice)
-        _loader, loader_ = (_loader, loader_) .|> CuIterator
+        _loader, loader_, __loader = (_loader, loader_, __loader) .|> CuIterator
     end
-
-    # full batch statistics functions
-    _stats = (p, st; io = io) -> statistics(NN, p, st, _loader; io, mode = :train)
-    stats_ = (p, st; io = io) -> statistics(NN, p, st, loader_; io, mode = :test)
-
-    # full batch losses for cb_stats
-    _loss = (p, st) -> minibatch_metric(NN, p, st, _loader, lossfun)
-    loss_ = (p, st) -> minibatch_metric(NN, p, st, loader_, lossfun)
 
     # callback functions
     EPOCH = Int[]
     _LOSS = Float32[]
-    _LOSS_MINIBATCH = Float32[]
     LOSS_ = Float32[]
+    STATS = EPOCH, _LOSS, LOSS_
 
-    # callback for printing statistics
-    cb_stats = (p, st; io = io) -> callback(p, st; io, _loss, _stats, loss_, stats_)
-
-    # callback for training
-    cb_epoch = (p, st, epoch, nepoch; io = io) -> callback(p, st; io,
-                                                _loss, _LOSS, loss_, LOSS_,
-                                                EPOCH, epoch, nepoch, step = cbstep)
+    cb = make_callback(NN, __loader, loader_, lossfun; io, STATS, stats = false)
+    cb_stats = make_callback(NN, __loader, loader_, lossfun; io, stats = true)
 
     # parameters
     _p, _st = Lux.setup(rng, NN)
-    # _p = _p |> ComponentArray # not nice for real + complex
 
     p  = isnothing(p ) ? _p  : p
     st = isnothing(st) ? _st : st
@@ -93,33 +83,48 @@ function train_model(
 
     println(io, "#======================#")
     println(io, "Starting Trainig Loop")
-    println(io, "Optimizer: $opt")
     println(io, "#======================#")
 
     # set up optimizer
-    st = Lux.trainmode(st)
+    # # TODO
+    st = Lux.trainmode(st) # https://github.com/LuxDL/Lux.jl/issues/432
     opt_st = nothing
 
+    time0 = time()
     for i in eachindex(nepochs)
-        learning_rate = learning_rates[i]
+        time1 = time()
+
+        opt = opts[i]
         nepoch = nepochs[i]
 
-        @set! opt.eta = learning_rate
+        println(io, "#======================#")
+        println(io, "Optimization Round $i, EPOCHS: $nepoch")
+        println(io, "Optimizer $opt")
+        println(io, "#======================#")
 
-        println(io, "#======================#")
-        println(io, "Learning Rate: $learning_rate, EPOCHS: $nepoch")
-        println(io, "#======================#")
+        args = (opt, NN, p, st, nepoch, _loader, loader_, __loader)
+        kwargs = (;lossfun, opt_st, cb, io, early_stopping, patience)
 
         if (device === Lux.gpu) | (device isa Lux.LuxCUDADevice)
-            CUDA.@time p, st, opt_st = optimize(NN, p, st, _loader, loader_, nepoch;
-                lossfun, opt, opt_st, cb_epoch, io, early_stopping, patience)
+            CUDA.@time p, st, opt_st = optimize(args...; kwargs...)
         else
-            @time p, st, opt_st = optimize(NN, p, st, _loader, loader_, nepoch;
-                lossfun, opt, opt_st, cb_epoch, io, early_stopping, patience)
+            @time p, st, opt_st = optimize(args...; kwargs...)
         end
+
+        time2 = time()
+        t21 = round(time2 - time1; sigdigits = 8)
+        t20 = round(time2 - time0; sigdigits = 8)
+        println(io, "#======================#")
+        println(io, "Optimization Round $i done")
+        println(io, "Time: $(t21) || Total time: $(t20)")
+        println(io, "#======================#")
 
         cb_stats(p, st)
     end
+
+    println(io, "#======================#")
+    println(io, "Optimization done")
+    println(io, "#======================#")
 
     # TODO - output a train.log file with timings
     # add ProgressMeters.jl, or TensorBoardLogger.jl
@@ -133,35 +138,54 @@ function train_model(
     p, st = (p, st) |> Lux.cpu
 
     # training plot
-    if make_plots
-        plot_training(EPOCH, _LOSS, LOSS_; dir)
-    end
+    plot_training(STATS...; dir)
 
     model = NN, p, st
-    STATS = EPOCH, _LOSS, LOSS_
  
     # save
     filename = joinpath(dir, "$name.jld2")
     isfile(filename) && rm(filename)
-    jldsave(filename; model, metadata)
+    jldsave(filename; model, metadata, STATS)
 
     model, STATS
 end
 
 #===============================================================#
-function minibatch_metric(NN, p, st, loader, metric)
+"""
+    minibatch_metric(NN, p, st, loader, lossfun, ismean) -> l
+
+Only for callbacks. Enforce this by setting Lux.testmode
+
+- `NN, p, st`: neural network
+- `loader`: data loader
+- `lossfun`: loss function: (x::Array, y::Array) -> l::Real
+"""
+function minibatch_metric(NN, p, st, loader, lossfun)
+    st = Lux.testmode(st) # https://github.com/LuxDL/Lux.jl/issues/432
     x, ŷ = first(loader)
-    y = NN(x, p, st)[1]
-    metric(y, ŷ)
+    y, _ = NN(x, p, st)
+    lossfun(y, ŷ)
 end
 
-function fullbatch_metric(NN, p, st, loader, metric, ismean = false)
+"""
+    fullbatch_metric(NN, p, st, loader, lossfun, ismean) -> l
+
+Only for callbacks. Enforce this by setting Lux.testmode
+
+- `NN, p, st`: neural network
+- `loader`: data loader
+- `lossfun`: loss function: (x::Array, y::Array) -> l::Real
+- `ismean`: lossfun takes a mean
+"""
+function fullbatch_metric(NN, p, st, loader, lossfun, ismean = true)
     L = 0f0
     N = 0
 
+    st = Lux.testmode(st) # https://github.com/LuxDL/Lux.jl/issues/432
+
     for (x, ŷ) in loader
         y = NN(x, p, st)[1]
-        l = metric(y, ŷ)
+        l = lossfun(y, ŷ)
 
         if ismean
             n = length(ŷ)
@@ -179,10 +203,15 @@ end
 $SIGNATURES
 
 """
-function statistics(NN::Lux.AbstractExplicitLayer, p, st, loader;
-    mode::Symbol = :train,
+function statistics(
+    NN::Lux.AbstractExplicitLayer,
+    p::Union{NamedTuple, AbstractVector},
+    st::NamedTuple,
+    loader::Union{CuIterator, MLUtils.DataLoader};
     io::Union{Nothing, IO} = stdout,
 )
+    st = Lux.testmode(st) # https://github.com/LuxDL/Lux.jl/issues/432
+
     N = 0
     SUM   = 0f0
     VAR   = 0f0
@@ -190,14 +219,6 @@ function statistics(NN::Lux.AbstractExplicitLayer, p, st, loader;
     SQRER = 0f0
 
     MAXER = 0f0
-
-    st = if mode === :train
-        Lux.trainmode(st)
-    elseif mode === :test
-        Lux.testmode(st)
-    else
-        error("mode must be :train or :test")
-    end
 
     for (x, ŷ) in loader
         y, _ = NN(x, p, st)
@@ -233,11 +254,11 @@ function statistics(NN::Lux.AbstractExplicitLayer, p, st, loader;
 
     if !isnothing(io)
         str = ""
-        str *= string("R² score:                   ", round(R2    , digits=8), "\n")
-        str *= string("MSE (mean SQR error):       ", round(MSE   , digits=8), "\n")
-        str *= string("RMSE (root mean SQR error): ", round(RMSE  , digits=8), "\n")
-        str *= string("MAE (mean ABS error):       ", round(meanAE, digits=8), "\n")
-        str *= string("maxAE (max ABS error)       ", round(maxAE , digits=8), "\n")
+        str *= string("R² score:                   ", round(R2    ; sigdigits=8), "\n")
+        str *= string("MSE (mean SQR error):       ", round(MSE   ; sigdigits=8), "\n")
+        str *= string("RMSE (root mean SQR error): ", round(RMSE  ; sigdigits=8), "\n")
+        str *= string("MAE (mean ABS error):       ", round(meanAE; sigdigits=8), "\n")
+        str *= string("maxAE (max ABS error)       ", round(maxAE ; sigdigits=8), "\n")
         # str *= string("mean REL error: ", round(meanRE, digits=8), "\n")
         # str *= string("max  REL error: ", round(maxRE , digits=8))
 
@@ -247,21 +268,65 @@ function statistics(NN::Lux.AbstractExplicitLayer, p, st, loader;
     R2, MSE, meanAE, maxAE #, meanRE, maxRE
 end
 
+#===============================================================#
+"""
+$SIGNATURES
+"""
+function make_callback(
+    NN::Lux.AbstractExplicitLayer,
+    _loader::Union{CuIterator, MLUtils.DataLoader},
+    loader_::Union{CuIterator, MLUtils.DataLoader},
+    lossfun;
+    STATS::Union{Nothing, NTuple{3, Any}} = nothing,
+    stats::Bool = false,
+    io = stdout,
+)
+    _loss = (p, st) -> fullbatch_metric(NN, p, st, _loader, lossfun)
+    loss_ = (p, st) -> fullbatch_metric(NN, p, st, loader_, lossfun)
+
+    kwargs = (; _loss, loss_,)
+
+    if stats
+        _stats = (p, st; io = io) -> statistics(NN, p, st, _loader; io)
+        stats_ = (p, st; io = io) -> statistics(NN, p, st, loader_; io)
+
+        kwargs = (;kwargs..., _stats, stats_)
+    end
+
+    if !isnothing(STATS)
+        kwargs = (;kwargs..., STATS)
+    end
+
+    (p, st; epoch = 0, nepoch = 0, io = io) -> callback(p, st; io, epoch, nepoch, kwargs...)
+end
+
 """
 $SIGNATURES
 
 """
-function callback(p, st; io::Union{Nothing, IO} = stdout,
-                  _loss = nothing, _LOSS = nothing, _stats = nothing,
-                  loss_ = nothing, LOSS_ = nothing, stats_ = nothing,
-                  epoch = nothing, step = 0, nepoch = 0, EPOCH = nothing,
-                 )
+function callback(p, st;
+    io::Union{Nothing, IO} = stdout,
+    #
+    _loss  = nothing,
+    loss_  = nothing,
+    #
+    _stats = nothing,
+    stats_ = nothing,
+    #
+    STATS  = nothing,
+    #
+    epoch  = nothing,
+    nepoch = 0,
+)
+    EPOCH, _LOSS, LOSS_ = isnothing(STATS) ? ntuple(Returns(nothing), 3) : STATS
+
+    # println(io, "Epoch [$epoch[] / $nepoch]"
+    #     * "\t Loss: $l || MSE: $(ms) || MAE: $(ma) || MAXAE: $(mx)")
 
     str = if !isnothing(epoch)
-        step = iszero(step) ? 10 : step
-
-        if epoch % step == 0 || epoch == 1 || epoch == nepoch
-            "Epoch [$epoch / $nepoch]"
+        cbstep = 1
+        if epoch % cbstep == 0 || epoch == 1 || epoch == nepoch
+            "Epoch [$epoch / $nepoch]\t"
         else
             return
         end
@@ -276,7 +341,7 @@ function callback(p, st; io::Union{Nothing, IO} = stdout,
 
     # log training loss
     _l = if !isnothing(_loss)
-        _l = _loss(p, st)[1]
+        _l = _loss(p, st)
         !isnothing(_LOSS) && push!(_LOSS, _l)
         _l
     else
@@ -285,7 +350,7 @@ function callback(p, st; io::Union{Nothing, IO} = stdout,
 
     # log test loss
     l_ = if !isnothing(loss_)
-        l_ = loss_(p, st)[1]
+        l_ = loss_(p, st)
         !isnothing(LOSS_) && push!(LOSS_, l_)
         l_
     else
@@ -295,16 +360,15 @@ function callback(p, st; io::Union{Nothing, IO} = stdout,
     isnothing(io) && return
 
     if !isnothing(_l)
-        str *= string("\t TRAIN LOSS: ", round(_l, digits=8))
+        str *= string("TRAIN LOSS: ", round(_l; sigdigits=8))
     end
 
     if !isnothing(l_)
-        str *= string("\t TEST LOSS: ", round(l_, digits=8))
+        str *= string(" || TEST LOSS: ", round(l_; sigdigits=8))
     end
 
-    println(io, str)
-
     if !isnothing(io)
+        println(io, str)
         if !isnothing(_stats)
             println(io, "#======================#")
             println(io, "TRAIN STATS")
@@ -319,7 +383,7 @@ function callback(p, st; io::Union{Nothing, IO} = stdout,
         end
     end
 
-    return
+    _l, l_
 end
 
 #===============================================================#
@@ -352,71 +416,190 @@ Train parameters `p` to minimize `loss` using optimization strategy `opt`.
 
 # Arguments
 - Loss signature: `loss(p, st) -> y, st`
-- Callback signature: `cb(p, st epoch, nepochs) -> nothing` 
+- Callback signature: `cb(p, st epoch, nepoch) -> nothing` 
 """
-function optimize(NN, p, st, _loader, loader_, nepochs;
+function optimize(
+    opt::Optimisers.AbstractRule,
+    NN::Lux.AbstractExplicitLayer,
+    p::Union{NamedTuple, AbstractVector},
+    st::NamedTuple,
+    nepoch::Integer,
+    _loader::Union{CuIterator, MLUtils.DataLoader},
+    loader_::Union{CuIterator, MLUtils.DataLoader},
+    __loader::Union{CuIterator, MLUtils.DataLoader} = _loader;
     lossfun = mse,
-    opt = Optimisers.Adam(),
     opt_st = nothing,
-    cb_batch = nothing,
-    cb_epoch = nothing,
+    cb = nothing,
     io::Union{Nothing, IO} = stdout,
     early_stopping::Union{Bool, Nothing} = nothing,
     patience::Union{Int, Nothing} = nothing,
+    kwargs...,
 )
-
-    early_stopping = isnothing(early_stopping) ? true : early_stopping
-    patience = isnothing(patience) ? round(Int, nepochs // 4) : patience
+    cb = isnothing(cb) ? make_callback(NN, __loader, loader_, lossfun; io) : cb
 
     # print stats
-    !isnothing(cb_epoch) && cb_epoch(p, st, 0, nepochs; io)
+    _, l_ = cb(p, st; epoch = 0, nepoch, io)
 
-    # warm up, get minconfig
+    # warm up
     loss = Loss(NN, st, first(_loader), lossfun)
-    l, _, _ = grad(loss, p)
-    minconfig = (; count = 0, l, p, st, opt_st)
+    grad(loss, p)
+
+    # set up early_stopping
+    early_stopping = isnothing(early_stopping) ? true : early_stopping
+    patience = isnothing(patience) ? round(Int, nepoch // 4) : patience
+    minconfig = make_minconfig(early_stopping, patience, l_, p, st, opt_st)
 
     # init optimizer
     opt_st = isnothing(opt_st) ? Optimisers.setup(opt, p) : opt_st
 
-    for epoch in 1:nepochs
+    for epoch in 1:nepoch
         for batch in _loader
             loss = Loss(NN, st, batch, lossfun)
             l, st, g = grad(loss, p)
             opt_st, p = Optimisers.update!(opt_st, p, g)
 
-            println(io, "Epoch [$epoch / $nepochs]" * "\t Batch loss: $l")
-            !isnothing(cb_batch) && cb_batch(p, st, step)
+            println(io, "Epoch [$epoch / $nepoch]" * "\t Batch loss: $l")
         end
 
         println(io, "#=======================#")
-        !isnothing(cb_epoch) && cb_epoch(p, st, epoch, nepochs; io)
 
-        l, _ = Loss(NN, st, first(loader_), lossfun)(p)
-
-        # early stopping based on mini-batch loss from test set
-        # https://github.com/jeffheaton/app_deep_learning/blob/main/t81_558_class_03_4_early_stop.ipynb
-        if early_stopping
-            if l < minconfig.l
-                println(io, "Improvement in loss found: $(l) < $(minconfig.l)")
-                minconfig = (; minconfig..., count = 0, l, p, st, opt_st)
-            else
-                println(io, "No improvement in loss found in the last $(minconfig.count) epochs. Here, $(l) > $(minconfig.l)")
-                @set! minconfig.count = minconfig.count + 1
-            end
-            if minconfig.count >= patience
-                println(io, "Early Stopping triggered after $(minconfig.count) epochs of no improvement.")
-                break
-            end
-        else
-            minconfig = (; minconfig..., count = 0, l, p, st, opt_st)
-        end
+        # callback, early stopping
+        _, l_ = cb(p, st; epoch, nepoch, io)
+        minconfig, ifbreak = update_minconfig(minconfig, l_, p, st, opt_st; io)
+        ifbreak && break
 
         println(io, "#=======================#")
 
     end
 
     minconfig.p, minconfig.st, minconfig.opt_st
+end
+
+"""
+# references
+
+https://docs.sciml.ai/Optimization/stable/tutorials/minibatch/
+https://lux.csail.mit.edu/dev/tutorials/advanced/1_GravitationalWaveForm#training-the-neural-network
+
+"""
+function optimize(
+    opt::Optim.AbstractOptimizer,
+    NN::Lux.AbstractExplicitLayer,
+    p::Union{NamedTuple, AbstractVector},
+    st::NamedTuple,
+    nepoch::Integer,
+    _loader::Union{CuIterator, MLUtils.DataLoader},
+    loader_::Union{CuIterator, MLUtils.DataLoader},
+    __loader::Union{CuIterator, MLUtils.DataLoader} = _loader;
+    lossfun = mse,
+    opt_st = nothing,
+    cb = nothing,
+    io::Union{Nothing, IO} = stdout,
+    early_stopping::Union{Bool, Nothing} = nothing,
+    patience::Union{Int, Nothing} = nothing,
+    kwargs...
+)
+    @warn "Newton / BFGS / L-BFGS do not work with mini-batching.
+        Set batchsize to equal data-size, or else the method may be unstable.
+        If you want a stochastic optimizer, try `Optimisers.jl`."
+
+    # callback
+    cb = isnothing(cb) ? make_callback(NN, __loader, loader_, lossfun) : cb
+
+    # early stopping
+    early_stopping = isnothing(early_stopping) ? true : early_stopping
+    patience = isnothing(patience) ? round(Int, nepoch // 4) : patience
+    mincfg = Ref(make_minconfig(early_stopping, patience, Inf32, p, st, opt_st))
+
+    # current state
+    state = Ref(st)
+    epoch = Ref(0)
+
+    #======================#
+    # optimizer functions
+    #======================#
+
+    function optloss(optx, optp, batch...)
+        xdata, ydata = batch
+
+        p, st = optx, state[]
+        ypred, st = NN(xdata, p, st)
+        lossfun(ydata, ypred), batch, ypred, st
+    end
+
+    function optcb(p, l, batch, ypred, st)
+
+        # # TODO - optcb is called at every minibatch. only call at epoch
+        # if minibatch
+        #     ll = round(l; sigdigits = 8)
+        #     print(io, "Epoch [$(epoch[]) / $(nepoch)]\tBatch Loss: $(ll)")
+        #     return false
+        # end
+
+        state[] = st
+        println(io, "#=======================#")
+
+        _, l_ = cb(p, st; epoch = epoch[], nepoch, io)
+        minconfig, ifbreak = update_minconfig(mincfg[], l_, p, st, opt_st; io)
+        mincfg[] = minconfig
+        epoch[] += 1
+
+        return ifbreak
+    end
+
+    #======================#
+    # set up optimization solve
+    #======================#
+    adtype  =  AutoZygote()
+    optfun  = OptimizationFunction(optloss, adtype)
+    optprob = OptimizationProblem(optfun, p, st)
+
+    @time optres = solve(optprob, opt, ncycle(__loader, nepoch); callback = optcb)
+
+    obj = round(optres.objective; sigdigits = 8)
+    tim = round(optres.solve_time; sigdigits = 8)
+    println(io, "#=======================#")
+    @show optres.retcode
+    println(io, "Achieved objective value $(obj) in time $(tim)s.")
+    println(io, "#=======================#")
+
+    mincfg[].p, mincfg[].st, mincfg[].opt_st
+end
+
+"""
+early stopping based on mini-batch loss from test set
+https://github.com/jeffheaton/app_deep_learning/blob/main/t81_558_class_03_4_early_stop.ipynb
+"""
+function make_minconfig(early_stopping, patience, l, p, st, opt_st)
+    (; count = 0, early_stopping, patience, l, p, st, opt_st)
+end
+
+function update_minconfig(
+    minconfig::NamedTuple,
+    l::Real,
+    p::Union{NamedTuple, AbstractVector},
+    st::NamedTuple,
+    opt_st;
+    io::Union{IO, Nothing} = stdout,
+)
+    ifbreak = false
+
+    if l < minconfig.l
+        println(io, "Improvement in loss found: $(l) < $(minconfig.l)")
+        minconfig = (; minconfig..., count = 0, l, p, st, opt_st)
+    else
+        println(io, "No improvement in loss found in the last "
+            * "$(minconfig.count) epochs. Here, $(l) > $(minconfig.l)")
+        @set! minconfig.count = minconfig.count + 1
+    end
+
+    if (minconfig.count >= minconfig.patience) & minconfig.early_stopping
+        println(io, "Early Stopping triggered after $(minconfig.count)"
+            * "epochs of no improvement.")
+        ifbreak = true
+    end
+
+    minconfig, ifbreak
 end
 
 #===============================================================#
@@ -443,7 +626,7 @@ function plot_training(EPOCH, _LOSS, LOSS_; dir = nothing)
 
     if !isnothing(dir)
         png(plt, joinpath(dir, "plt_training"))
-            end
+    end
 
     plt
 end
