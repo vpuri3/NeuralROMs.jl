@@ -64,6 +64,6 @@ linesearch = BackTracking(order=3)
 
 linesearch = StrongWolfe()
 @show fx_sw, x_sw, iter_sw = gdoptimize(f, g!, fg!, x0, linesearch)
-
+#======================================================#
 nothing
 #

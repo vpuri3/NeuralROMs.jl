@@ -550,7 +550,7 @@ function optimize(
     #======================#
     # set up optimization solve
     #======================#
-    adtype  =  AutoZygote()
+    adtype  = AutoZygote()
     optfun  = OptimizationFunction(optloss, adtype)
     optprob = OptimizationProblem(optfun, p, st)
 

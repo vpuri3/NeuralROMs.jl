@@ -228,55 +228,76 @@ decoder, _code = GeometryLearning.get_autodecoder(model...)
 #======================================================#
 # learn test code
 #======================================================#
-N_ = 1
 data_ = begin
-    data = _data
-    # data = data_
-    x_ = data[1][1][1:N_ * 1024]
-    i_ = data[1][2][1:N_ * 1024]
-    u_ = data[2][1:N_ * 1024]
+    # data = _data
+    data = data_
+
+    i = 80
+    I = findall(isequal(i), data[1][2])
+
+    x_ = data[1][1][I] |> Base.Fix2(reshape, (1, :)) |> copy
+    i_ = data[1][2][I] |> Base.Fix2(reshape, (1, :)) |> copy
+    u_ = data[2][I]    |> Base.Fix2(reshape, (1, :)) |> copy
+
+    i_ .= 1
 
     ((reshape(x_, 1, :), reshape(i_, 1, :)), reshape(u_, 1, :),)
 end
 
 decoder_frozen = Lux.Experimental.freeze(decoder...)
-NN_ = AutoDecoder(decoder_frozen[1], N_, l; init_weight = zeros32)
+NN_ = AutoDecoder(decoder_frozen[1], 1, l; init_weight = zeros32)
 p_, st_ = Lux.setup(rng, NN_)
 
 @set! st_.decoder.frozen_params = ComponentArray(getdata(decoder[2]) |> copy, getaxes(decoder[2]))
 @assert st_.decoder.frozen_params == decoder[2]
 
-# gauss newton
 include(joinpath(@__DIR__, "gaussnewton.jl"))
 
-for linesearch in (
+for line in (
     # Static,
-    # BackTracking,
-    HagerZhang,
+    BackTracking,
+    # HagerZhang,
     # MoreThuente,
     # StrongWolfe,
 )
-    println(linesearch)
-    linesearch = linesearch === Static ? Static() : linesearch{Float32}()
-    nlsq(NN_, p_, st_, data_; device, linesearch, α0 = 1f-1)
-    println()
+    for alpha in (
+        InitialStatic, # BackTracking, StrongWolfe
+        # InitialPrevious,
+        # InitialQuadratic, # MoreThunte, StrongWolfe
+        # InitialHagerZhang, # StrongWolfe
+        # InitialConstantChange, # StrongWolfe
+    )
+        println(line, "\t", alpha)
+
+        local linesearch = line === Static ? Static() : line{Float32}()
+        local alphaguess = alpha{Float32}()
+
+        zy = AutoZygote()
+        fd = AutoForwardDiff()
+
+        # # gauss newton
+        # nlsq(NN_, p_, st_, data_; device, linesearch, alphaguess)
+
+        optimizer = LBFGS(; linesearch, alphaguess)
+        global p_ = datafit(NN_, p_, st_, data_, optimizer; device)
+
+        optimizer = Newton()
+        global p_ = datafit(NN_, p_, st_, data_, optimizer; device)
+
+        println()
+    end
 end
 
 ## BFGS, Newton, etc (i.e. calls to Optim.jl)
 
-# E = 50
-# opts, nepochs = (BFGS(), NewtonTrustRegion(),), (E, E,)
-#
-# _batchsize = N_ * 1024
-# batchsize_ = N_ * 1024
-#
+# opts, nepochs = (LBFGS(), NewtonTrustRegion(),), (20, 20,)
+# _batchsize, batchsize_ = 1024, 1024
 # device = Lux.cpu_device()
 #
 # model_, ST = train_model(NN_, data_;
 #     rng, _batchsize, batchsize_, opts, nepochs, device, metadata, dir,
 #     name = "code_", p = p_, st = st_,
 # )
-# plot_training(ST...) |> display
 
 #======================================================#
 
