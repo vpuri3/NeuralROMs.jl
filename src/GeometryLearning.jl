@@ -39,10 +39,14 @@ using ComponentArrays
 using Setfield: @set!
 using IterTools
 
+using NonlinearSolve
+using LineSearches
+
 include("utils.jl")
 include("vis.jl")
 include("metrics.jl")
 include("train.jl")
+include("nlsq.jl")
 
 include("layers.jl")
 
@@ -59,6 +63,7 @@ export
        fix_kw,
        init_siren,
        scaled_siren_init,
+       remake_ca,
 
        # layers
        Atten,
@@ -85,8 +90,12 @@ export
        train_model,
        callback,
        optimize,
-
        plot_training,
+
+       # nlsq
+       nlsq,
+
+       # metrics
        mae,
        mse,
        pnorm,

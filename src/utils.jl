@@ -1,4 +1,5 @@
 #
+#===========================================================#
 fastify(act) = act
 fastify(::typeof(tanh)) = Lux.tanh_fast
 fastify(::typeof(Lux.sigmoid)) = Lux.sigmoid_fast
@@ -28,7 +29,7 @@ end
 
 #===========================================================#
 
-"""
+""", FUNC_CACHE_PREFER_NONE
     _ntimes(x, (Nx, Ny)): x [L, B] --> [L, Nx, Ny, B]
 
 Make `Nx ⋅ Ny` copies of the first dimension and store it in the following
@@ -82,4 +83,18 @@ init_siren(::Type{T}, dims::Integer...; kw...) where{T<:Real} = init_siren(Rando
 function scaled_siren_init(scale::Real)
     (args...; kwargs...) -> init_siren(args...; kwargs..., scale)
 end
+#===========================================================#
+function remake_ca(
+    NN::Lux.AbstractExplicitLayer,
+    p::Union{NamedTuple, AbstractArray},
+    st::NamedTuple,
+)
+    if p isa NamedTuple
+        NN, p, st
+    else
+        p = ComponentArray(getdata(p) |> copy, getaxes(p))
+        NN, p, st
+    end
+end
+#===========================================================#
 #

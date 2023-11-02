@@ -24,13 +24,15 @@ function train_model(
     rng::Random.AbstractRNG = Random.default_rng(),
 #
     _batchsize::Int = 32,
-    batchsize_::Union{Int} = _batchsize,
+    batchsize_::Int = _batchsize,
+    __batchsize::Int = size(_data[2][end]), # > batchsize for BFGS, callback
 #
     opts::NTuple{M, Any} = (Optimisers.Adam(1f-3),),
     nepochs::NTuple{M, Int} = (100,),
 #
     dir::String = "dump",
     name = "model",
+    metadata = nothing,
     io::IO = stdout,
 #
     p = nothing,
@@ -40,21 +42,17 @@ function train_model(
 #
     early_stopping::Union{Bool, Nothing} = nothing,
     patience::Union{Int, Nothing} = nothing,
-#
-    metadata = nothing,
 ) where{M}
 
     # make directory for saving model
     mkpath(dir)
 
     # create data loaders
-    _loader  = DataLoader(_data; batchsize = _batchsize, rng, shuffle = true)
-    loader_  = DataLoader(data_; batchsize = batchsize_, rng, shuffle = true)
+    _loader  = DataLoader(_data; batchsize = _batchsize , rng, shuffle = true)
+    loader_  = DataLoader(data_; batchsize = batchsize_ , rng, shuffle = true)
+    __loader = DataLoader(_data; batchsize = __batchsize, rng)
 
-    # large batchsize train loader for BFGS, callback
-    __loader = DataLoader(_data; batchsize = batchsize_, rng)
-
-    if (device === Lux.gpu) | (device isa Lux.LuxCUDADevice)
+    if device isa Lux.LuxCUDADevice
         _loader, loader_, __loader = (_loader, loader_, __loader) .|> CuIterator
     end
 
@@ -105,11 +103,7 @@ function train_model(
         args = (opt, NN, p, st, nepoch, _loader, loader_, __loader)
         kwargs = (;lossfun, opt_st, cb, io, early_stopping, patience)
 
-        if (device === Lux.gpu) | (device isa Lux.LuxCUDADevice)
-            CUDA.@time p, st, opt_st = optimize(args...; kwargs...)
-        else
-            @time p, st, opt_st = optimize(args...; kwargs...)
-        end
+        @time p, st, opt_st = optimize(args...; kwargs...)
 
         time2 = time()
         t21 = round(time2 - time1; sigdigits = 8)
@@ -499,12 +493,30 @@ function optimize(
     patience::Union{Int, Nothing} = nothing,
     kwargs...
 )
-    @warn "Newton / BFGS / L-BFGS do not work with mini-batching.
-        Set batchsize to equal data-size, or else the method may be unstable.
-        If you want a stochastic optimizer, try `Optimisers.jl`."
+    if opt isa Union{
+        Optim.Newton,
+        Optim.BFGS,
+        Optim.LBFGS,
+        }
+
+        # NOTE: _loader, __loader should have the same data
+        @assert size(_loader.data) == size(__loader.data)
+
+        dsize = size(_loader.data)[end]
+        bsize = __loader.batchsize
+
+        _loader = __loader
+        @info "Using optimizer " * string(opt) * " with batchsize $bsize" *
+             " with data set of $dsize samples."
+
+        @warn "Hessian-based optimizers such as Newton / BFGS / L-BFGS do
+         not work with mini-batching. Set batchsize to equal data-size,
+         or else the method may be unstable. If you want a stochastic
+         optimizer, try `Optimisers.jl`."
+    end
 
     # callback
-    cb = isnothing(cb) ? make_callback(NN, __loader, loader_, lossfun) : cb
+    cb = isnothing(cb) ? make_callback(NN, _loader, loader_, lossfun) : cb
 
     # early stopping
     early_stopping = isnothing(early_stopping) ? true : early_stopping
@@ -529,6 +541,7 @@ function optimize(
 
     function optcb(p, l, batch, ypred, st)
 
+        # TODO - finish minibatching here
         # # TODO - optcb is called at every minibatch. only call at epoch
         # if minibatch
         #     ll = round(l; sigdigits = 8)
@@ -554,7 +567,7 @@ function optimize(
     optfun  = OptimizationFunction(optloss, adtype)
     optprob = OptimizationProblem(optfun, p, st)
 
-    @time optres = solve(optprob, opt, ncycle(__loader, nepoch); callback = optcb)
+    @time optres = solve(optprob, opt, ncycle(_loader, nepoch); callback = optcb)
 
     obj = round(optres.objective; sigdigits = 8)
     tim = round(optres.solve_time; sigdigits = 8)

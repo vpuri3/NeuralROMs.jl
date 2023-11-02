@@ -71,7 +71,7 @@ function get_INR_encoder_decoder(NN::Lux.AbstractExplicitLayer, p, st)
     encoder = (NN.layers.encode.layers.encoder, p.encode.encoder, st.encode.encoder)
     decoder = (NN.layers.decoder, p.decoder, st.decoder)
     
-    encoder, decoder
+    remake_ca(encoder...), remake_ca(decoder...)
 end
 
 #======================================================#
@@ -88,7 +88,14 @@ function AutoDecoder(
     code = nothing,
 )
     code = if isnothing(code)
-        Embedding(num_batches => code_len; init_weight)
+        if num_batches == 1
+            # TODO - scatter doesn't work for Zygote over ForwardDiff on GPU.
+            # OneEmbedding avoids calls to scatter
+            Embedding(num_batches => code_len; init_weight)
+            # OneEmbedding(code_len; init_weight)
+        else
+            Embedding(num_batches => code_len; init_weight)
+        end
     else
         code
     end
@@ -106,12 +113,43 @@ function AutoDecoder(
     )
 end
 
-function get_autodecoder(NN::Lux.AbstractExplicitLayer, p, st)
+function get_autodecoder(
+    NN::Lux.AbstractExplicitLayer,
+    p::Union{NamedTuple, AbstractArray},
+    st::NamedTuple,
+)
     decoder = (NN.layers.decoder, p.decoder, st.decoder)
     code    = (NN.layers.assem.layers.codex.layers.code, p.assem.codex.code, st.assem.codex.code)
 
-    decoder, code
+    remake_ca(decoder...), remake_ca(code...)
 end
+#======================================================#
+struct OneEmbedding{F} <: Lux.AbstractExplicitLayer
+    len::Int
+    init::F
+end
+
+OneEmbedding(len::Int; init_weight = zeros32) = OneEmbedding(len, init_weight)
+
+function Lux.initialparameters(rng::AbstractRNG, e::OneEmbedding)
+    return (; weight = e.init(rng, e.len),)
+end
+
+Lux.initialstates(::Random.AbstractRNG, ::OneEmbedding) = (;)
+
+function (e::OneEmbedding)(x::AbstractArray{<:Integer}, ps, st)
+    @assert all(isequal(true), x)
+
+    o = Zygote.ignore() do 
+        o = similar(x, Bool, length(x))
+        fill!(o, true)
+    end
+
+    code = ps.weight * o'
+
+    return reshape(code, e.len, size(x)...), st
+end
+
 #======================================================#
 """
     HyperDecoder
