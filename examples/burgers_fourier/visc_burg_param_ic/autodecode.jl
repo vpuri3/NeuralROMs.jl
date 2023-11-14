@@ -112,9 +112,9 @@ function infer_autodecoder(
 )
     # make data
 
-    xdata, udata, tdata = data
-    Nx = length(data[1])
-    id = ones(Int32, Nx)
+    # xdata, udata, tdata = data
+    # Nx = length(data[1])
+    # id = ones(Int32, Nx)
 
     fill!(data[1][2], true)
     loader = DataLoader(data; batchsize = 1)
