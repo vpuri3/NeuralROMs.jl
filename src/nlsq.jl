@@ -36,7 +36,7 @@ function nlsq(
     end
 
     nlsprob = NonlinearLeastSquaresProblem{false}(nlsloss, p0)
-    nlssol = solve(nlsprob, nls; maxiters, callback, abstol)
+    nlssol  = solve(nlsprob, nls; maxiters, callback, abstol)
 
     if verbose
         resid = nlssol.resid

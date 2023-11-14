@@ -104,12 +104,18 @@ end
 #======================================================#
 function infer_autodecoder(
     decoder::NTuple{3, Any},
-    data::Tuple,
+    data::Tuple, # (x, u, t)
     p0::AbstractVector;
     device = Lux.cpu_device(),
     learn_init::Bool = false,
+    verbose::Bool = true,
 )
-    # data
+    # make data
+
+    xdata, udata, tdata = data
+    Nx = length(data[1])
+    id = ones(Int32, Nx)
+
     fill!(data[1][2], true)
     loader = DataLoader(data; batchsize = 1)
 
@@ -119,7 +125,8 @@ function infer_autodecoder(
 
     # model
     decoder_frozen = Lux.Experimental.freeze(decoder...)
-    NN = AutoDecoder(decoder_frozen[1], 1, l; init_weight = zeros32)
+    code_len = length(p0)
+    NN = AutoDecoder(decoder_frozen[1], 1, code_len; init_weight = zeros32)
     p, st = Lux.setup(rng, NN)
     p = ComponentArray(p)
     @set! st.decoder.frozen_params = decoder[2]
@@ -127,9 +134,17 @@ function infer_autodecoder(
     # optimizer
     autodiff = AutoForwardDiff()
     linsolve = QRFactorization()
+    linesearch = LineSearch()
 
+    # linesearchalg = Static()
+    # linesearchalg = BackTracking()
+    # linesearchalg = HagerZhang()
+    # linesearch = LineSearch(; method = linesearchalg, autodiff = AutoZygote())
+    # linesearch = LineSearch(; method = linesearchalg, autodiff = AutoFiniteDiff())
+
+    # opt = BFGS()
     # opt = LevenbergMarquardt(; autodiff, linsolve)
-    opt = GaussNewton(;autodiff, linsolve)
+    opt = GaussNewton(;autodiff, linsolve, linesearch)
 
     copy!(p, p0)
 
@@ -143,15 +158,16 @@ function infer_autodecoder(
     iter = 1
 
     for batch in loader
+
         xdata = reshape.(batch[1], shape...)
         ydata = reshape(batch[2], shape...)
 
         bdata = (xdata, ydata)
 
         if learn_init & (iter == 1)
-            p = nlsq(NN, p, st, bdata, Optimisers.Adam(1f-1))
-            p = nlsq(NN, p, st, bdata, Optimisers.Adam(1f-2))
-            p = nlsq(NN, p, st, bdata, Optimisers.Adam(1f-3))
+            p = nlsq(NN, p, st, bdata, Optimisers.Adam(1f-1); verbose = false)
+            p = nlsq(NN, p, st, bdata, Optimisers.Adam(1f-2); verbose = false)
+            p = nlsq(NN, p, st, bdata, Optimisers.Adam(1f-3); verbose = false)
         end
 
         p = nlsq(NN, p, st, bdata, opt; maxiters = 20, verbose = false)
@@ -166,8 +182,10 @@ function infer_autodecoder(
         upreds = push(upreds, u)
         push!(MSEs, l)
 
-        println("Iter $iter, MSE: $l")
-        iter += 1
+        if verbose
+            println("Iter $iter, MSE: $l")
+            iter += 1
+        end
     end
 
     code  = mapreduce(getdata, hcat, codes ) |> Lux.cpu_device()
@@ -175,7 +193,6 @@ function infer_autodecoder(
 
     return code, upred, MSEs
 end
-
 #======================================================#
 
 function evolve_autodecoder(
@@ -187,20 +204,29 @@ function evolve_autodecoder(
     # data
     fill!(data[1][2], true)
 
-    # model
+
     decoder_frozen = Lux.Experimental.freeze(decoder...)
-    NN = AutoDecoder(decoder_frozen[1], 1, l; init_weight = zeros32)
+    code_len = size(_code[2].weight, 1)
+    NN = AutoDecoder(decoder_frozen[1], 1, code_len)
     p, st = Lux.setup(rng, NN)
     p = ComponentArray(p)
+    copy!(p, _code[2].weight[:, 1])
+
     @set! st.decoder.frozen_params = decoder[2]
 
-    # use FiniteDiff.jl ?
+    #==============#
+    # normalize data
+    #==============#
+    xdata = (Xdata .- md.x̄) / sqrt(md.σx)
+    udata = (Udata .- md.ū) / sqrt(md.σu)
+
     function uderv(NN, p, st, data)
         xdata, ydata = data
         x, i = xdata
 
-        T = eltype(ydata)
-        ϵ = cbrt(T)
+        T = real(eltype(ydata))
+        # ϵ = sqrt(eps(T)) * max(one(T), abs(norm(x))) # upwinding
+        ϵ = cbrt(eps(T))
 
         x_ = x .+ ϵ
         _x = x .- ϵ
@@ -234,6 +260,8 @@ function post_process_autodecoder(
     modelfile::String,
     outdir::String;
     device = Lux.cpu_device(),
+    makeplot::Bool = true,
+    verbose::Bool = true,
 )
 
     #==============#
@@ -263,6 +291,11 @@ function post_process_autodecoder(
     close(model)
 
     #==============#
+    # make outdir path
+    #==============#
+    mkpath(outdir)
+
+    #==============#
     # normalize data
     #==============#
     xdata = (Xdata .- md.x̄) / sqrt(md.σx)
@@ -277,85 +310,81 @@ function post_process_autodecoder(
     _udata = udata[:, md._Ib, :]
     udata_ = udata[:, md.Ib_, :]
 
-    _Ns = Nt * length(md._Ib) # num_codes
-    Ns_ = Nt * length(md.Ib_)
-
-    #==============#
-    # make data
-    #==============#
-    _xyz = zeros(Float32, Nx, _Ns)
-    xyz_ = zeros(Float32, Nx, Ns_)
-
-    _xyz[:, :] .= xdata
-    xyz_[:, :] .= xdata
-
-    _idx = zeros(Int32, Nx, _Ns)
-    idx_ = zeros(Int32, Nx, Ns_)
-
-    _idx[:, :] .= 1:_Ns |> adjoint
-    idx_[:, :] .= 1:Ns_ |> adjoint
-
-    _x = (reshape(_xyz, 1, :), reshape(_idx, 1, :))
-    # x_ = (reshape(xyz_, 1, :), reshape(idx_, 1, :))
-
-    mkpath(outdir)
-
     #==============#
     # Training
     #==============#
-    _Upred = NN(_x, p, st)[1]
+
+    #=
+
+    _data, data_, _ = makedata_autodecode(datafile)
+
+    _Upred = NN(_data[1] |> device, p |> device, st |> device)[1] |> Lux.cpu_device()
     _Upred = _Upred * sqrt(md.σu) .+ md.ū
     _Upred = reshape(_Upred, Nx, length(md._Ib), Nt)
 
     for k in 1:length(md._Ib)
-        udata = @view _Udata[:, k, :]
-        upred = @view _Upred[:, k, :]
+        Ud = @view _Udata[:, k, :]
+        Up = @view _Upred[:, k, :]
         _mu = round(mu[md._Ib[k]], digits = 2)
-        anim = animate1D(udata, upred, Xdata, Tdata; linewidth=2, xlabel="x",
-            ylabel="u(x,t)", title = "μ = $_mu, ")
-        gif(anim, joinpath(outdir, "train$(k).gif"), fps=30)
+
+        if makeplot
+            anim = animate1D(Ud, Up, Xdata, Tdata; linewidth=2, xlabel="x",
+                ylabel="u(x,t)", title = "μ = $_mu, ")
+            gif(anim, joinpath(outdir, "train$(k).gif"), fps=30)
+        end
     end
 
+    =#
+
     #==============#
-    # Inference
+    # Inference (via data regression)
     #==============#
     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
 
-    id = ones(Int32, Nx, Nt)
-    xd = (vec(xdata) * ones(1, Nt), id)
-    qq = _code[2].weight[:, 1]
+    xd = (vec(xdata) * ones(Float32, 1, Nt), ones(Int32, Nx, Nt))
+    p0 = _code[2].weight[:, 1]
 
     # on train data
     for k in 1:length(md._Ib)
         ud = @view _udata[:, k, :]
-        data  = (xd, ud)
+        data = (xd, ud)
 
-        _, up, er = infer_autodecoder(decoder, data, qq; device)
+        # data = (xdata, ud, Tdata)
+
+        _, up, er = infer_autodecoder(decoder, data, p0; device, verbose)
 
         Ud = ud * sqrt(md.σu) .+ md.ū
         Up = up * sqrt(md.σu) .+ md.ū
 
-        _mu = round(mu[md._Ib[k]], digits = 2)
-        anim = animate1D(Ud, Up, Xdata, Tdata; linewidth=2,
-            xlabel="x", ylabel="u(x,t)", title = "μ = $_mu, ")
-        gif(anim, joinpath(outdir, "infer_train$(k).gif"), fps=30)
+        if makeplot
+            _mu = round(mu[md._Ib[k]], digits = 2)
+            anim = animate1D(Ud, Up, Xdata, Tdata; linewidth=2,
+                xlabel="x", ylabel="u(x,t)", title = "μ = $_mu, ")
+            gif(anim, joinpath(outdir, "infer_train$(k).gif"), fps=30)
+        end
     end
+
+    #=
 
     # on test data
     for k in 1:length(md.Ib_)
         ud = @view udata_[:, k, :]
         data  = (xd, ud)
 
-        _, up, er = infer_autodecoder(decoder, data, qq; device)
+        _, up, er = infer_autodecoder(decoder, data, p0; device)
 
         Ud = ud * sqrt(md.σu) .+ md.ū
         Up = up * sqrt(md.σu) .+ md.ū
 
-        _mu = round(mu[md.Ib_[k]], digits = 2)
-        anim = animate1D(Ud, Up, Xdata, Tdata; linewidth=2,
-            xlabel="x", ylabel="u(x,t)", title = "μ = $_mu, ")
-        gif(anim, joinpath(outdir, "infer_test$(k).gif"), fps=30)
+        if makeplot
+            _mu = round(mu[md.Ib_[k]], digits = 2)
+            anim = animate1D(Ud, Up, Xdata, Tdata; linewidth=2,
+                xlabel="x", ylabel="u(x,t)", title = "μ = $_mu, ")
+            gif(anim, joinpath(outdir, "infer_test$(k).gif"), fps=30)
+        end
     end
+
+    =#
 
     #==============#
     # Done
@@ -374,14 +403,17 @@ end
 # parameters
 #======================================================#
 
-function _train()
+function train_autodecoder(
+    datafile::String,
+    modelfile::String;
+    device = Lux.cpu_device(),
+)
     E = 3000
     opts = 1f-4 .* (10, 5, 2, 1, 0.5, 0.2,) .|> Optimisers.Adam
     nepochs = E/6 * ones(6) .|> Int |> Tuple
-    datafile = joinpath(@__DIR__, "burg_visc_re10k/data.bson")
-    dir = joinpath(@__DIR__, "model_dec")
     _data, data_, metadata = makedata_autodecode(datafile)
 
+    dir = modelfile
     opts = (opts..., BFGS(),)
     nepochs = (nepochs..., E)
 
@@ -390,7 +422,6 @@ function _train()
 
     _batchsize = 1024 * 10
     batchsize_ = 1024 * 300
-    device = Lux.gpu_device()
 
     decoder = Chain(
         Dense(l+1, w, sin; init_weight = scaled_siren_init(3f1), init_bias = rand),
@@ -414,50 +445,16 @@ end
 # main
 #======================================================#
 
-# train
-# _train()
+device = Lux.gpu_device()
 
 datafile = joinpath(@__DIR__, "burg_visc_re10k", "data.bson")
 modelfile = joinpath(@__DIR__, "model_dec", "model.jld2")
 outdir = joinpath(@__DIR__, "result_dec")
 
-device = Lux.gpu_device()
-post_process_autodecoder(datafile, modelfile, outdir; device)
-
+# train_autodecoder(datafile, modelfile; device)
+post_process_autodecoder(datafile, modelfile, outdir;
+    device, makeplot = true, verbose = true)
+# evolve_autodecoder(datafile, modelfile, outdir)
 #======================================================#
-# learn test code
-#======================================================#
-# # reload for analysis
-# modelfile = joinpath(@__DIR__, "model_dec", "model.jld2")
-# model = jldopen(modelfile)["model"]
-# decoder, _code = GeometryLearning.get_autodecoder(model...)
-#
-# data_ = begin
-#     data, b = _data, 3
-#     data, b = data_, 4
-#
-#     shape = (1024, b, 100) # Nx, Nb, Nt
-#     x_ = reshape(data[1][1], shape)
-#     u_ = reshape(data[2], shape)
-#
-#     i = 1
-#     x_ = x_[:, i, :]
-#     u_ = u_[:, i, :]
-#
-#     i_ = similar(x_, Int32)
-#     fill!(i_, true)
-#
-#     (x_, i_), u_
-# end
-#
-# q = _code[2].weight[:, 1]
-# code_, upred_, MSE_ = infer_autodecoder(decoder, data_, q; device)
-# p1 = plot(MSE_, ylims = (1f-5, Inf), yaxis = :log)
-# p2 = plot(upred_[:, 60:5:100])
-# plot(p1, p2)
-
-#======================================================#
-#======================================================#
-#======================================================#
-# nothing
+nothing
 #
