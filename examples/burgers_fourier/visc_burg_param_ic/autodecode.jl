@@ -155,12 +155,12 @@ function infer_autodecoder(
         batch  = xbatch, ubatch
 
         if learn_init & (iter == 1)
-            p = nlsq(NN, p, st, batch, Optimisers.Adam(1f-1); verbose)
-            p = nlsq(NN, p, st, batch, Optimisers.Adam(1f-2); verbose)
-            p = nlsq(NN, p, st, batch, Optimisers.Adam(1f-3); verbose)
+            p, _ = nlsq(NN, p, st, batch, Optimisers.Adam(1f-1); verbose)
+            p, _ = nlsq(NN, p, st, batch, Optimisers.Adam(1f-2); verbose)
+            p, _ = nlsq(NN, p, st, batch, Optimisers.Adam(1f-3); verbose)
         end
 
-        p = nlsq(NN, p, st, batch, nls; maxiters = 20, verbose)
+        p, _ = nlsq(NN, p, st, batch, nls; maxiters = 20, verbose)
 
         # eval
         upred = NN(xbatch, p, st)[1]
@@ -265,13 +265,17 @@ function evolve_autodecoder(
     verbose::Bool = true,
     md = nothing,
 )
+    #============================#
     # make data
+    #============================#
     xdata, udata, tdata = data
     Nx, Nt = size(udata)
     id = ones(Int32, Nx)
     x, u = (xdata, id), udata
 
+    #============================#
     # model
+    #============================#
     decoder_frozen = Lux.Experimental.freeze(decoder...)
     code_len = length(p0)
     NN = AutoDecoder(decoder_frozen[1], 1, code_len)
@@ -284,6 +288,8 @@ function evolve_autodecoder(
     x, u  = (x, u ) |> device
     p, st = (p, st) |> device
 
+    T = eltype(p)
+    #========================================================#
     # TODO form residual vector in un-normalized space
     _normalize(u::AbstractArray, μ::Number, σ::Number) = (u .- μ) / sqrt(σ)
     _unnormalize(u::AbstractArray, μ::Number, σ::Number) = u * sqrt(σ) .+ μ
@@ -342,8 +348,7 @@ function evolve_autodecoder(
 
     # TODO: make an ODEProblem about p
     # - how would ODEAlg compute abstol/reltol?
-
-    # large error in between time-steps => need smaller step size.
+    #========================================================#
 
     # optimizer
     autodiff = AutoForwardDiff()
@@ -351,49 +356,98 @@ function evolve_autodecoder(
     linesearch = LineSearch()
     nls = GaussNewton(;autodiff, linsolve, linesearch)
 
+    #============================#
     # learn IC
+    #============================#
+    iter = 0
     if verbose
-        println("Iter: 0, time: 0.0 - learn IC")
+        println("#============================#")
+        println("Iter: $iter, time: 0.0 - learn IC")
     end
 
     xbatch = reshape.(x, 1, Nx)
     ubatch = reshape(u[:, 1], 1, Nx)
     batch  = (xbatch, ubatch)
 
-    p0 = nlsq(NN, p, st, batch, nls; maxiters = 20, verbose)
+    p0, _ = nlsq(NN, p, st, batch, nls; maxiters = 20, verbose)
     u0 = NN(xbatch, p0, st)[1]
 
-    t = 0f0
-    Δt = 1f-3
-    ν = 1f-4
+    if verbose
+        println("#============================#")
+    end
+
+    #============================#
+    # Set up solver
+    #============================#
+    Tinit, Tfinal = extrema(tdata)
+    t0 = T(Tinit)
+    Δt = T(1f-2)
+    ν  = T(1f-4)
 
     ps = (p0,)
     us = (u0,)
-    ts = (t,)
+    ts = (t0,)
 
+    # plot for debugging
     xplt = vec(xdata) |> Array
     plt = plot(xplt, vec(u0 |> Array), w = 2.0, label = "Step 0")
     display(plt)
+    dtplt = (T(Tfinal) - T(Tinit)) / 100
+    tplt  = T(Tinit) + dtplt
 
-    for iter in 1:400
+    #============================#
+    # Time loop
+    #============================#
+    t1 = t0
+    # for iter in 1:70
+    while t1 < Tfinal * T(0.9)
+        #============================#
+        # set up
+        #============================#
+
+        iter += 1
         batch = (xbatch, u0)
-        nlsp  = (t, Δt, ν, p0)
+        t1 = t0 + Δt
+        nlsp  = (t1, Δt, ν, p0)
 
-        t += Δt
-    
         if verbose
-            t_round = round(t; sigdigits=6)
-            println("Iter: $iter, time: $t_round")
+            t_round  = round(t1; sigdigits=6)
+            Δt_round = round(Δt; sigdigits=6)
+            println("Iter: $iter, Time: $t_round, Δt: $Δt_round")
         end
 
-        p1 = nlsq(NN, p0, st, batch, nls; residual, nlsp, maxiters = 20, verbose)
+        #============================#
+        # solve
+        #============================#
+        p1, l = nlsq(NN, p0, st, batch, nls; residual, nlsp, maxiters = 20, verbose)
+
+        while l > 1f-6
+            if Δt < 1f-5
+                println("Δt = $Δt")
+                break
+            end
+
+            Δt /= 2
+
+            l_round = round(l; sigdigits = 6)
+            Δt_round = round(Δt; sigdigits = 6)
+            println("REPEATING Iter: $iter, MSE: $l_round, Time: $t_round, Δt: $Δt_round")
+
+            nlsp  = (t1, Δt, ν, p0)
+            p1, l = nlsq(NN, p0, st, batch, nls; residual, nlsp, maxiters = 20, verbose)
+        end
+
+        #============================#
+        # Evaluate, save, etc
+        #============================#
         u1 = NN(xbatch, p1, st)[1]
 
         ps = push(ps, p1)
         us = push(us, u1)
-        ts = push(ts, t)
+        ts = push(ts, t1)
 
-        if iter % 10 == 0
+        if t1 >= tplt
+            tplt += dtplt
             uplt = vec(u1) |> Array
             plot!(plt, xplt, uplt, w = 2.0, label = "Step: $iter")
             plot!(plt, legend = false)
@@ -403,9 +457,17 @@ function evolve_autodecoder(
             # scatter!(plt, xplt[Iplt], udata[Iplt, iplt], label = "data: $iter")
             display(plt)
         end
+
+        if verbose
+            println("#============================#")
+        end
     
+        #============================#
+        # update states
+        #============================#
         p0 = p1
         u0 = u1
+        t0 = t1
     end
 
     code = mapreduce(getdata, hcat, ps) |> Lux.cpu_device()
@@ -554,9 +616,7 @@ function post_process_autodecoder(
 
         code, pred, times = evolve_autodecoder(decoder, data, p0; device, verbose, md)
 
-        # m = md.μ[k] # plot derivatives
         # plt = plot()
-        # m = 0.6
         # plot!(plt, Xdata, U    |> vec, label = "u"   , w = 2.0)
         # plot!(plt, Xdata, Udx  |> vec, label = "udx" , w = 2.0)
         # # plot!(plt, xdata, udxx |> vec, label = "udxx", w = 2.0)

@@ -541,7 +541,7 @@ function optimize(
 
     function optcb(p, l, batch, ypred, st)
 
-        # TODO - finish minibatching here
+        # TODO - finish minibatching here, and rm other optimization loop.
         # # TODO - optcb is called at every minibatch. only call at epoch
         # if minibatch
         #     ll = round(l; sigdigits = 8)

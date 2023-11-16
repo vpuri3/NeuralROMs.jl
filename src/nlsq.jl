@@ -40,13 +40,14 @@ function nlsq(
     nlsprob = NonlinearLeastSquaresProblem{false}(nlsloss, p0, nlsp)
     nlssol  = solve(nlsprob, nls; maxiters, callback, abstol)
 
+    resid = nlssol.resid
+    resid = round(sum(abs2, resid) / length(resid); sigdigits = 8)
+
     if verbose
-        resid = nlssol.resid
-        resid = round(sum(abs2, resid) / length(resid); sigdigits = 8)
         println(io, "Steps: $(nlssol.stats.nsteps), MSE: $resid, Ret: $(nlssol.retcode)")
     end
 
-    nlssol.u
+    nlssol.u, resid
 end
 
 #======================================================#
@@ -90,17 +91,18 @@ function nlsq(
 
     optsol = solve(optprob, opt; maxiters, callback) #, abstol, reltol)
 
-    obj = round(optsol.objective; sigdigits = 8)
-    tym = round(optsol.solve_time; sigdigits = 8)
 
     if verbose
+        obj = round(optsol.objective; sigdigits = 8)
+        tym = round(optsol.solve_time; sigdigits = 8)
+
         println(io, "#=======================#")
         @show optsol.retcode
         println(io, "Achieved objective value $(obj) in time $(tym)s.")
         println(io, "#=======================#")
     end
 
-    optsol.u
+    optsol.u, optsol.objective
 end
 
 # Linesearch / nlsq
