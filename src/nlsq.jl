@@ -9,19 +9,21 @@ function nlsq(
     abstol::Real = 1f-5,
     io::Union{Nothing, IO} = stdout,
     verbose::Bool = true,
-    residual = nothing, # (NN, p, st, data) -> resid
+    residual = nothing, # (NN, p, st, data, nlsp) -> resid
+    nlsp = SciMLBase.NullParameters()
 )
     st = Lux.testmode(st)
     p0 = ComponentArray(p0)
 
     residual = if isnothing(residual)
-        (NN, p, st, data) -> NN(data[1], p, st)[1] - data[2]
+        # data regression
+        (NN, p, st, data, nlsp) -> NN(data[1], p, st)[1] - data[2]
     else
         residual
     end
 
     function nlsloss(nlsx, nlsp)
-        r = residual(NN, nlsx, st, data)
+        r = residual(NN, nlsx, st, data, nlsp)
         vec(r)
     end
 
@@ -35,7 +37,7 @@ function nlsq(
         return false
     end
 
-    nlsprob = NonlinearLeastSquaresProblem{false}(nlsloss, p0)
+    nlsprob = NonlinearLeastSquaresProblem{false}(nlsloss, p0, nlsp)
     nlssol  = solve(nlsprob, nls; maxiters, callback, abstol)
 
     if verbose
@@ -101,6 +103,7 @@ function nlsq(
     optsol.u
 end
 
+# Linesearch / nlsq
 # rosenbrock(x) = (1.f0 - x[1])^2 + 100.f0 * (x[2] - x[1]^2)^2
 # f(x) = [rosenbrock(x), (x[1] - 1.f0), (x[2]-1.f0), x[1]*x[2] - 1]
 # x0 = zeros(Float32, 2)

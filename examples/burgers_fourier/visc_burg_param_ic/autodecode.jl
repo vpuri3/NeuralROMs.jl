@@ -111,24 +111,19 @@ function infer_autodecoder(
     verbose::Bool = true,
 )
     # make data
-
-    # xdata, udata, tdata = data
-    # Nx = length(data[1])
-    # id = ones(Int32, Nx)
-
-    fill!(data[1][2], true)
-    loader = DataLoader(data; batchsize = 1)
-
-    if device isa Lux.LuxCUDADevice
-        loader = loader |> CuIterator
-    end
+    xdata, udata, tdata = data
+    Nx, Nt = size(udata)
+    id = ones(Int32, Nx)
+    x, u = (xdata, id), udata
 
     # model
     decoder_frozen = Lux.Experimental.freeze(decoder...)
     code_len = length(p0)
-    NN = AutoDecoder(decoder_frozen[1], 1, code_len; init_weight = zeros32)
+    NN = AutoDecoder(decoder_frozen[1], 1, code_len)
     p, st = Lux.setup(rng, NN)
     p = ComponentArray(p)
+
+    copy!(p, p0)
     @set! st.decoder.frozen_params = decoder[2]
 
     # optimizer
@@ -142,44 +137,37 @@ function infer_autodecoder(
     # linesearch = LineSearch(; method = linesearchalg, autodiff = AutoZygote())
     # linesearch = LineSearch(; method = linesearchalg, autodiff = AutoFiniteDiff())
 
-    # opt = BFGS()
-    # opt = LevenbergMarquardt(; autodiff, linsolve)
-    opt = GaussNewton(;autodiff, linsolve, linesearch)
-
-    copy!(p, p0)
+    # nls = BFGS()
+    # nls = LevenbergMarquardt(; autodiff, linsolve)
+    nls = GaussNewton(;autodiff, linsolve, linesearch)
 
     codes  = ()
     upreds = ()
     MSEs   = []
 
+    x, u  = (x, u ) |> device
     p, st = (p, st) |> device
-    shape = (1, Colon())
 
-    iter = 1
+    for iter in 1:Nt
 
-    for batch in loader
-
-        xdata = reshape.(batch[1], shape...)
-        ydata = reshape(batch[2], shape...)
-
-        bdata = (xdata, ydata)
+        xbatch = reshape.(x, 1, Nx)
+        ubatch = reshape(u[:, iter], 1, Nx)
+        batch  = xbatch, ubatch
 
         if learn_init & (iter == 1)
-            p = nlsq(NN, p, st, bdata, Optimisers.Adam(1f-1); verbose = false)
-            p = nlsq(NN, p, st, bdata, Optimisers.Adam(1f-2); verbose = false)
-            p = nlsq(NN, p, st, bdata, Optimisers.Adam(1f-3); verbose = false)
+            p = nlsq(NN, p, st, batch, Optimisers.Adam(1f-1); verbose)
+            p = nlsq(NN, p, st, batch, Optimisers.Adam(1f-2); verbose)
+            p = nlsq(NN, p, st, batch, Optimisers.Adam(1f-3); verbose)
         end
 
-        p = nlsq(NN, p, st, bdata, opt; maxiters = 20, verbose = false)
+        p = nlsq(NN, p, st, batch, nls; maxiters = 20, verbose)
 
         # eval
-        u = NN(xdata, p, st)[1]
-        l = round(mse(u, ydata); sigdigits = 8)
-
-        # large error in between time-steps => need smaller step size.
+        upred = NN(xbatch, p, st)[1]
+        l = round(mse(upred, ubatch); sigdigits = 8)
 
         codes  = push(codes, p)
-        upreds = push(upreds, u)
+        upreds = push(upreds, upred)
         push!(MSEs, l)
 
         if verbose
@@ -194,64 +182,239 @@ function infer_autodecoder(
     return code, upred, MSEs
 end
 #======================================================#
+using ForwardDiff
+using ForwardDiff: Dual, Partials, value, partials
+
+# struct FDDeriv1Tag end
+# struct FDDeriv2Tag end
+# struct FDDeriv2TagInternal end
+
+"""
+Based on SparseDiffTools.auto_jacvec
+
+MWE:
+
+```julia
+# f = x -> exp.(x)
+f = x -> x .^ 2
+x = [1.0, 2.0, 3.0, 4.0]
+v = ones(4)
+
+forwarddiff_deriv1(f, x)
+forwarddiff_deriv2(f, x)
+```
+"""
+function forwarddiff_deriv1(f, x)
+    T = eltype(x)
+    tag = ForwardDiff.Tag(f, T)
+    y = Dual{typeof(tag)}.(x, one(T))
+
+    fy = f(y)
+    fx = value.(fy)
+    df = partials.(fy, 1)
+    
+    fx, df
+end
+
+# SparseDiffTools.SparseDiffToolsTag()
+# SparseDiffTools.DeivVecTag()
+# ForwardDiff.Tag(FDDeriv1Tag(), eltype(x))
+
+# function ForwardDiff.checktag(
+#     ::Type{<:ForwardDiff.Tag{<:SparseDiffToolsTag, <:T}},
+#     f::F, x::AbstractArray{T}) where {T, F}
+#     return true
+# end
+
+function forwarddiff_deriv2(f, x)
+    T = eltype(x)
+    tag1 = ForwardDiff.Tag(f, T)
+    tag2 = ForwardDiff.Tag(f, T)
+    z = Dual{typeof(tag1)}.(Dual{typeof(tag2)}.(x, one(T)), one(T))
+
+    fz = f(z)
+    fx = value.(value.(fz))
+    df = value.(partials.(fz, 1))
+    d2f = partials.(partials.(fz, 1), 1)
+
+    fx, df, d2f
+end
+
+function finitediff_deriv2(f, x)
+    
+    T = real(eltype(x))
+    ϵ = cbrt(eps(T)) # * x̄
+    ϵinv = inv(ϵ)
+
+    _fx = f(x .- ϵ)
+    fx  = f(x)
+    fx_ = f(x .+ ϵ)
+
+    df  = T(0.5) * ϵinv   * (fx_ - _fx)
+    d2f = T(1.0) * ϵinv^2 * (fx_ + _fx - 2fx)
+
+    fx, df, d2f
+end
+#======================================================#
 
 function evolve_autodecoder(
     decoder::NTuple{3, Any},
     data::Tuple,
     p0::AbstractVector;
     device = Lux.cpu_device(),
+    verbose::Bool = true,
+    md = nothing,
 )
-    # data
-    fill!(data[1][2], true)
+    # make data
+    xdata, udata, tdata = data
+    Nx, Nt = size(udata)
+    id = ones(Int32, Nx)
+    x, u = (xdata, id), udata
 
-
+    # model
     decoder_frozen = Lux.Experimental.freeze(decoder...)
-    code_len = size(_code[2].weight, 1)
+    code_len = length(p0)
     NN = AutoDecoder(decoder_frozen[1], 1, code_len)
     p, st = Lux.setup(rng, NN)
     p = ComponentArray(p)
-    copy!(p, _code[2].weight[:, 1])
 
+    copy!(p, p0)
     @set! st.decoder.frozen_params = decoder[2]
 
-    #==============#
-    # normalize data
-    #==============#
-    xdata = (Xdata .- md.x̄) / sqrt(md.σx)
-    udata = (Udata .- md.ū) / sqrt(md.σu)
+    x, u  = (x, u ) |> device
+    p, st = (p, st) |> device
 
-    function uderv(NN, p, st, data)
-        xdata, ydata = data
+    # TODO form residual vector in un-normalized space
+    _normalize(u::AbstractArray, μ::Number, σ::Number) = (u .- μ) / sqrt(σ)
+    _unnormalize(u::AbstractArray, μ::Number, σ::Number) = u * sqrt(σ) .+ μ
+
+    function uderv(NN, p, st, xdata, md) # xdata - normalized x points
         x, i = xdata
 
-        T = real(eltype(ydata))
-        # ϵ = sqrt(eps(T)) * max(one(T), abs(norm(x))) # upwinding
-        ϵ = cbrt(eps(T))
+        function makeUfromX(X; NN = NN, p = p, st = st, i = i, md = md)
+            x = _normalize(X, md.x̄, md.σx)
+            u = NN((x, i), p, st)[1]
+            _unnormalize(u, md.ū, md.σu)
+        end
 
-        x_ = x .+ ϵ
-        _x = x .- ϵ
-
-        ϵinv = 1 ./ ϵ
-
-        _u = NN((_x, i), p, st)[1]
-        u  = NN((x , i), p, st)[1]
-        u_ = NN((x_, i), p, st)[1]
-
-        udx  = T(0.5) * ϵinv * (u_ - _u)
-        udxx = T(1.0) * ϵinv^2 * (u_ + _u - 2u)
-
-        u, udx, udxx
+        X = _unnormalize(x, md.x̄, md.σx)
+        # finitediff_deriv2(makeUfromX, X)
+        forwarddiff_deriv2(makeUfromX, X)
     end
 
-    function dudt(NN, p, st, data; ν = 1f4) # burgers RHS
-        u, udx, udxx = uderv(NN, p, st, data)
+    function dudt(NN, p, st, xdata, md, ν) # burgers RHS
+        u, udx, udxx = uderv(NN, p, st, xdata, md)
 
-        -u .* udx + (1/ν) * udxx
+        # -u .* udx + (1/ν) * udxx
+        -u .* udx
     end
 
-    function residual(NN, p, st, data; Δt = 1f-3)
-        rhs = dudt(NN, p, st, data)
+    function residual_eulerbwd(NN, p, st, data, nlsp)
+        xdata, u0 = data
+        t, Δt, ν, p0 = nlsp
+
+        Rhs = dudt(NN, p, st, xdata, md, ν) # RHS formed with current `p`
+        u1 = NN(xdata, p, st)[1]
+
+        U0 = _unnormalize(u0, md.ū, md.σu)
+        U1 = _unnormalize(u1, md.ū, md.σu)
+
+        Resid = U1 - U0 - Δt * Rhs
+        vec(Resid)
     end
+
+    function residual_eulerfwd(NN, p, st, data, nlsp)
+        xdata, u0 = data
+        t, Δt, ν, p0 = nlsp
+
+        Rhs = dudt(NN, p0, st, xdata, md, ν) # RHS formed with `p0`
+        u1 = NN(xdata, p, st)[1]
+
+        U0 = _unnormalize(u0, md.ū, md.σu)
+        U1 = _unnormalize(u1, md.ū, md.σu)
+
+        Resid = U1 - U0 - Δt * Rhs
+        vec(Resid)
+    end
+
+    residual = residual_eulerbwd
+    # residual = residual_eulerfwd
+
+    # TODO: make an ODEProblem about p
+    # - how would ODEAlg compute abstol/reltol?
+    #
+
+    # large error in between time-steps => need smaller step size.
+
+    # optimizer
+    autodiff = AutoForwardDiff()
+    linsolve = QRFactorization()
+    linesearch = LineSearch()
+    nls = GaussNewton(;autodiff, linsolve, linesearch)
+
+    # learn IC
+    if verbose
+        println("Iter: 0, time: 0.0 - learn IC")
+    end
+
+    xbatch = reshape.(x, 1, Nx)
+    ubatch = reshape(u[:, 1], 1, Nx)
+    batch  = (xbatch, ubatch)
+
+    # return uderv(NN, p, st, xbatch, md) |> Lux.cpu_device()
+
+    p0 = nlsq(NN, p, st, batch, nls; maxiters = 20, verbose)
+    u0 = NN(xbatch, p0, st)[1]
+
+    t = 0f0
+    Δt = 1f-3
+    ν = 1f-4
+
+    ps = (p0,)
+    us = (u0,)
+    ts = (t,)
+
+    xplt = vec(xdata) |> Array
+    plt = plot(xplt, vec(u0 |> Array), w = 2.0, label = "Step 0")
+    display(plt)
+
+    for iter in 1:100
+        batch = (xbatch, u0)
+        nlsp  = (t, Δt, ν, p0)
+
+        t += Δt
+    
+        if verbose
+            t_round = round(t; sigdigits=6)
+            println("Iter: $iter, time: $t_round")
+        end
+
+        p1 = nlsq(NN, p0, st, batch, nls; residual, nlsp, maxiters = 20, verbose)
+        u1 = NN(xbatch, p1, st)[1]
+
+        ps = push(ps, p1)
+        us = push(us, u1)
+        ts = push(ts, t)
+
+        if iter % 10 == 0
+            uplt = vec(u1) |> Array
+            plot!(plt, xplt, uplt, w = 2.0, label = "Step: $iter")
+
+            # iplt = Int(iter / 10)
+            # Iplt = 1:32:Nx
+            # scatter!(plt, xplt[Iplt], udata[Iplt, iplt], label = "data: $iter")
+            display(plt)
+        end
+    
+        p0 = p1
+        u0 = u1
+    end
+
+    code = mapreduce(getdata, hcat, ps) |> Lux.cpu_device()
+    pred = mapreduce(adjoint, hcat, us) |> Lux.cpu_device()
+    tyms = [ts...]
+
+    return code, pred, tyms
 end
 
 #======================================================#
@@ -304,22 +467,22 @@ function post_process_autodecoder(
     #==============#
     # train/test split
     #==============#
-    _Udata = @view Udata[:, md._Ib, :]
+    _Udata = @view Udata[:, md._Ib, :] # un-normalized
     Udata_ = @view Udata[:, md.Ib_, :]
 
-    _udata = udata[:, md._Ib, :]
+    _udata = udata[:, md._Ib, :] # normalized
     udata_ = udata[:, md.Ib_, :]
+
+    #=
 
     #==============#
     # Training
     #==============#
 
-    #=
-
     _data, data_, _ = makedata_autodecode(datafile)
 
-    _Upred = NN(_data[1] |> device, p |> device, st |> device)[1] |> Lux.cpu_device()
-    _Upred = _Upred * sqrt(md.σu) .+ md.ū
+    _upred = NN(_data[1] |> device, p |> device, st |> device)[1] |> Lux.cpu_device()
+    _Upred = _upred * sqrt(md.σu) .+ md.ū
     _Upred = reshape(_Upred, Nx, length(md._Ib), Nt)
 
     for k in 1:length(md._Ib)
@@ -334,22 +497,17 @@ function post_process_autodecoder(
         end
     end
 
-    =#
-
     #==============#
     # Inference (via data regression)
     #==============#
-    decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
 
-    xd = (vec(xdata) * ones(Float32, 1, Nt), ones(Int32, Nx, Nt))
+    decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     p0 = _code[2].weight[:, 1]
 
     # on train data
     for k in 1:length(md._Ib)
-        ud = @view _udata[:, k, :]
-        data = (xd, ud)
-
-        # data = (xdata, ud, Tdata)
+        ud = _udata[:, k, :]
+        data = (xdata, ud, Tdata)
 
         _, up, er = infer_autodecoder(decoder, data, p0; device, verbose)
 
@@ -364,12 +522,10 @@ function post_process_autodecoder(
         end
     end
 
-    #=
-
     # on test data
     for k in 1:length(md.Ib_)
-        ud = @view udata_[:, k, :]
-        data  = (xd, ud)
+        ud = udata_[:, k, :]
+        data = (xdata, ud, Tdata)
 
         _, up, er = infer_autodecoder(decoder, data, p0; device)
 
@@ -385,6 +541,39 @@ function post_process_autodecoder(
     end
 
     =#
+
+    #==============#
+    # evolve
+    #==============#
+
+    decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    p0 = _code[2].weight[:, 1]
+
+    begin
+        k = 1
+        ud = udata[:, k, :]
+        data = (xdata, ud, Tdata)
+
+        code, pred, times = evolve_autodecoder(decoder, data, p0; device, verbose, md)
+
+        # m = md.μ[k] # plot derivatives
+        # plt = plot()
+        # m = 0.6
+        # plot!(plt, Xdata, U    |> vec, label = "u"   , w = 2.0)
+        # plot!(plt, Xdata, Udx  |> vec, label = "udx" , w = 2.0)
+        # # plot!(plt, xdata, udxx |> vec, label = "udxx", w = 2.0)
+        #
+        # Utrue = Udata[:, 1, 1]
+        # plot!(plt, Xdata, Utrue, label = "u true", w = 2.0)
+        #
+        # Num = (Utrue[2:end] - Utrue[1:end-1]) / (Xdata[2] - Xdata[1])
+        # plot!(plt, Xdata[1:end-1], Num, label = "udx true", w = 2.0)
+        #
+        # # # num = (utrue[3:end] + utrue[1:end-2] - 2utrue[2:end-1]) / (xdata[2] - xdata[1])^2
+        # # # plot!(plt, xdata[2:end-1], num, label = "udx true", w = 2.0)
+        # # # ylims!(plt, (-15, 15))
+        # # display(plt)
+    end
 
     #==============#
     # Done
@@ -454,7 +643,13 @@ outdir = joinpath(@__DIR__, "result_dec")
 # train_autodecoder(datafile, modelfile; device)
 post_process_autodecoder(datafile, modelfile, outdir;
     device, makeplot = true, verbose = true)
-# evolve_autodecoder(datafile, modelfile, outdir)
 #======================================================#
-nothing
+# f = x -> x .^ 2
+# # f = x -> exp.(x)
+# x = [1.0, 2.0, 3.0, 4.0]
+# v = ones(4)
+# forwarddiff_deriv1(f, x)
+# forwarddiff_deriv2(f, x)
+
+# nothing
 #
