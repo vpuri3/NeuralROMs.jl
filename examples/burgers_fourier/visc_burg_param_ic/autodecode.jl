@@ -342,7 +342,6 @@ function evolve_autodecoder(
 
     # TODO: make an ODEProblem about p
     # - how would ODEAlg compute abstol/reltol?
-    #
 
     # large error in between time-steps => need smaller step size.
 
@@ -361,8 +360,6 @@ function evolve_autodecoder(
     ubatch = reshape(u[:, 1], 1, Nx)
     batch  = (xbatch, ubatch)
 
-    # return uderv(NN, p, st, xbatch, md) |> Lux.cpu_device()
-
     p0 = nlsq(NN, p, st, batch, nls; maxiters = 20, verbose)
     u0 = NN(xbatch, p0, st)[1]
 
@@ -378,7 +375,7 @@ function evolve_autodecoder(
     plt = plot(xplt, vec(u0 |> Array), w = 2.0, label = "Step 0")
     display(plt)
 
-    for iter in 1:100
+    for iter in 1:400
         batch = (xbatch, u0)
         nlsp  = (t, Δt, ν, p0)
 
@@ -399,6 +396,7 @@ function evolve_autodecoder(
         if iter % 10 == 0
             uplt = vec(u1) |> Array
             plot!(plt, xplt, uplt, w = 2.0, label = "Step: $iter")
+            plot!(plt, legend = false)
 
             # iplt = Int(iter / 10)
             # Iplt = 1:32:Nx
