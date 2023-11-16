@@ -240,15 +240,13 @@ function forwarddiff_deriv2(f, x)
     fx, df, d2f
 end
 
-function finitediff_deriv2(f, x)
-    
-    T = real(eltype(x))
-    ϵ = cbrt(eps(T)) # * x̄
-    ϵinv = inv(ϵ)
-
+function finitediff_deriv2(f, x; ϵ = cbrt(eps(eltype(x))))
     _fx = f(x .- ϵ)
     fx  = f(x)
     fx_ = f(x .+ ϵ)
+
+    T = eltype(x)
+    ϵinv = inv(ϵ)
 
     df  = T(0.5) * ϵinv   * (fx_ - _fx)
     d2f = T(1.0) * ϵinv^2 * (fx_ + _fx - 2fx)
@@ -289,6 +287,7 @@ function evolve_autodecoder(
     p, st = (p, st) |> device
 
     T = eltype(p)
+
     #========================================================#
     # TODO form residual vector in un-normalized space
     _normalize(u::AbstractArray, μ::Number, σ::Number) = (u .- μ) / sqrt(σ)
@@ -304,7 +303,7 @@ function evolve_autodecoder(
         end
 
         X = _unnormalize(x, md.x̄, md.σx)
-        # finitediff_deriv2(makeUfromX, X)
+        # finitediff_deriv2(makeUfromX, X; ϵ = 10 * cbrt(eps(Float32)))
         forwarddiff_deriv2(makeUfromX, X)
     end
 
@@ -380,7 +379,7 @@ function evolve_autodecoder(
     # Set up solver
     #============================#
     Tinit, Tfinal = extrema(tdata)
-    t0 = T(Tinit)
+    t0 = t1 = T(Tinit)
     Δt = T(1f-2)
     ν  = T(1f-4)
 
@@ -395,16 +394,25 @@ function evolve_autodecoder(
     dtplt = (T(Tfinal) - T(Tinit)) / 100
     tplt  = T(Tinit) + dtplt
 
+    # plot derivatives
+    begin
+        # Xdata = _unnormalize(xdata, md.x̄, md.σx)   |> Lux.cpu_device()
+        # U, Udx, Udxx = uderv(NN, p, st, xdata, md) |> Lux.cpu_device()
+        #
+        # plt = plot()
+        # plot!(plt, Xdata, U    |> vec, label = "u"   , w = 2.0)
+        # plot!(plt, Xdata, Udx  |> vec, label = "udx" , w = 2.0)
+        # plot!(plt, xdata, udxx |> vec, label = "udxx", w = 2.0)
+    end
+
     #============================#
     # Time loop
     #============================#
-    t1 = t0
-    # for iter in 1:70
-    while t1 < Tfinal * T(0.9)
+    while t1 <= Tfinal
+
         #============================#
         # set up
         #============================#
-
         iter += 1
         batch = (xbatch, u0)
         t1 = t0 + Δt
@@ -421,8 +429,9 @@ function evolve_autodecoder(
         #============================#
         p1, l = nlsq(NN, p0, st, batch, nls; residual, nlsp, maxiters = 20, verbose)
 
+        # adaptive time-stepper
         while l > 1f-6
-            if Δt < 1f-5
+            if Δt < 5f-5
                 println("Δt = $Δt")
                 break
             end
@@ -536,7 +545,7 @@ function post_process_autodecoder(
     #=
 
     #==============#
-    # Training
+    # from training data
     #==============#
 
     _data, data_, _ = makedata_autodecode(datafile)
@@ -558,14 +567,13 @@ function post_process_autodecoder(
     end
 
     #==============#
-    # Inference (via data regression)
+    # inference (via data regression)
     #==============#
 
     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     p0 = _code[2].weight[:, 1]
 
-    # on train data
-    for k in 1:length(md._Ib)
+    for k in axes(mu, 1)
         ud = _udata[:, k, :]
         data = (xdata, ud, Tdata)
 
@@ -578,25 +586,8 @@ function post_process_autodecoder(
             _mu = round(mu[md._Ib[k]], digits = 2)
             anim = animate1D(Ud, Up, Xdata, Tdata; linewidth=2,
                 xlabel="x", ylabel="u(x,t)", title = "μ = $_mu, ")
-            gif(anim, joinpath(outdir, "infer_train$(k).gif"), fps=30)
-        end
-    end
-
-    # on test data
-    for k in 1:length(md.Ib_)
-        ud = udata_[:, k, :]
-        data = (xdata, ud, Tdata)
-
-        _, up, er = infer_autodecoder(decoder, data, p0; device)
-
-        Ud = ud * sqrt(md.σu) .+ md.ū
-        Up = up * sqrt(md.σu) .+ md.ū
-
-        if makeplot
-            _mu = round(mu[md.Ib_[k]], digits = 2)
-            anim = animate1D(Ud, Up, Xdata, Tdata; linewidth=2,
-                xlabel="x", ylabel="u(x,t)", title = "μ = $_mu, ")
-            gif(anim, joinpath(outdir, "infer_test$(k).gif"), fps=30)
+            _name = k in md._Ib ? "infer_train$(k)" : "infer_test$(k)"
+            gif(anim, joinpath(outdir, "$(_name).gif"), fps=30)
         end
     end
 
@@ -615,22 +606,24 @@ function post_process_autodecoder(
         data = (xdata, ud, Tdata)
 
         code, pred, times = evolve_autodecoder(decoder, data, p0; device, verbose, md)
+    end
 
-        # plt = plot()
-        # plot!(plt, Xdata, U    |> vec, label = "u"   , w = 2.0)
-        # plot!(plt, Xdata, Udx  |> vec, label = "udx" , w = 2.0)
-        # # plot!(plt, xdata, udxx |> vec, label = "udxx", w = 2.0)
+    for k in axes(mu, 1)
+        # ud = _udata[:, k, :]
+        # data = (xdata, ud, Tdata)
+
+        # _, up, er = infer_autodecoder(decoder, data, p0; device, verbose)
         #
-        # Utrue = Udata[:, 1, 1]
-        # plot!(plt, Xdata, Utrue, label = "u true", w = 2.0)
+        # Ud = ud * sqrt(md.σu) .+ md.ū
+        # Up = up * sqrt(md.σu) .+ md.ū
         #
-        # Num = (Utrue[2:end] - Utrue[1:end-1]) / (Xdata[2] - Xdata[1])
-        # plot!(plt, Xdata[1:end-1], Num, label = "udx true", w = 2.0)
-        #
-        # # # num = (utrue[3:end] + utrue[1:end-2] - 2utrue[2:end-1]) / (xdata[2] - xdata[1])^2
-        # # # plot!(plt, xdata[2:end-1], num, label = "udx true", w = 2.0)
-        # # # ylims!(plt, (-15, 15))
-        # # display(plt)
+        # if makeplot
+        #     _mu = round(mu[md._Ib[k]], digits = 2)
+        #     anim = animate1D(Ud, Up, Xdata, Tdata; linewidth=2,
+        #         xlabel="x", ylabel="u(x,t)", title = "μ = $_mu, ")
+        #     _name = k in md._Ib ? "infer_train$(k)" : "infer_test$(k)"
+        #     gif(anim, joinpath(outdir, "$(_name).gif"), fps=30)
+        # end
     end
 
     #==============#
