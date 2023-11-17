@@ -266,11 +266,11 @@ function evolve_autodecoder(
     #============================#
     # make data
     #============================#
-    xdata, udata, tdata = data
-    Nx, Nt = size(udata)
-    id = ones(Int32, Nx)
-    x, u = (xdata, id), udata
+    Xdata, Udata, Tdata = data
+    Nx, Nt = size(Udata)
+    Icode = ones(Int32, Nx)
 
+    T = eltype(p0)
     #============================#
     # model
     #============================#
@@ -283,60 +283,62 @@ function evolve_autodecoder(
     copy!(p, p0)
     @set! st.decoder.frozen_params = decoder[2]
 
-    x, u  = (x, u ) |> device
+    #============================#
+    # move to device
+    #============================#
+
+    Xdata = Xdata   |> device
+    Icode = Icode   |> device
+    Udata = Udata   |> device
     p, st = (p, st) |> device
 
-    T = eltype(p)
-
     #========================================================#
-    # TODO form residual vector in un-normalized space
     _normalize(u::AbstractArray, μ::Number, σ::Number) = (u .- μ) / sqrt(σ)
     _unnormalize(u::AbstractArray, μ::Number, σ::Number) = u * sqrt(σ) .+ μ
 
-    function uderv(NN, p, st, xdata, md) # xdata - normalized x points
-        x, i = xdata
+    function makeUfromX(X, NN, p, st, Icode, md)
+        x = _normalize(X, md.x̄, md.σx)
+        u = NN((x, Icode), p, st)[1]
+        _unnormalize(u, md.ū, md.σu)
+    end
 
-        function makeUfromX(X; NN = NN, p = p, st = st, i = i, md = md)
-            x = _normalize(X, md.x̄, md.σx)
-            u = NN((x, i), p, st)[1]
-            _unnormalize(u, md.ū, md.σu)
+    function uderv(X, NN, p, st, Icode, md)
+
+        function _makeUfromX(X; NN = NN, p = p, st = st, Icode = Icode, md = md)
+            makeUfromX(X, NN, p, st, Icode, md)
         end
 
-        X = _unnormalize(x, md.x̄, md.σx)
-        # finitediff_deriv2(makeUfromX, X; ϵ = 10 * cbrt(eps(Float32)))
-        forwarddiff_deriv2(makeUfromX, X)
+        # finitediff_deriv2(_makeUfromX, X; ϵ = 10 * cbrt(eps(Float32)))
+        forwarddiff_deriv2(_makeUfromX, X)
     end
 
-    function dudt(NN, p, st, xdata, md, ν) # burgers RHS
-        u, udx, udxx = uderv(NN, p, st, xdata, md)
+    function dudt(X, NN, p, st, Icode, md) # burgers RHS
+        U, Udx, Udxx = uderv(X, NN, p, st, Icode, md)
 
-        # -u .* udx + (1/ν) * udxx
-        -u .* udx
+        # ν = md.ν
+        # -U .* Udx + (1/ν) * Udxx
+        -U .* Udx
     end
 
-    function residual_eulerbwd(NN, p, st, data, nlsp)
-        xdata, u0 = data
+    function residual_eulerbwd(NN, p, st, batch, nlsp)
+        X_I, U0 = batch
         t, Δt, ν, p0 = nlsp
+        X, Icode = X_I
 
-        Rhs = dudt(NN, p, st, xdata, md, ν) # RHS formed with current `p`
-        u1 = NN(xdata, p, st)[1]
-
-        U0 = _unnormalize(u0, md.ū, md.σu)
-        U1 = _unnormalize(u1, md.ū, md.σu)
+        Rhs = dudt(X, NN, p, st, Icode, md) # RHS formed with current `p`
+        U1  = makeUfromX(X, NN, p, st, Icode, md)
 
         Resid = U1 - U0 - Δt * Rhs
         vec(Resid)
     end
 
-    function residual_eulerfwd(NN, p, st, data, nlsp)
-        xdata, u0 = data
+    function residual_eulerfwd(NN, p, st, batch, nlsp)
+        X_I, U0 = batch
         t, Δt, ν, p0 = nlsp
+        X, Icode = X_I
 
-        Rhs = dudt(NN, p0, st, xdata, md, ν) # RHS formed with `p0`
-        u1 = NN(xdata, p, st)[1]
-
-        U0 = _unnormalize(u0, md.ū, md.σu)
-        U1 = _unnormalize(u1, md.ū, md.σu)
+        Rhs = dudt(X, NN, p, st, Icode, md) # RHS formed with `p0`
+        U1  = makeUfromX(X, NN, p, st, Icode, md)
 
         Resid = U1 - U0 - Δt * Rhs
         vec(Resid)
@@ -345,6 +347,7 @@ function evolve_autodecoder(
     residual = residual_eulerbwd
     # residual = residual_eulerfwd
 
+    #========================================================#
     # TODO: make an ODEProblem about p
     # - how would ODEAlg compute abstol/reltol?
     #========================================================#
@@ -352,7 +355,7 @@ function evolve_autodecoder(
     # optimizer
     autodiff = AutoForwardDiff()
     linsolve = QRFactorization()
-    linesearch = LineSearch()
+    linesearch = LineSearch() # TODO
     nls = GaussNewton(;autodiff, linsolve, linesearch)
 
     #============================#
@@ -364,12 +367,21 @@ function evolve_autodecoder(
         println("Iter: $iter, time: 0.0 - learn IC")
     end
 
-    xbatch = reshape.(x, 1, Nx)
-    ubatch = reshape(u[:, 1], 1, Nx)
-    batch  = (xbatch, ubatch)
+    Xbatch = reshape.((Xdata, Icode), 1, Nx)
+    Ubatch = reshape(Udata[:, 1], 1, Nx)
+    batch  = (Xbatch, Ubatch)
 
-    p0, _ = nlsq(NN, p, st, batch, nls; maxiters = 20, verbose)
-    u0 = NN(xbatch, p0, st)[1]
+    function residual_learn(NN, p, st, batch, nlsp)
+        X_I, U0 = batch
+        X, Icode = X_I
+
+        U1 = makeUfromX(X, NN, p, st, Icode, md)
+
+        vec(U1 - U0)
+    end
+
+    p0, _ = nlsq(NN, p, st, batch, nls; residual = residual_learn, maxiters = 20, verbose)
+    U0 = makeUfromX(Xbatch[1], NN, p, st, Xbatch[2], md)
 
     if verbose
         println("#============================#")
@@ -378,32 +390,26 @@ function evolve_autodecoder(
     #============================#
     # Set up solver
     #============================#
-    Tinit, Tfinal = extrema(tdata)
+    Tinit, Tfinal = extrema(Tdata)
     t0 = t1 = T(Tinit)
     Δt = T(1f-2)
     ν  = T(1f-4)
 
     ps = (p0,)
-    us = (u0,)
+    Us = (U0,)
     ts = (t0,)
 
-    # plot for debugging
-    xplt = vec(xdata) |> Array
-    plt = plot(xplt, vec(u0 |> Array), w = 2.0, label = "Step 0")
-    display(plt)
-    dtplt = (T(Tfinal) - T(Tinit)) / 100
-    tplt  = T(Tinit) + dtplt
-
-    # plot derivatives
-    begin
-        # Xdata = _unnormalize(xdata, md.x̄, md.σx)   |> Lux.cpu_device()
-        # U, Udx, Udxx = uderv(NN, p, st, xdata, md) |> Lux.cpu_device()
-        #
-        # plt = plot()
-        # plot!(plt, Xdata, U    |> vec, label = "u"   , w = 2.0)
-        # plot!(plt, Xdata, Udx  |> vec, label = "udx" , w = 2.0)
-        # plot!(plt, xdata, udxx |> vec, label = "udxx", w = 2.0)
-    end
+    # # plot derivatives
+    # begin
+    #     U, Udx, Udxx = uderv(Xbatch[1], NN, p, st, Xbatch[2], md) |> Lux.cpu_device()
+    #
+    #     _plt = plot()
+    #     plot!(_plt, Xplt, U    |> vec, label = "u"   , w = 2.0)
+    #     plot!(_plt, Xplt, Udx  |> vec, label = "udx" , w = 2.0)
+    #     # plot!(_plt, Xplt, Udxx |> vec, label = "udxx", w = 2.0)
+    #     png(_plt, "deriv_plt")
+    #     display(_plt)
+    # end
 
     #============================#
     # Time loop
@@ -414,7 +420,7 @@ function evolve_autodecoder(
         # set up
         #============================#
         iter += 1
-        batch = (xbatch, u0)
+        batch = (Xbatch, U0)
         t1 = t0 + Δt
         nlsp  = (t1, Δt, ν, p0)
 
@@ -449,23 +455,11 @@ function evolve_autodecoder(
         #============================#
         # Evaluate, save, etc
         #============================#
-        u1 = NN(xbatch, p1, st)[1]
+        U1 = makeUfromX(Xbatch[1], NN, p1, st, Xbatch[2], md)
 
         ps = push(ps, p1)
-        us = push(us, u1)
+        Us = push(Us, U1)
         ts = push(ts, t1)
-
-        if t1 >= tplt
-            tplt += dtplt
-            uplt = vec(u1) |> Array
-            plot!(plt, xplt, uplt, w = 2.0, label = "Step: $iter")
-            plot!(plt, legend = false)
-
-            # iplt = Int(iter / 10)
-            # Iplt = 1:32:Nx
-            # scatter!(plt, xplt[Iplt], udata[Iplt, iplt], label = "data: $iter")
-            display(plt)
-        end
 
         if verbose
             println("#============================#")
@@ -475,12 +469,12 @@ function evolve_autodecoder(
         # update states
         #============================#
         p0 = p1
-        u0 = u1
+        U0 = U1
         t0 = t1
     end
 
     code = mapreduce(getdata, hcat, ps) |> Lux.cpu_device()
-    pred = mapreduce(adjoint, hcat, us) |> Lux.cpu_device()
+    pred = mapreduce(adjoint, hcat, Us) |> Lux.cpu_device()
     tyms = [ts...]
 
     return code, pred, tyms
@@ -503,7 +497,7 @@ function post_process_autodecoder(
     Tdata = data[:t]
     Xdata = data[:x]
     Udata = data[:u]
-    mu = data[:mu]
+    mu = data[:mu] |> vec
 
     # data sizes
     Nx, _, Nt = size(Udata)
@@ -583,7 +577,7 @@ function post_process_autodecoder(
         Up = up * sqrt(md.σu) .+ md.ū
 
         if makeplot
-            _mu = round(mu[md._Ib[k]], digits = 2)
+            _mu = round(mu[k], digits = 2)
             anim = animate1D(Ud, Up, Xdata, Tdata; linewidth=2,
                 xlabel="x", ylabel="u(x,t)", title = "μ = $_mu, ")
             _name = k in md._Ib ? "infer_train$(k)" : "infer_test$(k)"
@@ -600,30 +594,22 @@ function post_process_autodecoder(
     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     p0 = _code[2].weight[:, 1]
 
-    begin
-        k = 1
-        ud = udata[:, k, :]
-        data = (xdata, ud, Tdata)
+    for k in [1, 2, 3, 4, 5] # axes(mu, 1)
+        Ud = Udata[:, k, :]
+        data = (Xdata, Ud, Tdata)
+        _, Up, Tpred = evolve_autodecoder(decoder, data, p0; device, verbose, md)
 
-        code, pred, times = evolve_autodecoder(decoder, data, p0; device, verbose, md)
-    end
+        if makeplot
+            _mu = round(mu[k], digits = 2)
+            # anim = animate1D(Up, Xdata, Tpred; linewidth=2,
+            #     xlabel="x", ylabel="u(x,t)", title = "μ = $_mu, ")
+            # _name = k in md._Ib ? "evolve_train$(k)" : "evolve_test$(k)"
+            # gif(anim, joinpath(outdir, "$(_name).gif"), fps=30)
 
-    for k in axes(mu, 1)
-        # ud = _udata[:, k, :]
-        # data = (xdata, ud, Tdata)
-
-        # _, up, er = infer_autodecoder(decoder, data, p0; device, verbose)
-        #
-        # Ud = ud * sqrt(md.σu) .+ md.ū
-        # Up = up * sqrt(md.σu) .+ md.ū
-        #
-        # if makeplot
-        #     _mu = round(mu[md._Ib[k]], digits = 2)
-        #     anim = animate1D(Ud, Up, Xdata, Tdata; linewidth=2,
-        #         xlabel="x", ylabel="u(x,t)", title = "μ = $_mu, ")
-        #     _name = k in md._Ib ? "infer_train$(k)" : "infer_test$(k)"
-        #     gif(anim, joinpath(outdir, "$(_name).gif"), fps=30)
-        # end
+            _plt = plot(title = "μ=$_mu", xlabel = "x", ylabel = "x", legend = false)
+            plot!(_plt, Xdata, Up[:, 1:10:min(size(Up, 2), 300)])
+            png(_plt, joinpath(outdir, "evolve_$k"))
+        end
     end
 
     #==============#
