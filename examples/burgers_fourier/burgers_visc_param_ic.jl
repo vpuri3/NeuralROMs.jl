@@ -1,8 +1,17 @@
 #
 using FourierSpaces
+using GeometryLearning
 
-using CUDA, OrdinaryDiffEq, LinearSolve, LinearAlgebra, Random
-using Plots, BSON, GeometryLearning
+let
+    # add test dependencies to env stack
+    pkgpath = dirname(dirname(pathof(GeometryLearning)))
+    tstpath = joinpath(pkgpath, "test")
+    !(tstpath in LOAD_PATH) && push!(LOAD_PATH, tstpath)
+end
+
+using CUDA, LuxCUDA, LuxDeviceUtils
+using OrdinaryDiffEq, LinearSolve, LinearAlgebra, Random
+using Plots, JLD2
 
 Random.seed!(0)
 CUDA.allowscalar(false)
@@ -24,7 +33,7 @@ function burgers_inviscid(N, mu = LinRange(0.6, 1.2, 7)', p = nothing;
     tsave=100,
     odealg=SSPRK43(),
     odekw = (;),
-    device = cpu,
+    device = cpu_device(),
     dir = nothing,
 )
 
@@ -79,16 +88,43 @@ function burgers_inviscid(N, mu = LinRange(0.6, 1.2, 7)', p = nothing;
     t = sol.t |> cpu
     V = V     |> cpu
 
+    # compute derivatives
+    udx, ud2x = begin
+        Nx, Nb, Nt = size(u)
+        u_re = reshape(u, Nx, Nb * Nt)
+
+        V  = make_transform(V, u_re; p=p)
+        Dx = gradientOp(V)[1]
+
+        du_re  = Dx * u_re
+        d2u_re = Dx * du_re
+
+        reshape(du_re, Nx, Nb, Nt), reshape(d2u_re, Nx, Nb, Nt)
+    end
+
     if !isnothing(dir)
         mkpath(dir)
-        name = joinpath(dir, "data.bson")
         metadata = (; readme = "u [Nx, Nbatch, Nt]")
-        BSON.@save name x u t mu metadata
+
+        # filename = joinpath(dir, "data.bson")
+        # BSON.@save filename x u t mu metadata
+
+        filename = joinpath(dir, "data.jld2")
+        jldsave(filename; x, u, udx, ud2x, t, mu, metadata)
 
         for k in 1:size(u, 2)
-            uk = @view u[:, k, :]
-            anim = animate1D(uk, x, t; linewidth=2, xlabel="x", ylabel="u(x,t)", title = "μ = $(round(mu[k]; digits = 2)), ")
+            _u = @view u[:, k, :]
+            _udx = @view udx[:, k, :]
+            _ud2x = @view ud2x[:, k, :]
+
+            anim = animate1D(_u, x, t; linewidth=2, xlabel="x", ylabel="u(x,t)", title = "μ = $(round(mu[k]; digits = 2)), ")
             gif(anim, joinpath(dir, "traj_$(k).gif"), fps=30)
+
+            anim = animate1D(_udx, x, t; linewidth=2, xlabel="x", ylabel="u(x,t)", title = "μ = $(round(mu[k]; digits = 2)), ")
+            gif(anim, joinpath(dir, "traj_dx_$(k).gif"), fps=30)
+
+            anim = animate1D(_ud2x, x, t; linewidth=2, xlabel="x", ylabel="u(x,t)", title = "μ = $(round(mu[k]; digits = 2)), ")
+            gif(anim, joinpath(dir, "traj_d2x_$(k).gif"), fps=30)
         end
     end
 
@@ -97,9 +133,9 @@ end
 
 N = 8192
 dir = joinpath(@__DIR__, "visc_burg_param_ic", "burg_visc_re10k")
-device = gpu
+device = gpu_device()
 linsolve = KrylovJL_GMRES()
-odealg = # ImplicitEuler(; linsolve) # SSPRK83() # Tsit5()
+# odealg = # ImplicitEuler(; linsolve) # Tsit5()
 odealg = SSPRK43()
 (sol, V), (x, u, t, mu) = burgers_inviscid(N; device, dir, odealg)
 

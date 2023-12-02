@@ -7,10 +7,10 @@ using GeometryLearning
 
 using LinearAlgebra, ComponentArrays
 
-using Random, Lux, MLUtils                        # ML
+using Random, Lux, MLUtils, ParameterSchedulers   # ML
 using OptimizationOptimJL, OptimizationOptimisers # opt
 using LinearSolve, NonlinearSolve, LineSearches   # num
-using Plots, BSON, JLD2                           # vis / analysis
+using Plots, JLD2                                 # vis / save
 using CUDA, LuxCUDA, KernelAbstractions           # GPU
 using Setfield                                    # misc
 
@@ -24,19 +24,17 @@ begin
     # FFTW.set_num_threads(nt)
 end
 
-rng = Random.default_rng()
-Random.seed!(rng, 199)
-
 #======================================================#
-function makedata_autodecode(datafile)
+function makedata_autodecode(datafile::String)
     
     #==============#
     # load data
     #==============#
-    data = BSON.load(datafile)
-    x = data[:x]
-    u = data[:u] # [Nx, Nb, Nt]
-    mu = data[:mu] # [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
+    data = jldopen(datafile)
+    x = data["x"]
+    u = data["u"] # [Nx, Nb, Nt]
+    mu = data["mu"] # [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
+    close(data)
 
     # data sizes
     Nx, Nb, Nt = size(u)
@@ -106,6 +104,7 @@ function infer_autodecoder(
     decoder::NTuple{3, Any},
     data::Tuple, # (x, u, t)
     p0::AbstractVector;
+    rng::Random.AbstractRNG = Random.default_rng(),
     device = Lux.cpu_device(),
     learn_init::Bool = false,
     verbose::Bool = true,
@@ -182,98 +181,85 @@ function infer_autodecoder(
     return code, upred, MSEs
 end
 #======================================================#
-using ForwardDiff
-using ForwardDiff: Dual, Partials, value, partials
 
-# struct FDDeriv1Tag end
-# struct FDDeriv2Tag end
-# struct FDDeriv2TagInternal end
+_normalize(u::AbstractArray, μ::Number, σ::Number) = (u .- μ) / sqrt(σ)
+_unnormalize(u::AbstractArray, μ::Number, σ::Number) = u * sqrt(σ) .+ μ
 
-"""
-Based on SparseDiffTools.auto_jacvec
-
-MWE:
-
-```julia
-# f = x -> exp.(x)
-f = x -> x .^ 2
-x = [1.0, 2.0, 3.0, 4.0]
-v = ones(4)
-
-forwarddiff_deriv1(f, x)
-forwarddiff_deriv2(f, x)
-```
-"""
-function forwarddiff_deriv1(f, x)
-    T = eltype(x)
-    tag = ForwardDiff.Tag(f, T)
-    y = Dual{typeof(tag)}.(x, one(T))
-
-    fy = f(y)
-    fx = value.(fy)
-    df = partials.(fy, 1)
-    
-    fx, df
+function makeUfromX(X, NN, p, st, Icode, md)
+    x = _normalize(X, md.x̄, md.σx)
+    u = NN((x, Icode), p, st)[1]
+    _unnormalize(u, md.ū, md.σu)
 end
 
-# SparseDiffTools.SparseDiffToolsTag()
-# SparseDiffTools.DeivVecTag()
-# ForwardDiff.Tag(FDDeriv1Tag(), eltype(x))
+function dUdX(X, NN, p, st, Icode, md)
 
-# function ForwardDiff.checktag(
-#     ::Type{<:ForwardDiff.Tag{<:SparseDiffToolsTag, <:T}},
-#     f::F, x::AbstractArray{T}) where {T, F}
-#     return true
-# end
+    function _makeUfromX(X; NN = NN, p = p, st = st, Icode = Icode, md = md)
+        makeUfromX(X, NN, p, st, Icode, md)
+    end
 
-function forwarddiff_deriv2(f, x)
-    T = eltype(x)
-    tag1 = ForwardDiff.Tag(f, T)
-    tag2 = ForwardDiff.Tag(f, T)
-    z = Dual{typeof(tag1)}.(Dual{typeof(tag2)}.(x, one(T)), one(T))
-
-    fz = f(z)
-    fx = value.(value.(fz))
-    df = value.(partials.(fz, 1))
-    d2f = partials.(partials.(fz, 1), 1)
-
-    fx, df, d2f
+    finitediff_deriv2(_makeUfromX, X; ϵ = 0.05f0)
+    # finitediff_deriv2(_makeUfromX, X)#; ϵ = 0.001f0)
+    # forwarddiff_deriv2(_makeUfromX, X)
 end
 
-function finitediff_deriv2(f, x; ϵ = cbrt(eps(eltype(x))))
-    _fx = f(x .- ϵ)
-    fx  = f(x)
-    fx_ = f(x .+ ϵ)
+function dUdp(X, NN, p, st, Icode, md)
 
-    T = eltype(x)
-    ϵinv = inv(ϵ)
+    function _makeUfromX(p; X = X, NN = NN, st = st, Icode = Icode, md = md)
+        makeUfromX(X, NN, p, st, Icode, md)
+    end
 
-    df  = T(0.5) * ϵinv   * (fx_ - _fx)
-    d2f = T(1.0) * ϵinv^2 * (fx_ + _fx - 2fx)
-
-    fx, df, d2f
+    forwarddiff_jacobian(_makeUfromX, p)
 end
-#======================================================#
 
-function evolve_autodecoder(
+function dUdt(X, NN, p, st, Icode, md) # burgers RHS
+    U, Udx, Udxx = dUdX(X, NN, p, st, Icode, md)
+
+    # ν = md.ν
+    # -U .* Udx + (1/ν) * Udxx # visc burgers
+    -U .* Udx                # inviscid burgers
+end
+
+function residual_eulerbwd_burgers(NN, p, st, batch, nlsp)
+    XI, U0 = batch
+    t, Δt, ν, p0, md = nlsp
+    X, Icode = XI
+
+    Rhs = dUdt(X, NN, p, st, Icode, md) # RHS formed with current `p`
+    U1  = makeUfromX(X, NN, p, st, Icode, md)
+
+    Resid = U1 - U0 - Δt * Rhs
+    vec(Resid)
+end
+
+function residual_eulerfwd_burgers(NN, p, st, batch, nlsp)
+    XI, U0 = batch
+    t, Δt, ν, p0, md = nlsp
+    X, Icode = XI
+
+    Rhs = dUdt(X, NN, p, st, Icode, md) # RHS formed with `p0`
+    U1  = makeUfromX(X, NN, p, st, Icode, md)
+
+    Resid = U1 - U0 - Δt * Rhs
+    vec(Resid)
+end
+
+function residual_learn(NN, p, st, batch, nlsp)
+    XI, U0 = batch
+    X, Icode = XI
+    md = nlsp
+
+    U1 = makeUfromX(X, NN, p, st, Icode, md)
+
+    vec(U1 - U0)
+end
+
+#========================================================#
+
+function makemodel_autodecoder(
     decoder::NTuple{3, Any},
-    data::Tuple,
     p0::AbstractVector;
-    device = Lux.cpu_device(),
-    verbose::Bool = true,
-    md = nothing,
+    rng::Random.AbstractRNG = Random.default_rng(),
 )
-    #============================#
-    # make data
-    #============================#
-    Xdata, Udata, Tdata = data
-    Nx, Nt = size(Udata)
-    Icode = ones(Int32, Nx)
-
-    T = eltype(p0)
-    #============================#
-    # model
-    #============================#
     decoder_frozen = Lux.Experimental.freeze(decoder...)
     code_len = length(p0)
     NN = AutoDecoder(decoder_frozen[1], 1, code_len)
@@ -282,81 +268,75 @@ function evolve_autodecoder(
 
     copy!(p, p0)
     @set! st.decoder.frozen_params = decoder[2]
+    
+    NN, p, st
+end
 
-    #============================#
+function plot_derv(
+    decoder::NTuple{3, Any},
+    data::Tuple,
+    p0::AbstractVector;
+    md = nothing,
+)
+    Xdata, Udata = data
+    NN, p, st = makemodel_autodecoder(decoder, p0; rng)
+
+    Nx = length(Xdata)
+    Xbatch = reshape(Xdata, 1, Nx)
+    Icode = ones(Int32, 1, Nx)
+
+    U, Udx, Udxx = dUdX(Xbatch, NN, p, st, Icode, md) .|> vec
+
+    plt = plot()
+    plot!(plt, Xdata, Udata[:, 1], label = "u data", w = 2.0)
+
+    plot!(plt, Xdata, U  , label = "u"      , w = 2.0)
+    plot!(plt, Xdata, Udx, label = "udx"    , w = 2.0)
+    # plot!(_plt, Xplt, Udxx, label = "udxx", w = 2.0)
+    png(plt, "deriv_plt")
+    display(plt)
+
+    return plt
+end
+
+#========================================================#
+
+function evolve_autodecoder(
+    decoder::NTuple{3, Any},
+    data::Tuple,
+    p0::AbstractVector;
+    rng::Random.AbstractRNG = Random.default_rng(),
+    device = Lux.cpu_device(),
+    verbose::Bool = true,
+    md = nothing,
+)
+    # make data
+    Xdata, Udata, Tdata = data
+    Nx, Nt = size(Udata)
+    Icode = ones(Int32, Nx)
+
+    # make model
+    NN, p, st = makemodel_autodecoder(decoder, p0; rng)
+    T = eltype(p0)
+
     # move to device
-    #============================#
-
     Xdata = Xdata   |> device
     Icode = Icode   |> device
     Udata = Udata   |> device
     p, st = (p, st) |> device
 
-    #========================================================#
-    _normalize(u::AbstractArray, μ::Number, σ::Number) = (u .- μ) / sqrt(σ)
-    _unnormalize(u::AbstractArray, μ::Number, σ::Number) = u * sqrt(σ) .+ μ
-
-    function makeUfromX(X, NN, p, st, Icode, md)
-        x = _normalize(X, md.x̄, md.σx)
-        u = NN((x, Icode), p, st)[1]
-        _unnormalize(u, md.ū, md.σu)
-    end
-
-    function uderv(X, NN, p, st, Icode, md)
-
-        function _makeUfromX(X; NN = NN, p = p, st = st, Icode = Icode, md = md)
-            makeUfromX(X, NN, p, st, Icode, md)
-        end
-
-        # finitediff_deriv2(_makeUfromX, X; ϵ = 10 * cbrt(eps(Float32)))
-        forwarddiff_deriv2(_makeUfromX, X)
-    end
-
-    function dudt(X, NN, p, st, Icode, md) # burgers RHS
-        U, Udx, Udxx = uderv(X, NN, p, st, Icode, md)
-
-        # ν = md.ν
-        # -U .* Udx + (1/ν) * Udxx
-        -U .* Udx
-    end
-
-    function residual_eulerbwd(NN, p, st, batch, nlsp)
-        X_I, U0 = batch
-        t, Δt, ν, p0 = nlsp
-        X, Icode = X_I
-
-        Rhs = dudt(X, NN, p, st, Icode, md) # RHS formed with current `p`
-        U1  = makeUfromX(X, NN, p, st, Icode, md)
-
-        Resid = U1 - U0 - Δt * Rhs
-        vec(Resid)
-    end
-
-    function residual_eulerfwd(NN, p, st, batch, nlsp)
-        X_I, U0 = batch
-        t, Δt, ν, p0 = nlsp
-        X, Icode = X_I
-
-        Rhs = dudt(X, NN, p, st, Icode, md) # RHS formed with `p0`
-        U1  = makeUfromX(X, NN, p, st, Icode, md)
-
-        Resid = U1 - U0 - Δt * Rhs
-        vec(Resid)
-    end
-
-    residual = residual_eulerbwd
-    # residual = residual_eulerfwd
-
-    #========================================================#
     # TODO: make an ODEProblem about p
     # - how would ODEAlg compute abstol/reltol?
-    #========================================================#
 
     # optimizer
     autodiff = AutoForwardDiff()
     linsolve = QRFactorization()
     linesearch = LineSearch() # TODO
     nls = GaussNewton(;autodiff, linsolve, linesearch)
+
+    # misc
+    projection_type = Val(:LSPG)
+    nl_iters = 100
 
     #============================#
     # learn IC
@@ -371,20 +351,23 @@ function evolve_autodecoder(
     Ubatch = reshape(Udata[:, 1], 1, Nx)
     batch  = (Xbatch, Ubatch)
 
-    function residual_learn(NN, p, st, batch, nlsp)
-        X_I, U0 = batch
-        X, Icode = X_I
+    p0, _ = nlsq(NN, p, st, batch, nls;
+        residual = residual_learn,
+        nlsp = md,
+        maxiters = nl_iters,
+        verbose,
+    )
 
-        U1 = makeUfromX(X, NN, p, st, Icode, md)
-
-        vec(U1 - U0)
-    end
-
-    p0, _ = nlsq(NN, p, st, batch, nls; residual = residual_learn, maxiters = 20, verbose)
     U0 = makeUfromX(Xbatch[1], NN, p, st, Xbatch[2], md)
 
     if verbose
         println("#============================#")
+    end
+
+    if projection_type isa Val{:PODGalerkin}
+        J = dUdp(Xbatch[1], NN, p, st, Icode, md)
+        # compute v = dp/dt
+        # evolve p with time-stepper
     end
 
     #============================#
@@ -395,21 +378,12 @@ function evolve_autodecoder(
     Δt = T(1f-2)
     ν  = T(1f-4)
 
+    residual = residual_eulerbwd_burgers
+    # residual = residual_eulerfwd_burgers
+
     ps = (p0,)
     Us = (U0,)
     ts = (t0,)
-
-    # # plot derivatives
-    # begin
-    #     U, Udx, Udxx = uderv(Xbatch[1], NN, p, st, Xbatch[2], md) |> Lux.cpu_device()
-    #
-    #     _plt = plot()
-    #     plot!(_plt, Xplt, U    |> vec, label = "u"   , w = 2.0)
-    #     plot!(_plt, Xplt, Udx  |> vec, label = "udx" , w = 2.0)
-    #     # plot!(_plt, Xplt, Udxx |> vec, label = "udxx", w = 2.0)
-    #     png(_plt, "deriv_plt")
-    #     display(_plt)
-    # end
 
     #============================#
     # Time loop
@@ -422,7 +396,7 @@ function evolve_autodecoder(
         iter += 1
         batch = (Xbatch, U0)
         t1 = t0 + Δt
-        nlsp  = (t1, Δt, ν, p0)
+        nlsp = t1, Δt, ν, p0, md
 
         if verbose
             t_round  = round(t1; sigdigits=6)
@@ -433,10 +407,11 @@ function evolve_autodecoder(
         #============================#
         # solve
         #============================#
-        p1, l = nlsq(NN, p0, st, batch, nls; residual, nlsp, maxiters = 20, verbose)
+        @time p1, l = nlsq(NN, p0, st, batch, nls;
+            residual, nlsp, maxiters = nl_iters, verbose)
 
         # adaptive time-stepper
-        while l > 1f-6
+        while l > 1f-5
             if Δt < 5f-5
                 println("Δt = $Δt")
                 break
@@ -448,8 +423,8 @@ function evolve_autodecoder(
             Δt_round = round(Δt; sigdigits = 6)
             println("REPEATING Iter: $iter, MSE: $l_round, Time: $t_round, Δt: $Δt_round")
 
-            nlsp  = (t1, Δt, ν, p0)
-            p1, l = nlsq(NN, p0, st, batch, nls; residual, nlsp, maxiters = 20, verbose)
+            nlsp  = t1, Δt, ν, p0, md
+            @time p1, l = nlsq(NN, p0, st, batch, nls; residual, nlsp, maxiters = nl_iters, verbose)
         end
 
         #============================#
@@ -481,10 +456,11 @@ function evolve_autodecoder(
 end
 
 #======================================================#
-function post_process_autodecoder(
+function postprocess_autodecoder(
     datafile::String,
     modelfile::String,
     outdir::String;
+    rng::Random.AbstractRNG = Random.default_rng(),
     device = Lux.cpu_device(),
     makeplot::Bool = true,
     verbose::Bool = true,
@@ -493,11 +469,12 @@ function post_process_autodecoder(
     #==============#
     # load data
     #==============#
-    data = BSON.load(datafile)
-    Tdata = data[:t]
-    Xdata = data[:x]
-    Udata = data[:u]
-    mu = data[:mu] |> vec
+    data = jldopen(datafile)
+    Tdata = data["t"]
+    Xdata = data["x"]
+    Udata = data["u"]
+    mu = data["mu"] |> vec
+    close(data)
 
     # data sizes
     Nx, _, Nt = size(Udata)
@@ -571,7 +548,7 @@ function post_process_autodecoder(
         ud = _udata[:, k, :]
         data = (xdata, ud, Tdata)
 
-        _, up, er = infer_autodecoder(decoder, data, p0; device, verbose)
+        _, up, er = infer_autodecoder(decoder, data, p0; rng, device, verbose)
 
         Ud = ud * sqrt(md.σu) .+ md.ū
         Up = up * sqrt(md.σu) .+ md.ū
@@ -585,8 +562,6 @@ function post_process_autodecoder(
         end
     end
 
-    =#
-
     #==============#
     # evolve
     #==============#
@@ -594,23 +569,58 @@ function post_process_autodecoder(
     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     p0 = _code[2].weight[:, 1]
 
-    for k in [1, 2, 3, 4, 5] # axes(mu, 1)
+    for k in 1:1 #[1, 2, 3, 4, 5] # axes(mu, 1)
         Ud = Udata[:, k, :]
         data = (Xdata, Ud, Tdata)
-        _, Up, Tpred = evolve_autodecoder(decoder, data, p0; device, verbose, md)
-
+        _, Up, Tpred = evolve_autodecoder(decoder, data, p0; rng, device, verbose, md)
+    
         if makeplot
             _mu = round(mu[k], digits = 2)
             # anim = animate1D(Up, Xdata, Tpred; linewidth=2,
             #     xlabel="x", ylabel="u(x,t)", title = "μ = $_mu, ")
             # _name = k in md._Ib ? "evolve_train$(k)" : "evolve_test$(k)"
             # gif(anim, joinpath(outdir, "$(_name).gif"), fps=30)
-
+           
             _plt = plot(title = "μ=$_mu", xlabel = "x", ylabel = "x", legend = false)
             plot!(_plt, Xdata, Up[:, 1:10:min(size(Up, 2), 300)])
             png(_plt, joinpath(outdir, "evolve_$k"))
         end
     end
+
+    =#
+
+    #==============#
+    # check derivative
+    #==============#
+
+    begin
+        k = 1
+        i = 80
+        _data = (Xdata, _Udata[:, k, i])
+    
+        decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+        p0 = _code[2].weight[:, 100]
+    
+        plt = plot_derv(decoder, _data, p0; md)
+        png(plt, joinpath(outdir, "derv"))
+        display(plt)
+    end
+
+    # begin
+    #     k = 1
+    #     Ud = Udata[:, k, :]
+    #     data = (Xdata, Ud, Tdata)
+    #
+    #     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    #     p0 = _code[2].weight[:, 1]
+    #
+    #     _, Up, Tpred = evolve_autodecoder(decoder, data, p0; rng, device, verbose, md)
+    #
+    #     _plt = plot(xlabel = "x", ylabel = "x", legend = false)
+    #     plot!(_plt, Xdata, Up[:, 1:10:min(size(Up, 2), 300)])
+    #     png(_plt, joinpath(outdir, "evolve_$k"))
+    #     display(_plt)
+    # end
 
     #==============#
     # Done
@@ -631,36 +641,84 @@ end
 
 function train_autodecoder(
     datafile::String,
-    modelfile::String;
+    modeldir::String;
     device = Lux.cpu_device(),
 )
-    E = 3000
-    opts = 1f-4 .* (10, 5, 2, 1, 0.5, 0.2,) .|> Optimisers.Adam
-    nepochs = E/6 * ones(6) .|> Int |> Tuple
     _data, data_, metadata = makedata_autodecode(datafile)
+    dir = modeldir
 
-    dir = modelfile
-    opts = (opts..., BFGS(),)
-    nepochs = (nepochs..., E)
+    #--------------------------------------------#
+    # training hyper-params
+    #--------------------------------------------#
+    ################
+    E = 1_750
+    lrs = (1f-2, 1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
+    opts = Optimisers.Adam.(lrs)
+    nepochs = (50, Int.(E/7*ones(7))...)
+    schedules = Step.(lrs, 1f0, Inf32)
 
-    w = 32 # width
-    l = 3  # latent
+    ################
+    # E = 2000
+    # nepochs = (50, E,)
+    # schedules = (
+    #     Step(1f-2, 1f0, Inf32),                        # constant warmup
+    #     # Triangle(λ0 = 1f-5, λ1 = 1f-3, period = 20), # gradual warmup
+    #     # Exp(1f-3, 0.996f0),
+    #     SinExp(λ0 = 1f-5, λ1 = 1f-3, period = 50, γ = 0.995f0),
+    #     # CosAnneal(λ0 = 1f-5, λ1 = 1f-3, period = 50),
+    # )
+    # opts = fill(Optimisers.Adam(), length(nepochs)) |> Tuple
+    ################
 
-    _batchsize = 1024 * 10
-    batchsize_ = 1024 * 300
+    _batchsize, batchsize_  = 1024 .* (10, 300)
+
+    #--------------------------------------------#
+    # architecture hyper-params
+    #--------------------------------------------#
+    l = 08  # latent
+    h = 10  # hidden layers
+    w = 096 # width
+    act = sin
+
+    init_wt_in = scaled_siren_init(3f1)
+    init_wt_hd = scaled_siren_init(1f0)
+    init_wt_fn = glorot_uniform
+
+    init_bias = rand32 # zeros32
+    use_bias_fn = false
+
+    # lossfun = mse
+    lossfun = l2reg(mse, 1f0; property = :decoder)
+    # reg: 1f-1 -> some change, MSE 4f-5
+    # reg: 1f-0 -> wiggles go down. MSE 1f-4
+
+    #----------------------#----------------------#
+
+    in_layer = Dense(l+1, w, act; init_weight = init_wt_in, init_bias)
+    hd_layer = Dense(w  , w, act; init_weight = init_wt_hd, init_bias)
+    fn_layer = Dense(w  , 1; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
 
     decoder = Chain(
-        Dense(l+1, w, sin; init_weight = scaled_siren_init(3f1), init_bias = rand),
-        Dense(w  , w, sin; init_weight = scaled_siren_init(1f0), init_bias = rand),
-        Dense(w  , w, elu; init_weight = scaled_siren_init(1f0), init_bias = rand),
-        Dense(w  , w, elu; init_weight = scaled_siren_init(1f0), init_bias = rand),
-        Dense(w  , 1; use_bias = false),
+        in_layer,
+        fill(hd_layer, h)...,
+        fn_layer,
     )
 
     NN = AutoDecoder(decoder, metadata._Ns, l)
 
-    model, ST = train_model(NN, _data;
-        rng, _batchsize, batchsize_, opts, nepochs, device, metadata, dir)
+    # second order optimizer
+    # if it can fit on 11 gb vRAM on 2080Ti
+    if Lux.parameterlength(decoder) < 35_000
+        opts = (opts..., LBFGS(),)
+        nepochs = (nepochs..., round(Int, E / 10))
+        schedules = (schedules..., Step(1f0, 1f0, Inf32))
+    end
+
+    @time model, ST = train_model(NN, _data; rng,
+        _batchsize, batchsize_,
+        opts, nepochs, schedules,
+        device, dir, metadata, lossfun
+    )
 
     plot_training(ST...) |> display
 
@@ -671,22 +729,31 @@ end
 # main
 #======================================================#
 
+rng = Random.default_rng()
+Random.seed!(rng, 460)
+
 device = Lux.gpu_device()
+datafile = joinpath(@__DIR__, "burg_visc_re10k", "data.jld2")
 
-datafile = joinpath(@__DIR__, "burg_visc_re10k", "data.bson")
-modelfile = joinpath(@__DIR__, "model_dec", "model.jld2")
-outdir = joinpath(@__DIR__, "result_dec")
+modeldir = joinpath(@__DIR__, "model_dec_sin_08_10_96_reg")
+modelfile = joinpath(modeldir, "model_08.jld2")
 
-# train_autodecoder(datafile, modelfile; device)
-post_process_autodecoder(datafile, modelfile, outdir;
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# model, STATS = train_autodecoder(datafile, modeldir; device)
+
+# modeldir = joinpath(@__DIR__, "model_dec_sin_03_10_96_reg/")
+# modelfile = joinpath(modeldir, "model_08.jld2")
+
+outdir = joinpath(dirname(modelfile), "results")
+postprocess_autodecoder(datafile, modelfile, outdir; rng,
     device, makeplot = true, verbose = true)
-#======================================================#
-# f = x -> x .^ 2
-# # f = x -> exp.(x)
-# x = [1.0, 2.0, 3.0, 4.0]
-# v = ones(4)
-# forwarddiff_deriv1(f, x)
-# forwarddiff_deriv2(f, x)
 
+#======================================================#
+# IDEAS: controlling noisy gradients
+# - L2 regularization on weights
+# - Gradient supervision
+# - secondary (corrector) network for gradient supervision
+# - use ParameterSchedulers.jl
+#======================================================#
 # nothing
 #

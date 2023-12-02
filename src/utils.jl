@@ -97,4 +97,8 @@ function remake_ca(
     end
 end
 #===========================================================#
+
+_getdata(loader::MLUtils.DataLoader) = loader.data
+_getdata(loader::CuIterator) = _getdata(loader.batches)
+#===========================================================#
 #

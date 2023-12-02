@@ -177,7 +177,6 @@ function HyperDecoder(
     )
 
     HyperNet(code_gen, evaluator)
-    nothing
 end
 
 function get_hyperdecoder(NN::Lux.AbstractExplicitLayer, p, st)
@@ -185,19 +184,20 @@ function get_hyperdecoder(NN::Lux.AbstractExplicitLayer, p, st)
 end
 #======================================================#
 struct HyperNet{W <: Lux.AbstractExplicitLayer, C <: Lux.AbstractExplicitLayer, A} <:
-       Lux.AbstractExplicitContainerLayer{(:weight_generator, :core_network)}
+       Lux.AbstractExplicitContainerLayer{(:weight_generator, :evaluator)}
     weight_generator::W
-    core_network::C
+    evaluator::C
     ca_axes::A
 end
 
-function HyperNet(w::Lux.AbstractExplicitLayer, c::Lux.AbstractExplicitLayer)
-    ca_axes = Lux.initialparameters(Random.default_rng(), c) |> ComponentArray |> getaxes
-    return HyperNet(w, c, ca_axes)
+function HyperNet(wt_gen::Lux.AbstractExplicitLayer, evltr::Lux.AbstractExplicitLayer)
+    rng = Random.default_rng()
+    ca_axes = Lux.initialparameters(rng, evltr) |> ComponentArray |> getaxes
+    return HyperNet(wt_gen, evltr, ca_axes)
 end
 
-function Lux.initialparameters(rng::AbstractRNG, h::HyperNet)
-    return (weight_generator=Lux.initialparameters(rng, h.weight_generator),)
+function Lux.initialparameters(rng::AbstractRNG, hn::HyperNet)
+    return (weight_generator=Lux.initialparameters(rng, hn.weight_generator),)
 end
 
 function (hn::HyperNet)(x, ps, st::NamedTuple)
@@ -208,8 +208,8 @@ end
 
 function (hn::HyperNet)((x, y)::T, ps, st::NamedTuple) where {T <: Tuple}
     ps_ca, st = hn(x, ps, st)
-    pred, st_ = hn.core_network(y, ps_ca, st.core_network)
-    @set! st.core_network = st_
+    pred, st_ = hn.evaluator(y, ps_ca, st.evaluator)
+    @set! st.evaluator = st_
     return pred, st
 end
 

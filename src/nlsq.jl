@@ -40,14 +40,15 @@ function nlsq(
     nlsprob = NonlinearLeastSquaresProblem{false}(nlsloss, p0, nlsp)
     nlssol  = solve(nlsprob, nls; maxiters, callback, abstol)
 
-    resid = nlssol.resid
-    resid = round(sum(abs2, resid) / length(resid); sigdigits = 8)
+    mse = sum(abs2, nlssol.resid) / length(nlssol.resid)
+    steps = nlssol.stats.nsteps
+    retcode = nlssol.retcode
 
     if verbose
-        println(io, "Steps: $(nlssol.stats.nsteps), MSE: $resid, Ret: $(nlssol.retcode)")
+        println(io, "Steps: $(steps), MSE: $(round(mse, sigdigits = 8)), Ret: $(retcode)")
     end
 
-    nlssol.u, resid
+    nlssol.u, mse, steps, retcode
 end
 
 #======================================================#
