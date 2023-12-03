@@ -513,8 +513,6 @@ function postprocess_autodecoder(
     _udata = udata[:, md._Ib, :] # normalized
     udata_ = udata[:, md.Ib_, :]
 
-    #=
-
     #==============#
     # from training data
     #==============#
@@ -561,6 +559,8 @@ function postprocess_autodecoder(
             gif(anim, joinpath(outdir, "$(_name).gif"), fps=30)
         end
     end
+
+    #=
 
     #==============#
     # evolve
@@ -651,10 +651,10 @@ function train_autodecoder(
     # training hyper-params
     #--------------------------------------------#
     ################
-    E = 1_750
+    E = 1400
     lrs = (1f-2, 1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
     opts = Optimisers.Adam.(lrs)
-    nepochs = (50, Int.(E/7*ones(7))...)
+    nepochs = (20, Int.(E/7*ones(7))...)
     schedules = Step.(lrs, 1f0, Inf32)
 
     ################
@@ -670,14 +670,14 @@ function train_autodecoder(
     # opts = fill(Optimisers.Adam(), length(nepochs)) |> Tuple
     ################
 
-    _batchsize, batchsize_  = 1024 .* (10, 300)
+    _batchsize, batchsize_  = 1024 .* (10, 3000)
 
     #--------------------------------------------#
     # architecture hyper-params
     #--------------------------------------------#
     l = 08  # latent
-    h = 10  # hidden layers
-    w = 096 # width
+    h = 05  # hidden layers
+    w = 128 # width
     act = sin
 
     init_wt_in = scaled_siren_init(3f1)
@@ -708,11 +708,11 @@ function train_autodecoder(
 
     # second order optimizer
     # if it can fit on 11 gb vRAM on 2080Ti
-    if Lux.parameterlength(decoder) < 35_000
-        opts = (opts..., LBFGS(),)
-        nepochs = (nepochs..., round(Int, E / 10))
-        schedules = (schedules..., Step(1f0, 1f0, Inf32))
-    end
+    # if Lux.parameterlength(decoder) < 35_000
+    #     opts = (opts..., LBFGS(),)
+    #     nepochs = (nepochs..., round(Int, E / 10))
+    #     schedules = (schedules..., Step(1f0, 1f0, Inf32))
+    # end
 
     @time model, ST = train_model(NN, _data; rng,
         _batchsize, batchsize_,
@@ -735,11 +735,11 @@ Random.seed!(rng, 460)
 device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "burg_visc_re10k", "data.jld2")
 
-modeldir = joinpath(@__DIR__, "model_dec_sin_08_10_96_reg")
+modeldir = joinpath(@__DIR__, "model_dec_sin_08_05_128_reg")
 modelfile = joinpath(modeldir, "model_08.jld2")
 
-# isdir(modeldir) && rm(modeldir, recursive = true)
-# model, STATS = train_autodecoder(datafile, modeldir; device)
+isdir(modeldir) && rm(modeldir, recursive = true)
+model, STATS = train_autodecoder(datafile, modeldir; device)
 
 # modeldir = joinpath(@__DIR__, "model_dec_sin_03_10_96_reg/")
 # modelfile = joinpath(modeldir, "model_08.jld2")

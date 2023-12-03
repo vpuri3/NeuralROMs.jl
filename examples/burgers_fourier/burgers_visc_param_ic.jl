@@ -30,7 +30,7 @@ end
 
 function burgers_inviscid(N, mu = LinRange(0.6, 1.2, 7)', p = nothing;
     tspan=(0.f0, 0.5f0),
-    tsave=100,
+    ntsave=1000,
     odealg=SSPRK43(),
     odekw = (;),
     device = cpu_device(),
@@ -76,7 +76,7 @@ function burgers_inviscid(N, mu = LinRange(0.6, 1.2, 7)', p = nothing;
     odefunc = cache_operator(A-C+F, u0)
 
     """ time discr """
-    tsave = range(tspan...; length=tsave)
+    tsave = range(tspan...; length=ntsave)
     prob = ODEProblem(odefunc, u0, tspan, p; reltol=1f-6, abstol=1f-5)
 
     """ solve """
@@ -113,9 +113,10 @@ function burgers_inviscid(N, mu = LinRange(0.6, 1.2, 7)', p = nothing;
         jldsave(filename; x, u, udx, ud2x, t, mu, metadata)
 
         for k in 1:size(u, 2)
-            _u = @view u[:, k, :]
-            _udx = @view udx[:, k, :]
-            _ud2x = @view ud2x[:, k, :]
+            It = LinRange(1, ntsave, 100) .|> Base.Fix1(round, Int)
+            _u = @view u[:, k, It]
+            _udx = @view udx[:, k, It]
+            _ud2x = @view ud2x[:, k, It]
 
             anim = animate1D(_u, x, t; linewidth=2, xlabel="x", ylabel="u(x,t)", title = "μ = $(round(mu[k]; digits = 2)), ")
             gif(anim, joinpath(dir, "traj_$(k).gif"), fps=30)

@@ -112,7 +112,7 @@ function train_model(
         t20 = round(time2 - time0; sigdigits = 8)
         println(io, "#======================#")
         println(io, "Optimization Round $iopt done")
-        println(io, "Time: $(t21) || Total time: $(t20)")
+        println(io, "Time: $(t21)s || Total time: $(t20)s")
         println(io, "#======================#")
 
         cb_stats(p, st)
@@ -484,7 +484,7 @@ function optimize(
 
     for epoch in 1:nepoch
         # update LR
-        !isnothing(schedule) && Optimisers.adjust!(opt_st, schedule(epoch))
+        isnothing(schedule) || Optimisers.adjust!(opt_st, schedule(epoch))
 
         # progress bar
         prog = ProgressMeter.Progress(
@@ -641,7 +641,7 @@ early stopping based on mini-batch loss from test set
 https://github.com/jeffheaton/app_deep_learning/blob/main/t81_558_class_03_4_early_stop.ipynb
 """
 function make_minconfig(early_stopping, patience, l, p, st, opt_st)
-    (; count = 0, early_stopping, patience, l, p, st, opt_st)
+    (; count = 0, early_stopping, patience, l, p, st, opt_st,)
 end
 
 function update_minconfig(
@@ -659,19 +659,24 @@ function update_minconfig(
             "Improvement in loss found: $(l) < $(minconfig.l)\n",
             color = :green,
         )
-        minconfig = (; minconfig..., count = 0, l, p, st, opt_st)
+        p = deepcopy(p)
+        st = deepcopy(st)
+        opt_st = deepcopy(opt_st)
+        minconfig = (; minconfig..., count = 0, l, p, st, opt_st,)
     else
         printstyled(io,
-            "No improvement in loss found in the last "
-            * "$(minconfig.count) epochs. Here, $(l) > $(minconfig.l)\n",
+            "No improvement in loss found in the last \
+            $(minconfig.count) epochs. $(l) > $(minconfig.l)\n",
             color = :red,
         )
         @set! minconfig.count = minconfig.count + 1
     end
 
     if (minconfig.count >= minconfig.patience) & minconfig.early_stopping
-        println(io, "Early Stopping triggered after $(minconfig.count)"
-            * "epochs of no improvement.")
+        printstyled(io, "Early Stopping triggered after $(minconfig.count) \
+            epochs of no improvement.\n",
+            color = :red,
+        )
         ifbreak = true
     end
 

@@ -75,6 +75,8 @@ function get_INR_encoder_decoder(NN::Lux.AbstractExplicitLayer, p, st)
 end
 
 #======================================================#
+# Auto Decoder
+#======================================================#
 """
     AutoDecoder
 
@@ -123,6 +125,24 @@ function get_autodecoder(
 
     remake_ca(decoder...), remake_ca(code...)
 end
+
+function freeze_autodecoder(
+    decoder::NTuple{3, Any},
+    p0::AbstractVector;
+    rng::Random.AbstractRNG = Random.default_rng(),
+)
+    decoder_frozen = Lux.Experimental.freeze(decoder...)
+    code_len = length(p0)
+    NN = AutoDecoder(decoder_frozen[1], 1, code_len)
+    p, st = Lux.setup(rng, NN)
+    p = ComponentArray(p)
+
+    copy!(p, p0)
+    @set! st.decoder.frozen_params = decoder[2]
+    
+    NN, p, st
+end
+
 #======================================================#
 struct OneEmbedding{F} <: Lux.AbstractExplicitLayer
     len::Int
@@ -150,6 +170,8 @@ function (e::OneEmbedding)(x::AbstractArray{<:Integer}, ps, st)
     return reshape(code, e.len, size(x)...), st
 end
 
+#======================================================#
+# Hyper Decoder
 #======================================================#
 """
     HyperDecoder

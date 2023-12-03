@@ -88,8 +88,13 @@ export
     PermutedBatchNorm,
     SplitRows,
     ImplicitEncoderDecoder,
+
     AutoDecoder,
+    get_autodecoder,
+    freeze_autodecoder,
+
     HyperNet,
+    get_hyperdecoder,
 
     # transforms
     FourierTransform,
@@ -110,7 +115,7 @@ export
     plot_training,
     
     # nlsq
-    nlsq,
+    nonlinleastsq,
     
     # metrics
     mae,
