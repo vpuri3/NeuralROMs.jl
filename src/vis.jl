@@ -45,6 +45,35 @@ end
 
 #===============================================================#
 
+function plot_derivatives1D_autodecoder(
+    decoder::NTuple{3, Any},
+    Xdata,
+    p0::AbstractVector,
+    md = nothing;
+    second_derv::Bool = true,
+    autodiff = AutoForwardDiff(),
+    ϵ = nothing,
+)
+    NN, p, st = freeze_autodecoder(decoder, p0)
+
+    Nx = length(Xdata)
+    Xbatch = reshape(Xdata, 1, Nx)
+    Icode = ones(Int32, 1, Nx)
+
+    U, Udx, Udxx = dUdX2(Xbatch, NN, p, st, Icode, md; autodiff, ϵ) .|> vec
+
+    plt = plot(xabel = "x", ylabel = "u(x,t)")
+    plot!(plt, Xdata, U  , label = "u"  , w = 2.0)
+    plot!(plt, Xdata, Udx, label = "udx", w = 2.0)
+
+    if second_derv
+        plot!(plt, Xdata, Udxx, label = "udxx", w = 2.0)
+    end
+
+    return plt
+end
+
+#===============================================================#
 """
 $SIGNATURES
 

@@ -54,12 +54,14 @@ include("metrics.jl")
 include("autodiff.jl")
 
 include("train.jl")
-include("nlsq.jl")
+include("nonlinleastsq.jl")
 
 include("layers.jl")
 
 include("transform.jl")
 include("operator.jl")
+
+include("evolve.jl")
 
 export
     # vis
@@ -114,8 +116,21 @@ export
     optimize,
     plot_training,
     
-    # nlsq
+    # nonlinleastsq
     nonlinleastsq,
+
+    # evolve
+    shiftdata,
+    unshiftdata,
+
+    makeUfromX,
+    dUdX1,
+    dUdX2,
+    dUdp,
+
+    make_residual,
+    timestepper_residual_euler,
+    residual_learn,
     
     # metrics
     mae,

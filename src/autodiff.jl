@@ -1,10 +1,9 @@
+#
+const ADInputTypes{T} = Union{T, AbstractArray{T}} where{T <: Number}
+
 #======================================================#
 # ForwardDiff
 #======================================================#
-# struct FDDeriv1Tag end
-# struct FDDeriv2Tag end
-# struct FDDeriv2TagInternal end
-
 """
 Based on SparseDiffTools.auto_jacvec
 
@@ -19,30 +18,30 @@ forwarddiff_deriv1(f, x)
 forwarddiff_deriv2(f, x)
 ```
 """
-function forwarddiff_deriv1(f, x)
-    T = eltype(x)
+function forwarddiff_deriv1(f,
+    x::ADInputTypes{T},
+) where{T}
+
     tag = ForwardDiff.Tag(f, T)
     y = Dual{typeof(tag)}.(x, one(T))
 
     fy = f(y)
     fx = value.(fy)
-    df = partials.(fy, 1)
+    fdx = partials.(fy, 1)
     
-    fx, df
+    fx, fdx
 end
 
-# SparseDiffTools.SparseDiffToolsTag()
-# SparseDiffTools.DeivVecTag()
-# ForwardDiff.Tag(FDDeriv1Tag(), eltype(x))
+function forwarddiff_deriv1(f,
+    (x, y)::NTuple{2, ADInputTypes{T}},
+) where{T}
+    error("TODO. What should signature of f be? f(x, y) ?")
+end
 
-# function ForwardDiff.checktag(
-#     ::Type{<:ForwardDiff.Tag{<:SparseDiffToolsTag, <:T}},
-#     f::F, x::AbstractArray{T}) where {T, F}
-#     return true
-# end
+function forwarddiff_deriv2(f,
+    x::ADInputTypes{T},
+) where{T}
 
-function forwarddiff_deriv2(f, x)
-    T = eltype(x)
     tag1 = ForwardDiff.Tag(f, T)
     tag2 = ForwardDiff.Tag(f, T)
     z = Dual{typeof(tag1)}.(Dual{typeof(tag2)}.(x, one(T)), one(T))
@@ -55,41 +54,69 @@ function forwarddiff_deriv2(f, x)
     fx, df, d2f
 end
 
-function forwarddiff_jacobian(f, x)
+function forwarddiff_jacobian(f,
+    x::ADInputTypes{T},
+) where{T}
     ForwardDiff.jacobian(f, x)
 end
+
+# SparseDiffTools.SparseDiffToolsTag()
+# SparseDiffTools.DeivVecTag()
+# ForwardDiff.Tag(FDDeriv1Tag(), eltype(x))
+
+# struct FDDeriv1Tag end
+# struct FDDeriv2Tag end
+# struct FDDeriv2TagInternal end
+
+# function ForwardDiff.checktag(
+#     ::Type{<:ForwardDiff.Tag{<:SparseDiffToolsTag, <:T}},
+#     f::F, x::AbstractArray{T}) where {T, F}
+#     return true
+# end
 
 #======================================================#
 # FiniteDiff
 #======================================================#
-function finitediff_deriv1(f, x; ϵ = cbrt(eps(eltype(x))))
+function finitediff_deriv1(f,
+    x::ADInputTypes{T};
+    ϵ = nothing,
+) where{T}
+
+    ϵ = isnothing(ϵ) ? cbrt(eps(T)) : T.(ϵ)
+    ϵinv = inv(ϵ)
+
     _fx = f(x .- ϵ)
     fx  = f(x)
     fx_ = f(x .+ ϵ)
 
-    T = eltype(x)
-    ϵinv = inv(ϵ)
+    fdx = T(0.5) * ϵinv   * (fx_ - _fx)
 
-    df  = T(0.5) * ϵinv   * (fx_ - _fx)
-
-    fx, df
+    fx, fdx
 end
 
-function finitediff_deriv2(f, x; ϵ = cbrt(eps(eltype(x))))
+function finitediff_deriv2(f,
+    x::ADInputTypes{T};
+    ϵ = nothing,
+) where{T}
+
+    ϵ = isnothing(ϵ) ? cbrt(eps(T)) : T.(ϵ)
+    ϵinv = inv(ϵ)
+
     _fx = f(x .- ϵ)
     fx  = f(x)
     fx_ = f(x .+ ϵ)
 
-    T = eltype(x)
-    ϵinv = inv(ϵ)
+    fdx  = T(0.5) * ϵinv   * (fx_ - _fx)
+    fdxx = T(1.0) * ϵinv^2 * (fx_ + _fx - 2fx)
 
-    df  = T(0.5) * ϵinv   * (fx_ - _fx)
-    d2f = T(1.0) * ϵinv^2 * (fx_ + _fx - 2fx)
-
-    fx, df, d2f
+    fx, fdx, fdxx
 end
 
-function finitediff_jacobian(f, x)
+function finitediff_jacobian(f,
+    x::ADInputTypes{T};
+    ϵ = nothing,
+) where{T}
+
     FiniteDiff.finite_difference_jacobian(f, x, Val{:central})
 end
 

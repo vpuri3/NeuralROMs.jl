@@ -30,7 +30,6 @@ function nonlinleastsq(
         vec(r)
     end
 
-    # TODO - callback not being called. Read NonlinearSolve docs
     if verbose
         iter = Ref(0)
         callback = !isnothing(callback) ? callback : function(nlsx, l)
@@ -58,6 +57,68 @@ function nonlinleastsq(
     end
 
     nlssol.u, nlssol
+end
+#======================================================#
+
+function nonlinleastsq(
+    NN::Lux.AbstractExplicitLayer,
+    p0::Union{NamedTuple, AbstractVector},
+    st::NamedTuple,
+    data::Tuple,
+    opt::Union{Optim.AbstractOptimizer, Optimisers.AbstractRule};
+    maxiters::Integer = 50,
+    abstol = nothing,
+    reltol = nothing,
+    adtype::ADTypes.AbstractADType = AutoZygote(),
+    io::Union{Nothing, IO} = stdout,
+    verbose::Bool = true,
+    residual = nothing, # (NN, p, st, data) -> resid
+    callback = nothing,
+)
+    st = Lux.testmode(st)
+    p0 = ComponentArray(p0)
+
+    residual = if isnothing(residual)
+        (NN, p, st, data) -> NN(data[1], p, st)[1] - data[2]
+    else
+        residual
+    end
+
+    function optloss(optx, optp)
+        r = residual(NN, optx, st, data)
+        sum(abs2, r) / length(r)
+    end
+
+    if verbose
+        iter = Ref(0)
+        callback = !isnothing(callback) ? callback : function(nlsx, l)
+            iter[] += 1
+            println(io, "NonlinearSolve [$(iter[]) / $maxiters] MSE: $l")
+            return false
+        end
+    end
+
+    optfun  = OptimizationFunction(optloss, adtype)
+    optprob = OptimizationProblem(optfun, p0)
+    optsol  = solve(optprob, opt;
+        maxiters,
+        callback,
+        abstol,
+        reltol,
+    )
+
+
+    if verbose
+        obj = round(optsol.objective; sigdigits = 8)
+        tym = round(optsol.solve_time; sigdigits = 8)
+
+        println(io, "#=======================#")
+        @show optsol.retcode
+        println(io, "Achieved objective value $(obj) in time $(tym)s.")
+        println(io, "#=======================#")
+    end
+
+    optsol.u, optsol
 end
 #======================================================#
 
