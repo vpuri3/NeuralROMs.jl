@@ -169,25 +169,11 @@ function infer_autodecoder(
     return code, upred, MSEs
 end
 
-#======================================================#
-function dudtRHS_advection(
-    model::AbstractNeuralModel,
-    x::AbstractArray,
-    p::AbstractVector,
-    t::Real,
-    md;
-    autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
-    ϵ = nothing,
-)
-    u, udx, udxx = dudx2(model, x, p; autodiff, ϵ)
-
-    c = md.md_data.c
-    -c .* udx
-end
-
 #========================================================#
 function evolve_autodecoder(
+    prob::AbstractPDEProblem,
     decoder::NTuple{3, Any},
+    metadata::NamedTuple,
     data::Tuple,
     p0::AbstractVector;
     rng::Random.AbstractRNG = Random.default_rng(),
@@ -195,7 +181,6 @@ function evolve_autodecoder(
     linsolve = nothing,
     device = Lux.cpu_device(),
     verbose::Bool = true,
-    md = nothing,
 )
     #============================#
     # set up
@@ -216,7 +201,8 @@ function evolve_autodecoder(
     # make model
     NN, p0, st = freeze_autodecoder(decoder, p0; rng)
     Icode = ones(Int32, 1, Nx)
-    model = NeuralSpaceModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
+    model = NeuralSpaceModel(NN, st, Icode,
+        metadata.x̄, metadata.σx, metadata.ū, metadata.σu)
 
     # move to device
     xdata = xdata |> device
@@ -245,15 +231,14 @@ function evolve_autodecoder(
     nlsabstol = T(1f-6)
     Δt = T(5f-2)
 
-    implicit_timestepper = false
     autodiff_space = AutoForwardDiff()
     ϵ_space = nothing
 
-    dudtRHS = dudtRHS_advection
-    timestepper_residual = timestepper_residual_euler
+    # timestepper = EulerBackward()
+    timestepper = EulerForward()
 
-    # scheme = LeastSqPetrovGalerkin()
-    # scheme = PODGalerkin(nothing)
+    # scheme = LeastSqPetrovGalerkin(nlsolve)
+    # scheme = PODGalerkin(linsolve)
 
     projection_type = Val(:PODGalerkin)
     # projection_type = Val(:LSPG)
@@ -290,11 +275,9 @@ function evolve_autodecoder(
     #============================#
     # Set up solver
     #============================#
-    residual = make_residual(dudtRHS, timestepper_residual;
-        implicit = implicit_timestepper,
+    residual = make_residual(prob, timestepper;
         autodiff = autodiff_space,
         ϵ = ϵ_space,
-        md,
     )
 
     tinit, tfinal = extrema(tdata) .|> T
@@ -339,6 +322,8 @@ function evolve_autodecoder(
 
         p1 = if projection_type isa Val{:LSPG}
             nlsp = t1, Δt, t0, p0, u0
+
+            # TODO - try the CROM way?
 
             p1, nlssol = nonlinleastsq(
                 model, p0, batch, nlssolve;
@@ -396,14 +381,14 @@ function evolve_autodecoder(
         elseif projection_type isa Val{:PODGalerkin}
             # dU/dp (N, n), dU/dt (N,)
             J0 = dudp(model, xbatch, p0; autodiff = autodiff_space, ϵ = ϵ_space)
-            rhs0 = dudtRHS(model, xbatch, p0, t0, md)
+            rhs0 = dudtRHS(prob, model, xbatch, p0, t0; autodiff = autodiff_space, ϵ = ϵ_space)
 
             dpdt0 = J0 \ vec(rhs0)
-            p1 = p0 + Δt * dpdt0
+            p1 = apply_timestep(timestepper, Δt, p0, dpdt0)
 
             u1 = model(xbatch, p1)
-            rhs1 = dudtRHS(model, xbatch, p1, t1, md)
-            resid = timestepper_residual(Δt, u0, u1, rhs1)
+            rhs1 = dudtRHS(prob, model, xbatch, p1, t1)
+            resid = compute_residual(timestepper, Δt, u0, u1, rhs1)
 
             linmse = sum(abs2, resid) / length(resid)
             lininf = norm(resid, Inf)
@@ -582,7 +567,8 @@ function postprocess_autodecoder(
     # for k in 1:1 # axes(mu, 1)
     #     Ud = Udata[:, k, :]
     #     data = (Xdata, Ud, Tdata)
-    #     _, Up, Tpred = evolve_autodecoder(decoder, data, p0; rng, device, verbose, md)
+    #     @time _, Up, Tpred = evolve_autodecoder(prob, decoder, md, data, p0;
+    #         rng, device, verbose)
     #
     #     if makeplot
     #         xlabel = "x"
@@ -629,7 +615,9 @@ function postprocess_autodecoder(
         decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
         p0 = _code[2].weight[:, 1]
     
-        @time _, Up, Tpred = evolve_autodecoder(decoder, data, p0; rng, device, verbose, md)
+        prob = Advection1D(0.25f0)
+        @time _, Up, Tpred = evolve_autodecoder(prob, decoder, md, data, p0;
+            rng, device, verbose)
     
         idx = LinRange(1, size(Up, 2), 11) .|> Base.Fix1(round, Int)
     

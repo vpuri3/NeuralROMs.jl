@@ -17,12 +17,7 @@ function nonlinleastsq(
 )
     p0 = ComponentArray(p0)
 
-    residual = if isnothing(residual)
-        # data regression
-        (model, p, data, nlsp) -> model(data[1], p) - data[2]
-    else
-        residual
-    end
+    residual = isnothing(residual) ? residual_learn : residual
 
     function nlsloss(nlsx, nlsp)
         r = residual(model, nlsx, data, nlsp)

@@ -54,105 +54,52 @@ using NonlinearSolve
 using LineSearches
 
 abstract type AbstractNeuralModel end
-export AbstractNeuralModel
+abstract type AbstractPDEProblem end
+abstract type AbstractTimeStepper end
+
+export AbstractNeuralModel, AbstractPDEProblem, AbstractTimeStepper
 
 include("utils.jl")
+export fix_kw, init_siren, scaled_siren_init, remake_ca #, _ntimes
+
 include("metrics.jl")
+export mae, mse, pnorm, l2reg, rsquare
+
 include("autodiff.jl")
+export forwarddiff_deriv1, forwarddiff_deriv2, forwarddiff_jacobian,
+    finitediff_deriv1, finitediff_deriv2, finitediff_jacobian
 
 include("layers.jl")
-include("transform.jl")
-include("operator.jl")
+export Atten, Diag, PermutedBatchNorm, SplitRows, ImplicitEncoderDecoder,
+    AutoDecoder, get_autodecoder, freeze_autodecoder,
+    HyperNet, get_hyperdecoder
 
-include("vis.jl")
+include("transform.jl")
+export FourierTransform, CosineTransform
+
+include("operator.jl")
+export OpKernel, OpConv, OpKernelBilinear, OpConvBilinear, linear_nonlinear
+
 include("neuralmodel.jl")
+export normalizedata, unnormalizedata, NeuralSpaceModel, dudx1, dudx2, dudp
+
+include("problems.jl")
+export dudtRHS
+export Advection1D, AdvectionDiffusion1D, BurgersInviscid1D, BurgersViscous1D
 
 include("nonlinleastsq.jl")
+export nonlinleastsq
 
 include("evolve.jl")
+export make_residual, residual_learn,
+    compute_residual, apply_timestep, isimplicit,
+    EulerForward, EulerBackward,
+    PODGalerkin, LeastSqPetrovGalerkin
 
 include("train.jl")
+export train_model, callback, optimize, plot_training
 
-export
-    # vis
-    animate1D,
-    plot_1D_surrogate_steady,
-    
-    # utils
-    # _ntimes,
-    fix_kw,
-    init_siren,
-    scaled_siren_init,
-    remake_ca,
-    
-    # autodiff
-    forwarddiff_deriv1,
-    forwarddiff_deriv2,
-    forwarddiff_jacobian,
-
-    finitediff_deriv1,
-    finitediff_deriv2,
-    finitediff_jacobian,
-
-    # layers
-    Atten,
-    Diag,
-    PermutedBatchNorm,
-    SplitRows,
-    ImplicitEncoderDecoder,
-
-    AutoDecoder,
-    get_autodecoder,
-    freeze_autodecoder,
-
-    HyperNet,
-    get_hyperdecoder,
-
-    # transforms
-    FourierTransform,
-    CosineTransform,
-
-    # operator layers
-    OpKernel,
-    OpConv,
-
-    OpKernelBilinear,
-    OpConvBilinear,
-    linear_nonlinear,
-
-    # training
-    train_model,
-    callback,
-    optimize,
-    plot_training,
-    
-    # nonlinleastsq
-    nonlinleastsq,
-
-    # neuralmodel
-    normalizedata,
-    unnormalizedata,
-
-    NeuralSpaceModel,
-    dudx1,
-    dudx2,
-    dudp,
-
-    # evolve
-    make_residual,
-    timestepper_residual_euler,
-    residual_learn,
-
-    PODGalerkin,
-    LeastSqPetrovGalerkin,
-
-    do_timestep,
-    
-    # metrics
-    mae,
-    mse,
-    pnorm,
-    l2reg,
-    rsquare
+include("vis.jl")
+export animate1D, plot_1D_surrogate_steady
 
 end # module
