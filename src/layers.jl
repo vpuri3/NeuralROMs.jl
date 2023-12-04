@@ -135,6 +135,7 @@ function freeze_autodecoder(
     code_len = length(p0)
     NN = AutoDecoder(decoder_frozen[1], 1, code_len)
     p, st = Lux.setup(rng, NN)
+    st = Lux.testmode(st)
     p = ComponentArray(p)
 
     copy!(p, p0)

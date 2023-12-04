@@ -1,9 +1,68 @@
 #
+#======================================================#
+function nonlinleastsq(
+    model::AbstractNeuralModel,
+    p0::Union{NamedTuple, AbstractVector},
+    data::NTuple{2, Any},
+    nls::NonlinearSolve.AbstractNonlinearSolveAlgorithm;
+    maxiters::Integer = 20,
+    abstol = nothing,
+    reltol = nothing,
+    io::Union{Nothing, IO} = stdout,
+    verbose::Bool = false,
+    residual = nothing, # (NN, p, st, data, nlsp) -> resid
+    nlsp = SciMLBase.NullParameters(),
+    termination_condition = nothing,
+    callback = nothing,
+)
+    p0 = ComponentArray(p0)
+
+    residual = if isnothing(residual)
+        # data regression
+        (model, p, data, nlsp) -> model(data[1], p) - data[2]
+    else
+        residual
+    end
+
+    function nlsloss(nlsx, nlsp)
+        r = residual(model, nlsx, data, nlsp)
+        vec(r)
+    end
+
+    if verbose
+        iter = Ref(0)
+        callback = !isnothing(callback) ? callback : function(nlsx, l)
+            iter[] += 1
+            println(io, "NonlinearSolve [$(iter[]) / $maxiters] MSE: $l")
+            return false
+        end
+    end
+
+    nlsprob = NonlinearLeastSquaresProblem{false}(nlsloss, p0, nlsp)
+    nlssol  = solve(nlsprob, nls;
+        maxiters,
+        callback,
+        abstol,
+        reltol,
+        termination_condition,
+    )
+
+    if verbose
+        mse = sum(abs2, nlssol.resid) / length(nlssol.resid)
+        println("Steps: $(nlssol.stats.nsteps), \
+            MSE: $(round(mse, sigdigits = 8)), \
+            Ret: $(nlssol.retcode)"
+        )
+    end
+
+    nlssol.u, nlssol
+end
+#======================================================#
 function nonlinleastsq(
     NN::Lux.AbstractExplicitLayer,
     p0::Union{NamedTuple, AbstractVector},
     st::NamedTuple,
-    data::Tuple,
+    data::NTuple{2, Any},
     nls::NonlinearSolve.AbstractNonlinearSolveAlgorithm;
     maxiters::Integer = 20,
     abstol = nothing,
@@ -64,7 +123,7 @@ function nonlinleastsq(
     NN::Lux.AbstractExplicitLayer,
     p0::Union{NamedTuple, AbstractVector},
     st::NamedTuple,
-    data::Tuple,
+    data::NTuple{2, Any},
     opt::Union{Optim.AbstractOptimizer, Optimisers.AbstractRule};
     maxiters::Integer = 50,
     abstol = nothing,

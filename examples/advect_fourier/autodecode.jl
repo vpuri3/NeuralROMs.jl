@@ -46,13 +46,13 @@ function makedata_autodecode(datafile::String)
     # normalize data
     #==============#
     ū  = sum(u) / length(u)
-    σu = sum(abs2, u .- ū) / length(u)
-    u  = (u .- ū) / sqrt(σu)
+    σu = sum(abs2, u .- ū) / length(u) |> sqrt
+    u  = normalizedata(u, ū, σu)
 
     # normalize space
     x̄  = sum(x) / length(x)
-    σx = sum(abs2, x .- x̄) / length(x)
-    x  = (x .- x̄) / sqrt(σx)
+    σx = sum(abs2, x .- x̄) / length(x) |> sqrt
+    x  = normalizedata(x, x̄, σx)
 
     # train/test trajectory split
     _Ib, Ib_ = [1], []
@@ -99,25 +99,21 @@ end
 
 #======================================================#
 function infer_autodecoder(
-    decoder::NTuple{3, Any},
-    data::Tuple, # (x, u, t)
+    model::NeuralSpaceModel,
+    data::Tuple, # (X, U, T)
     p0::AbstractVector;
-    rng::Random.AbstractRNG = Random.default_rng(),
     device = Lux.cpu_device(),
     learn_init::Bool = false,
-    verbose::Bool = true,
+    verbose::Bool = false,
 )
     # make data
-    xdata, udata, tdata = data
+    xdata, udata, _ = data
     Nx, Nt = size(udata)
-    id = ones(Int32, Nx)
-    x, u = (xdata, id), udata
 
-    # model
-    NN, p, st = freeze_autodecoder(decoder, p0; rng)
-
-    copy!(p, p0)
-    @set! st.decoder.frozen_params = decoder[2]
+    model = model |> device # problem here.
+    xdata = xdata |> device
+    udata = udata |> device
+    p = p0 |> device
 
     # optimizer
     autodiff = AutoForwardDiff()
@@ -130,33 +126,31 @@ function infer_autodecoder(
     # linesearch = LineSearch(; method = linesearchalg, autodiff = AutoZygote())
     # linesearch = LineSearch(; method = linesearchalg, autodiff = AutoFiniteDiff())
 
-    # nlssolver = BFGS()
-    # nlssolver = LevenbergMarquardt(; autodiff, linsolve)
-    nlssolver = GaussNewton(;autodiff, linsolve, linesearch)
+    # nlssolve = BFGS()
+    # nlssolve = LevenbergMarquardt(; autodiff, linsolve)
+    nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
 
     codes  = ()
     upreds = ()
     MSEs   = []
 
-    x, u  = (x, u ) |> device
-    p, st = (p, st) |> device
-
     for iter in 1:Nt
 
-        xbatch = reshape.(x, 1, Nx)
-        ubatch = reshape(u[:, iter], 1, Nx)
+        xbatch = reshape(xdata, 1, Nx)
+        ubatch = reshape(udata[:, iter], 1, Nx)
         batch  = xbatch, ubatch
 
-        if learn_init & (iter == 1)
-            p, _ = nonlinleastsq(NN, p, st, batch, Optimisers.Adam(1f-1); verbose)
-            p, _ = nonlinleastsq(NN, p, st, batch, Optimisers.Adam(1f-2); verbose)
-            p, _ = nonlinleastsq(NN, p, st, batch, Optimisers.Adam(1f-3); verbose)
-        end
+        # if learn_init & (iter == 1)
+        #     p, _ = nonlinleastsq(model, p, batch, Optimisers.Adam(1f-1); verbose)
+        #     p, _ = nonlinleastsq(model, p, batch, Optimisers.Adam(1f-2); verbose)
+        #     p, _ = nonlinleastsq(model, p, batch, Optimisers.Adam(1f-3); verbose)
+        # end
 
-        p, _ = nonlinleastsq(NN, p, st, batch, nlssolver; maxiters = 20, verbose)
+        # @show typeof(batch[1]) # ReshapedArray :/
+        p, _ = nonlinleastsq(model, p, batch, nlssolve; maxiters = 20, verbose)
 
         # eval
-        upred = NN(xbatch, p, st)[1]
+        upred = model(xbatch, p)
         l = round(mse(upred, ubatch); sigdigits = 8)
 
         codes  = push(codes, p)
@@ -176,23 +170,19 @@ function infer_autodecoder(
 end
 
 #======================================================#
-function dUdtRHS_advection(X, NN, p, st, Icode, md, t;
+function dudtRHS_advection(
+    model::AbstractNeuralModel,
+    x::AbstractArray,
+    p::AbstractVector,
+    t::Real,
+    md;
     autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ = nothing,
 )
-    U, UdX, UdXX = dUdX2(X, NN, p, st, Icode, md; autodiff, ϵ)
-    c = md.md_data.c
-    -c .* UdX
-end
+    u, udx, udxx = dudx2(model, x, p; autodiff, ϵ)
 
-function dUdtRHS_advection_diffusion(X, NN, p, st, Icode, md, t;
-    autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
-    ϵ = nothing,
-)
-    U, UdX, UdXX = dUdX2(X, NN, p, st, Icode, md; autodiff, ϵ)
     c = md.md_data.c
-    ν = md.md_data.ν
-    @. -c * UdX + ν * UdXX
+    -c .* udx
 end
 
 #========================================================#
@@ -201,7 +191,8 @@ function evolve_autodecoder(
     data::Tuple,
     p0::AbstractVector;
     rng::Random.AbstractRNG = Random.default_rng(),
-    nlssolver = nothing,
+    nlssolve = nothing,
+    linsolve = nothing,
     device = Lux.cpu_device(),
     verbose::Bool = true,
     md = nothing,
@@ -210,29 +201,41 @@ function evolve_autodecoder(
     # set up
     #============================#
 
+    # Inputs should be
+    # - model::NeuralSpaceModel
+    # - prob::PDEProblem
+    # - data (x, u0)
+    # - tspan
+    # - p0,
+    # - kws...
+
     # data
-    Xdata, Udata, Tdata = data
-    Nx, Nt = size(Udata)
-    Icode = ones(Int32, Nx)
+    xdata, udata, tdata = data
+    Nx = size(udata, 1)
 
     # make model
-    NN, p, st = freeze_autodecoder(decoder, p0; rng)
-    T = eltype(p0)
+    NN, p0, st = freeze_autodecoder(decoder, p0; rng)
+    Icode = ones(Int32, 1, Nx)
+    model = NeuralSpaceModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
 
     # move to device
-    Xdata = Xdata   |> device
-    Icode = Icode   |> device
-    Udata = Udata   |> device
-    p, st = (p, st) |> device
+    xdata = xdata |> device
+    Icode = Icode |> device
+    udata = udata |> device
+    model = model |> device
+    p0 = p0 |> device
 
-    # nonlinear solver
-    nlssolver = if isnothing(nlssolver)
+    T = eltype(p0)
+
+    # solvers
+    linsolve = isnothing(linsolve) ? QRFactorization() : linsolve
+
+    nlssolve = if isnothing(nlssolve)
         autodiff = AutoForwardDiff()
-        linsolve = QRFactorization()
         linesearch = LineSearch() # TODO
-        nlssolver = GaussNewton(;autodiff, linsolve, linesearch)
+        nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
     else
-        nlssolver
+        nlssolve
     end
 
     #============================#
@@ -246,37 +249,39 @@ function evolve_autodecoder(
     autodiff_space = AutoForwardDiff()
     ϵ_space = nothing
 
-    dUdtRHS = dUdtRHS_advection
+    dudtRHS = dudtRHS_advection
     timestepper_residual = timestepper_residual_euler
+
+    # scheme = LeastSqPetrovGalerkin()
+    # scheme = PODGalerkin(nothing)
 
     projection_type = Val(:PODGalerkin)
     # projection_type = Val(:LSPG)
 
-    adaptive_timestep = Val(true)
+    adaptive_timestep = true
 
     #============================#
     # learn IC
     #============================#
-    timestep = 0
+    tstep = 0
+
     if verbose
         println("#============================#")
-        println("Time Step: $timestep, time: 0.0 - learn IC")
+        println("Time Step: $tstep, time: 0.0 - learn IC")
     end
 
-    Xbatch = reshape.((Xdata, Icode), 1, Nx)
-    Ubatch = reshape(Udata[:, 1], 1, Nx)
-    batch  = (Xbatch, Ubatch)
+    xbatch = reshape(xdata, 1, Nx)
+    ubatch = reshape(udata[:, 1], 1, Nx)
+    batch  = (xbatch, ubatch)
 
-    p0, nlssol, = nonlinleastsq(NN, p, st, batch, nlssolver;
+    p0, nlssol, = nonlinleastsq(model, p0, batch, nlssolve;
         residual = residual_learn,
-        nlsp = md,
-        maxiters = nlsmaxiters,
+        maxiters = nlsmaxiters * 5,
         abstol = nlsabstol,
         termination_condition = AbsTerminationMode(),
         verbose,
     )
-
-    U0 = makeUfromX(Xbatch[1], NN, p, st, Xbatch[2], md)
+    u0 = model(xbatch, p0)
 
     if verbose
         println("#============================#")
@@ -285,17 +290,18 @@ function evolve_autodecoder(
     #============================#
     # Set up solver
     #============================#
-    residual = make_residual(dUdtRHS, timestepper_residual;
+    residual = make_residual(dudtRHS, timestepper_residual;
         implicit = implicit_timestepper,
         autodiff = autodiff_space,
-        ϵ = ϵ_space
+        ϵ = ϵ_space,
+        md,
     )
 
-    Tinit, Tfinal = extrema(Tdata)
-    t0 = t1 = T(Tinit)
+    tinit, tfinal = extrema(tdata) .|> T
+    t0 = t1 = tinit
 
     ps = (p0,)
-    Us = (U0,)
+    us = (u0,)
     ts = (t0,)
 
     ##########
@@ -310,28 +316,32 @@ function evolve_autodecoder(
     #============================#
     # Time loop
     #============================#
-    while t1 <= Tfinal
+    while t1 <= tfinal
     
         #============================#
         # set up
         #============================#
-        timestep += 1
-        batch = (Xbatch, U0)
+        tstep += 1
+        batch = (xbatch, u0)
         t1 = t0 + Δt
-        nlsp = t0, t1, Δt, p0, md
     
         if verbose
             t_print  = round(t1; sigdigits=6)
             Δt_print = round(Δt; sigdigits=6)
-            println("Time Step: $timestep, Time: $t_print, Δt: $Δt_print")
+            println("Time Step: $tstep, Time: $t_print, Δt: $Δt_print")
         end
     
         #============================#
         # solve
         #============================#
+
+        # p1 = do_timestep(projection_type, adaptive_timestep, NN, p0, st, batch, )
+
         p1 = if projection_type isa Val{:LSPG}
+            nlsp = t1, Δt, t0, p0, u0
+
             p1, nlssol = nonlinleastsq(
-                NN, p0, st, batch, nlssolver;
+                model, p0, batch, nlssolve;
                 residual, nlsp, maxiters = nlsmaxiters, abstol = nlsabstol,
             )
 
@@ -357,17 +367,18 @@ function evolve_autodecoder(
 
                 Δt /= T(2f0)
                 t1 = t0 + Δt
-            
+
                 l_print = round(nlsmse; sigdigits = 6)
                 t_print = round(t1; sigdigits = 6)
                 Δt_print = round(Δt; sigdigits = 6)
 
-                println("REPEATING Time Step: $timestep, \
+                println("REPEATING Time Step: $tstep, \
                     Time: $t_print, MSE: $l_print, Δt: $Δt_print")
             
-                nlsp = t0, t1, Δt, p0, md
-                @time p1, nlssol = nonlinleastsq(
-                    NN, p0, st, batch, nlssolver;
+                nlsp = t1, Δt, t0, p0, u0
+
+                p1, nlssol = nonlinleastsq(
+                    model, p0, batch, nlssolve;
                     residual, nlsp,
                     maxiters = nlsmaxiters, abstol = nlsabstol,
                 )
@@ -383,11 +394,25 @@ function evolve_autodecoder(
 
             p1
         elseif projection_type isa Val{:PODGalerkin}
-            # dU/dp, dU/dt
-            J = dUdp(Xbatch[1], NN, p0, st, Icode, md)#; autodiff, ϵ) # (N, n)
-            r = dUdtRHS_advection(Xbatch[1], NN, p0, st, Icode, md, t0) # (N,)
-            dpdt = J \ vec(r)
-            p1 = p0 + Δt * dpdt # evolve with euler forward
+            # dU/dp (N, n), dU/dt (N,)
+            J0 = dudp(model, xbatch, p0; autodiff = autodiff_space, ϵ = ϵ_space)
+            rhs0 = dudtRHS(model, xbatch, p0, t0, md)
+
+            dpdt0 = J0 \ vec(rhs0)
+            p1 = p0 + Δt * dpdt0
+
+            u1 = model(xbatch, p1)
+            rhs1 = dudtRHS(model, xbatch, p1, t1, md)
+            resid = timestepper_residual(Δt, u0, u1, rhs1)
+
+            linmse = sum(abs2, resid) / length(resid)
+            lininf = norm(resid, Inf)
+            println("Linear Steps: $(0), \
+                MSE: $(round(linmse, sigdigits = 8)), \
+                ||∞: $(round(lininf, sigdigits = 8)), \
+                Ret: $(nlssol.retcode)"
+            )
+
             p1
         else
             error("Projection type must be `Val(:LSPG)`, or `Val(:PODGalerkin)`.")
@@ -396,10 +421,10 @@ function evolve_autodecoder(
         #============================#
         # Evaluate, save, etc
         #============================#
-        U1 = makeUfromX(Xbatch[1], NN, p1, st, Xbatch[2], md)
+        u1 = model(xbatch, p1)
     
         ps = push(ps, p1)
-        Us = push(Us, U1)
+        us = push(us, u1)
         ts = push(ts, t1)
     
         if verbose
@@ -410,12 +435,12 @@ function evolve_autodecoder(
         # update states
         #============================#
         p0 = p1
-        U0 = U1
+        u0 = u1
         t0 = t1
     end
 
     code = mapreduce(getdata, hcat, ps) |> Lux.cpu_device()
-    pred = mapreduce(adjoint, hcat, Us) |> Lux.cpu_device()
+    pred = mapreduce(adjoint, hcat, us) |> Lux.cpu_device()
     tyms = [ts...]
 
     return code, pred, tyms
@@ -430,6 +455,7 @@ function postprocess_autodecoder(
     device = Lux.cpu_device(),
     makeplot::Bool = true,
     verbose::Bool = true,
+    fps::Int = 300,
 )
 
     #==============#
@@ -446,7 +472,7 @@ function postprocess_autodecoder(
     # data sizes
     Nx, Nb, Nt = size(Udata)
 
-    mu = isnothing(mu) ? fill(nothing, Nb) : mu
+    mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
 
     # subsample in space
     Ix = Colon()
@@ -467,30 +493,21 @@ function postprocess_autodecoder(
     mkpath(outdir)
 
     #==============#
-    # normalize data
-    #==============#
-    xdata = (Xdata .- md.x̄) / sqrt(md.σx)
-    udata = (Udata .- md.ū) / sqrt(md.σu)
-
-    #==============#
     # train/test split
     #==============#
     _Udata = @view Udata[:, md._Ib, :] # un-normalized
     Udata_ = @view Udata[:, md.Ib_, :]
 
-    _udata = udata[:, md._Ib, :] # normalized
-    udata_ = udata[:, md.Ib_, :]
-
-    # #=
-
     #==============#
     # from training data
     #==============#
 
-    # _data, data_, _ = makedata_autodecode(datafile)
+    # _data, _, _ = makedata_autodecode(datafile)
+    # _Icode, _xdata = _data[1]
+    # _xdata = unnormalizedata(_xdata, md.x̄, md.σx)
     #
-    # _upred = NN(_data[1] |> device, p |> device, st |> device)[1] |> Lux.cpu_device()
-    # _Upred = _upred * sqrt(md.σu) .+ md.ū
+    # model = NeuralSpaceModel(NN, st, _Icode, md.x̄, md.σx, md.ū, md.σu) |> device
+    # _Upred = model(_xdata |> device, p |> device) |> Lux.cpu_device()
     # _Upred = reshape(_Upred, Nx, length(md._Ib), Nt)
     #
     # for k in 1:length(md._Ib)
@@ -500,13 +517,19 @@ function postprocess_autodecoder(
     #     if makeplot
     #         xlabel = "x"
     #         ylabel = "u(x, t)"
-    #
+    #     
     #         _mu = mu[md._Ib[k]]
     #         title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+    #     
+    #         idx = LinRange(1, size(Up, 2), 11) .|> Base.Fix1(round, Int)
+    #         plt = plot(;title, xlabel, ylable)
+    #         plot!(Xdata, Ud[:, idx], w = 2.0, label = "True")
+    #         plot!(Xdata, Up[:, idx], w = 2.0, label = "Pred")
+    #         png(plt, "train$(k)")
     #
     #         anim = animate1D(Ud, Up, Xdata, Tdata;
     #             w = 2, xlabel, ylabel, title)
-    #         gif(anim, joinpath(outdir, "train$(k).gif"), fps=30)
+    #         gif(anim, joinpath(outdir, "train$(k).gif"), fps)
     #     end
     # end
 
@@ -515,16 +538,18 @@ function postprocess_autodecoder(
     #==============#
 
     # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    #
     # p0 = _code[2].weight[:, 1]
+    # Icode = ones(Int32, 1, Nx)
+    #
+    # NN, p0, st = freeze_autodecoder(decoder, p0; rng)
+    # model = NeuralSpaceModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
     #
     # for k in 1:1 # axes(mu, 1)
-    #     ud = _udata[:, k, :]
-    #     data = (xdata, ud, Tdata)
+    #     Ud = Udata[:, k, :]
+    #     data = (Xdata, Ud, Tdata)
     #
-    #     _, up, er = infer_autodecoder(decoder, data, p0; rng, device, verbose)
-    #
-    #     Ud = ud * sqrt(md.σu) .+ md.ū
-    #     Up = up * sqrt(md.σu) .+ md.ū
+    #     _, Up, _ = infer_autodecoder(model, data, p0; device, verbose)
     #
     #     if makeplot
     #         xlabel = "x"
@@ -534,9 +559,16 @@ function postprocess_autodecoder(
     #         title = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
     #         _name = k in md._Ib ? "infer_train$(k)" : "infer_test$(k)"
     #
-    #         anim = animate1D(Ud, Up, Xdata, Tdata;
-    #             w = 2, xlabel, ylabel, title)
-    #         gif(anim, joinpath(outdir, "$(_name).gif"), fps=30)
+    #         idx = LinRange(1, size(Up, 2), 11) .|> Base.Fix1(round, Int)
+    #         plt = plot(;title, xlabel, ylabel)
+    #         plot!(Xdata, Up[:, idx], w = 2.0, label = "Pred", s = :solid)
+    #         plot!(Xdata, Ud[:, idx], w = 2.0, label = "True", s = :dash)
+    #         # png(plt, _name)
+    #         display(plt)
+    #
+    #         # anim = animate1D(Ud, Up, Xdata, Tdata;
+    #         #     w = 2, xlabel, ylabel, title)
+    #         # gif(anim, joinpath(outdir, "$(_name).gif"), fps)
     #     end
     # end
 
@@ -562,8 +594,8 @@ function postprocess_autodecoder(
     #
     #         # anim = animate1D(Up, Xdata, Tpred; linewidth=2,
     #         #     xlabel="x", ylabel="u(x,t)", title = "μ = $_mu, ")
-    #         # gif(anim, joinpath(outdir, "$(_name).gif"), fps=30)
-    #     
+    #         # gif(anim, joinpath(outdir, "$(_name).gif"), fps)
+    #    
     #         _plt = plot(title = "μ=$_mu", xlabel = "x", ylabel = "x", legend = false)
     #         plot!(_plt, Xdata, Up[:, 1:10:min(size(Up, 2), 300)])
     #         png(_plt, joinpath(outdir, "evolve_$k"))
@@ -576,53 +608,53 @@ function postprocess_autodecoder(
     # check derivative
     #==============#
 
-    begin
-        k = 1
-        i = 100
-    
-        decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-        p0 = _code[2].weight[:, i]
-    
-        plt = GeometryLearning.plot_derivatives1D_autodecoder(decoder, Xdata, p0, md,
-            second_derv = false)
-        png(plt, joinpath(outdir, "derv"))
-        display(plt)
-    end
+    # begin
+    #     k = 1
+    #     i = 100
+    #
+    #     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    #     p0 = _code[2].weight[:, i]
+    #
+    #     plt = GeometryLearning.plot_derivatives1D_autodecoder(decoder, Xdata, p0, md,
+    #         second_derv = false)
+    #     png(plt, joinpath(outdir, "derv"))
+    #     display(plt)
+    # end
 
     begin
         k = 1
         Ud = Udata[:, k, :]
         data = (Xdata, Ud, Tdata)
-
+    
         decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
         p0 = _code[2].weight[:, 1]
-
+    
         @time _, Up, Tpred = evolve_autodecoder(decoder, data, p0; rng, device, verbose, md)
-
+    
         idx = LinRange(1, size(Up, 2), 11) .|> Base.Fix1(round, Int)
-
+    
         function uIC(x; μ = -0.5f0, σ = 0.1f0)
             u = @. exp(-1f0/2f0 * ((x-μ)/σ)^2)
             reshape(u, :, 1)
         end
-
+    
         function uExact(x, c, t; μ = -0.5f0, σ=0.1f0)
             uIC(x; μ = μ + c * t, σ)
         end
-
+    
         tidx = Tpred[idx]
         upred = Up[:, idx]
-
+    
         utrue = Tuple(uExact(Xdata, md.md_data.c, t) for t in tidx)
         utrue = hcat(utrue...)
-
+    
         plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
         plot!(plt, Xdata, upred, w = 2, s = :solid)
         plot!(plt, Xdata, utrue, w = 2, s = :dash)
-
+    
         error = sum(abs, (upred - utrue).^2) / length(utrue)
         print("MSE: $(error)")
-
+    
         png(plt, joinpath(outdir, "evolve_$k"))
         display(plt)
     end
@@ -710,7 +742,7 @@ function train_autodecoder(
         device, dir, metadata, lossfun
     )
 
-    plot_training(ST...) |> display
+    plot_training(STATS...) |> display
 
     model, STATS
 end
@@ -725,7 +757,7 @@ Random.seed!(rng, 460)
 device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "data_advect/", "data.jld2")
 
-modeldir = joinpath(@__DIR__, "model2")
+modeldir = joinpath(@__DIR__, "model3")
 modelfile = joinpath(modeldir, "model_09.jld2")
 
 # isdir(modeldir) && rm(modeldir, recursive = true)

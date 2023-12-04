@@ -33,35 +33,45 @@ using ProgressMeter
 using JLD2
 
 # GPU stack
+using Adapt
 using CUDA
 using CUDA: AbstractGPUArray
 using KernelAbstractions
 
+# numerical
 using FFTW
 using NNlib
 using Tullio
+
+# data management
 using ComponentArrays
 using Setfield: @set!
+using ConcreteStructs
 using IterTools
 
+# linear/nonlinear solvers
 using NonlinearSolve
 using LineSearches
 
-include("utils.jl")
-include("vis.jl")
-include("metrics.jl")
+abstract type AbstractNeuralModel end
+export AbstractNeuralModel
 
+include("utils.jl")
+include("metrics.jl")
 include("autodiff.jl")
 
-include("train.jl")
-include("nonlinleastsq.jl")
-
 include("layers.jl")
-
 include("transform.jl")
 include("operator.jl")
 
+include("vis.jl")
+include("neuralmodel.jl")
+
+include("nonlinleastsq.jl")
+
 include("evolve.jl")
+
+include("train.jl")
 
 export
     # vis
@@ -119,18 +129,24 @@ export
     # nonlinleastsq
     nonlinleastsq,
 
+    # neuralmodel
+    normalizedata,
+    unnormalizedata,
+
+    NeuralSpaceModel,
+    dudx1,
+    dudx2,
+    dudp,
+
     # evolve
-    shiftdata,
-    unshiftdata,
-
-    makeUfromX,
-    dUdX1,
-    dUdX2,
-    dUdp,
-
     make_residual,
     timestepper_residual_euler,
     residual_learn,
+
+    PODGalerkin,
+    LeastSqPetrovGalerkin,
+
+    do_timestep,
     
     # metrics
     mae,
