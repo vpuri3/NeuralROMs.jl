@@ -230,7 +230,7 @@ function evolve_autodecoder(
     # args/kwargs
     #============================#
     nlsmaxiters = 10
-    nlsabstol = T(1f-6)
+    abstol = T(1f-6)
     Δt = T(1f-3)
 
     autodiff_space = AutoForwardDiff()
@@ -246,7 +246,9 @@ function evolve_autodecoder(
     # scheme = PODGalerkin(linsolve)
 
     projection_type = Val(:PODGalerkin)
+
     # projection_type = Val(:LSPG)
+    # Δt = T(1f-4)
 
     adaptive_timestep = true
 
@@ -267,8 +269,8 @@ function evolve_autodecoder(
     p0, nlssol, = nonlinleastsq(model, p0, batch, nlssolve;
         residual = residual_learn,
         maxiters = nlsmaxiters * 5,
-        abstol = nlsabstol,
         termination_condition = AbsTerminationMode(),
+        abstol,
         verbose,
     )
     u0 = model(xbatch, p0)
@@ -323,8 +325,6 @@ function evolve_autodecoder(
         # solve
         #============================#
 
-        # p1 = do_timestep(projection_type, adaptive_timestep, NN, p0, st, batch, )
-
         p1 = if projection_type isa Val{:LSPG}
             nlsp = t1, Δt, t0, p0, u0
 
@@ -332,54 +332,54 @@ function evolve_autodecoder(
 
             p1, nlssol = nonlinleastsq(
                 model, p0, batch, nlssolve;
-                residual, nlsp, maxiters = nlsmaxiters, abstol = nlsabstol,
+                residual, nlsp, maxiters = nlsmaxiters, abstol,
             )
 
-            nlsmse = sum(abs2, nlssol.resid) / length(nlssol.resid)
-            nlsinf = norm(nlssol.resid, Inf)
+            _mse = sum(abs2, nlssol.resid) / length(nlssol.resid)
+            _inf = norm(nlssol.resid, Inf)
             println("\tNonlinear Steps: $(nlssol.stats.nsteps), \
-                MSE: $(round(nlsmse, sigdigits = 8)), \
-                ||∞: $(round(nlsinf, sigdigits = 8)), \
+                MSE: $(round(_mse, sigdigits = 8)), \
+                ||∞: $(round(_inf, sigdigits = 8)), \
                 Ret: $(nlssol.retcode)"
             )
 
-            #===== ADAPTIVE TIME-STEPPER =====#
-
-            if (nlsmse < nlsabstol) & (nlssol.stats.nsteps < 4)
-                Δt *= T(2f0)
-            end
-
-            while (nlsmse > nlsabstol) #| SciMLBase.successful_retcode(nlretcode)
-                if Δt < T(1f-4)
-                    println("Δt = $Δt")
-                    break
+            if adaptive_timestep
+                if (_mse < abstol) & (nlssol.stats.nsteps < 4)
+                    Δt *= T(2f0)
                 end
 
-                Δt /= T(2f0)
-                t1 = t0 + Δt
+                while (_mse > abstol)
+                    if Δt < T(1f-4)
+                        println("Δt = $Δt")
+                        break
+                    end
 
-                l_print = round(nlsmse; sigdigits = 6)
-                t_print = round(t1; sigdigits = 6)
-                Δt_print = round(Δt; sigdigits = 6)
+                    Δt /= T(2f0)
+                    t1 = t0 + Δt
 
-                println("REPEATING Time Step: $tstep, \
-                    Time: $t_print, MSE: $l_print, Δt: $Δt_print")
-            
-                nlsp = t1, Δt, t0, p0, u0
+                    l_print = round(_mse; sigdigits = 6)
+                    t_print = round(t1; sigdigits = 6)
+                    Δt_print = round(Δt; sigdigits = 6)
 
-                p1, nlssol = nonlinleastsq(
-                    model, p0, batch, nlssolve;
-                    residual, nlsp,
-                    maxiters = nlsmaxiters, abstol = nlsabstol,
-                )
+                    println("REPEATING Time Step: $tstep, \
+                        Time: $t_print, MSE: $l_print, Δt: $Δt_print")
 
-                nlsmse = sum(abs2, nlssol.resid) / length(nlssol.resid)
-                nlsinf = norm(nlssol.resid, Inf)
-                println("Nonlinear Steps: $(nlssol.stats.nsteps), \
-                    MSE: $(round(nlsmse, sigdigits = 8)), \
-                    ||∞: $(round(nlsinf, sigdigits = 8)), \
-                    Ret: $(nlssol.retcode)"
-                )
+                    nlsp = t1, Δt, t0, p0, u0
+
+                    p1, nlssol = nonlinleastsq(
+                        model, p0, batch, nlssolve;
+                        residual, nlsp,
+                        maxiters = nlsmaxiters, abstol,
+                    )
+
+                    _mse = sum(abs2, nlssol.resid) / length(nlssol.resid)
+                    _inf = norm(nlssol.resid, Inf)
+                    println("Nonlinear Steps: $(nlssol.stats.nsteps), \
+                        MSE: $(round(_mse, sigdigits = 8)), \
+                        ||∞: $(round(_inf, sigdigits = 8)), \
+                        Ret: $(nlssol.retcode)"
+                    )
+                end
             end
 
             p1
@@ -396,13 +396,54 @@ function evolve_autodecoder(
             rhs1 = dudtRHS(prob, model, xbatch, p1, t1)
             resid = compute_residual(timestepper, Δt, u0, u1, rhs1)
 
-            linmse = sum(abs2, resid) / length(resid)
-            lininf = norm(resid, Inf)
+            _mse = sum(abs2, resid) / length(resid)
+            _inf = norm(resid, Inf)
             println("Linear Steps: $(0), \
-                MSE: $(round(linmse, sigdigits = 8)), \
-                ||∞: $(round(lininf, sigdigits = 8)), \
-                Ret: $(nlssol.retcode)"
+                MSE: $(round(_mse, sigdigits = 8)), \
+                ||∞: $(round(_inf, sigdigits = 8))"
             )
+
+            p1
+
+            if adaptive_timestep
+                if (_mse < abstol) & (nlssol.stats.nsteps < 4)
+                    Δt *= T(2f0)
+                end
+
+                while (_inf > 1f-3)
+                    if Δt < T(1f-4)
+                        println("Δt = $Δt")
+                        break
+                    end
+
+                    Δt /= T(2f0)
+                    t1 = t0 + Δt
+
+                    l_print = round(_mse; sigdigits = 6)
+                    t_print = round(t1; sigdigits = 6)
+                    Δt_print = round(Δt; sigdigits = 6)
+
+                    println("REPEATING Time Step: $tstep, \
+                        Time: $t_print, MSE: $l_print, Δt: $Δt_print")
+
+                    J0 = dudp(model, xbatch, p0; autodiff)
+                    rhs0 = dudtRHS(prob, model, xbatch, p0, t0; autodiff = autodiff_space, ϵ = ϵ_space)
+
+                    dpdt0 = J0 \ vec(rhs0)
+                    p1 = apply_timestep(timestepper, Δt, p0, dpdt0)
+
+                    u1 = model(xbatch, p1)
+                    rhs1 = dudtRHS(prob, model, xbatch, p1, t1)
+                    resid = compute_residual(timestepper, Δt, u0, u1, rhs1)
+
+                    _mse = sum(abs2, resid) / length(resid)
+                    _inf = norm(resid, Inf)
+                    println("Linear Steps: $(0), \
+                        MSE: $(round(_mse, sigdigits = 8)), \
+                        ||∞: $(round(_inf, sigdigits = 8))"
+                    )
+                end
+            end
 
             p1
         else
@@ -499,43 +540,43 @@ function postprocess_autodecoder(
     # from training data
     #==============#
 
-    _data, _, _ = makedata_autodecode(datafile)
-    _xdata, _Icode = _data[1]
-    _xdata = unnormalizedata(_xdata, md.x̄, md.σx)
-    
-    model = NeuralSpaceModel(NN, st, _Icode, md.x̄, md.σx, md.ū, md.σu) |> device
-    _Upred = model(_xdata |> device, p |> device) |> Lux.cpu_device()
-    _Upred = reshape(_Upred, Nx, length(md._Ib), Nt)
-    
-    for k in 1:1 # length(md._Ib)
-        Ud = @view _Udata[:, k, :]
-        Up = @view _Upred[:, k, :]
-    
-        if makeplot
-            xlabel = "x"
-            ylabel = "u(x, t)"
-       
-            _mu = mu[md._Ib[k]]
-            title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
-
-            idx_pred = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
-            idx_data = idx_pred
-
-            upred = Up[:, idx_pred]
-            udata = Ud[:, idx_data]
-
-            Iplot = 1:32:Nx
-
-            plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
-            plot!(plt, Xdata, upred, w = 2, palette = :tab10)
-            scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
-            png(plt, "train$(k)")
-    
-            anim = animate1D(Ud, Up, Xdata, Tdata;
-                w = 2, xlabel, ylabel, title)
-            gif(anim, joinpath(outdir, "train$(k).gif"); fps)
-        end
-    end
+    # _data, _, _ = makedata_autodecode(datafile)
+    # _xdata, _Icode = _data[1]
+    # _xdata = unnormalizedata(_xdata, md.x̄, md.σx)
+    #
+    # model = NeuralSpaceModel(NN, st, _Icode, md.x̄, md.σx, md.ū, md.σu) |> device
+    # _Upred = model(_xdata |> device, p |> device) |> Lux.cpu_device()
+    # _Upred = reshape(_Upred, Nx, length(md._Ib), Nt)
+    #
+    # for k in 1:1 # length(md._Ib)
+    #     Ud = @view _Udata[:, k, :]
+    #     Up = @view _Upred[:, k, :]
+    #
+    #     if makeplot
+    #         xlabel = "x"
+    #         ylabel = "u(x, t)"
+    #   
+    #         _mu = mu[md._Ib[k]]
+    #         title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+    #
+    #         idx_pred = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
+    #         idx_data = idx_pred
+    #
+    #         upred = Up[:, idx_pred]
+    #         udata = Ud[:, idx_data]
+    #
+    #         Iplot = 1:32:Nx
+    #
+    #         plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
+    #         plot!(plt, Xdata, upred, w = 2, palette = :tab10)
+    #         scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
+    #         png(plt, "train$(k)")
+    #
+    #         anim = animate1D(Ud, Up, Xdata, Tdata;
+    #             w = 2, xlabel, ylabel, title)
+    #         gif(anim, joinpath(outdir, "train$(k).gif"); fps)
+    #     end
+    # end
 
     #==============#
     # inference (via data regression)
@@ -610,48 +651,52 @@ function postprocess_autodecoder(
     #==============#
     # check derivative
     #==============#
-    begin
-        i = 1000
-    
-        decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-        p0 = _code[2].weight[:, i] # (l, 3k)
-    
-        plt = GeometryLearning.plot_derivatives1D_autodecoder(
-            decoder, Xdata, p0, md, second_derv = false,
-            autodiff = AutoFiniteDiff(),
-            ϵ=2f-2
-        )
-        png(plt, joinpath(outdir, "derv"))
-    end
+    # begin
+    #     i = 1700
+    #
+    #     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    #     p0 = _code[2].weight[:, i] # (l, 3k)
+    #
+    #     plt = GeometryLearning.plot_derivatives1D_autodecoder(
+    #         decoder, Xdata, p0, md, second_derv = false,
+    #         # autodiff = AutoFiniteDiff(),
+    #         # ϵ=2f-2
+    #     )
+    #     png(plt, joinpath(outdir, "derv"))
+    #     display(plt)
+    # end
 
     begin
-        k = 2
+        k = 7
         Ud = Udata[:, k, :]
         data = (Xdata, Ud, Tdata)
-
+    
         decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
         p0 = _code[2].weight[:, 1]
 
-        prob = Advection1D(0.25f0)
         prob = BurgersInviscid1D()
+        # prob = BurgersViscous1D(1/(4f3))
         @time _, Up, Tpred = evolve_autodecoder(prob, decoder, md, data, p0;
             rng, device, verbose)
-    
+
         idx_pred = LinRange(1, size(Up, 2), 10) .|> Base.Fix1(round, Int)
         t_pred   = Tpred[idx_pred]
-
+    
         idx_data = Tuple(findmin(abs.(Tdata .- t))[2] for t in t_pred)
         idx_data = [idx_data...]
-
+    
         upred = Up[:, idx_pred]
         udata = Ud[:, idx_data]
-
+    
         Iplot = 1:32:Nx
-
+    
         plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
         plot!(plt, Xdata, upred, w = 2, palette = :tab10)
         scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
-
+    
+        error = sum(abs, (upred - udata).^2) / length(udata)
+        print("MSE: $(error)")
+    
         png(plt, joinpath(outdir, "evolve_$k"))
         display(plt)
     end
@@ -792,8 +837,8 @@ datafile = joinpath(@__DIR__, "burg_visc_re10k", "data.jld2")
 # end
 
 for modeldir in (
-    joinpath(@__DIR__, "model_dec_sin_03_05_128_reg/"),
-    joinpath(@__DIR__, "model_dec_sin_08_05_096_reg/"),
+    # joinpath(@__DIR__, "model_dec_sin_03_05_128_reg/"),
+    # joinpath(@__DIR__, "model_dec_sin_08_05_096_reg/"),
     joinpath(@__DIR__, "model_dec_sin_08_05_128_reg/"),
 )
     modelfile = joinpath(modeldir, "model_08.jld2")

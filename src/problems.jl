@@ -64,5 +64,22 @@ end
 struct BurgersViscous1D{T} <: AbstractPDEProblem
     ν::T
 end
+
+function dudtRHS(
+    prob::BurgersViscous1D,
+    model::AbstractNeuralModel,
+    x::AbstractArray,
+    p::AbstractVector,
+    t::Real;
+    autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
+    ϵ = nothing,
+)
+    ν = prob.ν
+
+    u, udx, udxx = dudx2(model, x, p; autodiff, ϵ)
+
+    @. -u * udx + ν * udxx
+end
+
 #===================================================#
 

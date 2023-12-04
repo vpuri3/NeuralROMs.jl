@@ -86,7 +86,9 @@ export normalizedata, unnormalizedata, NeuralSpaceModel, dudx1, dudx2, dudp
 
 include("problems.jl")
 export dudtRHS
-export Advection1D, AdvectionDiffusion1D, BurgersInviscid1D, BurgersViscous1D
+export
+    Advection1D, AdvectionDiffusion1D,
+    BurgersInviscid1D, BurgersViscous1D
 
 include("nonlinleastsq.jl")
 export nonlinleastsq
