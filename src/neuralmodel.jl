@@ -1,7 +1,7 @@
 
 #===========================================================#
 normalizedata(u::AbstractArray, μ::Number, σ::Number) = (u .- μ) / σ
-unnormalizedata(u::AbstractArray, μ::Number, σ::Number) = u * σ .+ μ
+unnormalizedata(u::AbstractArray, μ::Number, σ::Number) = (u * σ) .+ μ
 #===========================================================#
 
 # For 2D, make X a tuple (X, Y). should work fine with dUdX, etc

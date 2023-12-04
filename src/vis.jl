@@ -47,7 +47,7 @@ end
 
 function plot_derivatives1D_autodecoder(
     decoder::NTuple{3, Any},
-    Xdata,
+    x::AbstractVector,
     p0::AbstractVector,
     md = nothing;
     second_derv::Bool = true,
@@ -56,18 +56,19 @@ function plot_derivatives1D_autodecoder(
 )
     NN, p, st = freeze_autodecoder(decoder, p0)
 
-    Nx = length(Xdata)
-    Xbatch = reshape(Xdata, 1, Nx)
+    Nx = length(x)
+    xbatch = reshape(x, 1, Nx)
     Icode = ones(Int32, 1, Nx)
 
-    U, Udx, Udxx = dUdX2(Xbatch, NN, p, st, Icode, md; autodiff, ϵ) .|> vec
+    model = NeuralSpaceModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
+    u, udx, udxx = dudx2(model, xbatch, p; autodiff, ϵ) .|> vec
 
     plt = plot(xabel = "x", ylabel = "u(x,t)")
-    plot!(plt, Xdata, U  , label = "u"  , w = 2.0)
-    plot!(plt, Xdata, Udx, label = "udx", w = 2.0)
+    plot!(plt, x, u  , label = "u"  , w = 3.0)
+    plot!(plt, x, udx, label = "udx", w = 3.0)
 
     if second_derv
-        plot!(plt, Xdata, Udxx, label = "udxx", w = 2.0)
+        plot!(plt, x, udxx, label = "udxx", w = 3.0)
     end
 
     return plt

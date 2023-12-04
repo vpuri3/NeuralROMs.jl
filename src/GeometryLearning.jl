@@ -18,6 +18,7 @@ import WeightInitializers: _nfan
 using Zygote
 using ChainRulesCore
 
+using FiniteDiff
 using ForwardDiff
 using ForwardDiff: Dual, Partials, value, partials
 

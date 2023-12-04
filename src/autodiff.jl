@@ -57,7 +57,7 @@ end
 function forwarddiff_jacobian(f,
     x::ADInputTypes{T},
 ) where{T}
-    ForwardDiff.jacobian(f, x)
+    ForwardDiff.jacobian(f, x) # TODO: scalar indexing on GPU :/
 end
 
 # SparseDiffTools.SparseDiffToolsTag()

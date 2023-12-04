@@ -487,36 +487,43 @@ function postprocess_autodecoder(
     # from training data
     #==============#
 
-    # _data, _, _ = makedata_autodecode(datafile)
-    # _Icode, _xdata = _data[1]
-    # _xdata = unnormalizedata(_xdata, md.x̄, md.σx)
-    #
-    # model = NeuralSpaceModel(NN, st, _Icode, md.x̄, md.σx, md.ū, md.σu) |> device
-    # _Upred = model(_xdata |> device, p |> device) |> Lux.cpu_device()
-    # _Upred = reshape(_Upred, Nx, length(md._Ib), Nt)
-    #
-    # for k in 1:length(md._Ib)
-    #     Ud = @view _Udata[:, k, :]
-    #     Up = @view _Upred[:, k, :]
-    #
-    #     if makeplot
-    #         xlabel = "x"
-    #         ylabel = "u(x, t)"
-    #     
-    #         _mu = mu[md._Ib[k]]
-    #         title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
-    #     
-    #         idx = LinRange(1, size(Up, 2), 11) .|> Base.Fix1(round, Int)
-    #         plt = plot(;title, xlabel, ylable)
-    #         plot!(Xdata, Ud[:, idx], w = 2.0, label = "True")
-    #         plot!(Xdata, Up[:, idx], w = 2.0, label = "Pred")
-    #         png(plt, "train$(k)")
-    #
-    #         anim = animate1D(Ud, Up, Xdata, Tdata;
-    #             w = 2, xlabel, ylabel, title)
-    #         gif(anim, joinpath(outdir, "train$(k).gif"), fps)
-    #     end
-    # end
+    _data, _, _ = makedata_autodecode(datafile)
+    _xdata, _Icode = _data[1]
+    _xdata = unnormalizedata(_xdata, md.x̄, md.σx)
+    
+    model = NeuralSpaceModel(NN, st, _Icode, md.x̄, md.σx, md.ū, md.σu) |> device
+    _Upred = model(_xdata |> device, p |> device) |> Lux.cpu_device()
+    _Upred = reshape(_Upred, Nx, length(md._Ib), Nt)
+    
+    for k in 1:length(md._Ib)
+        Ud = @view _Udata[:, k, :]
+        Up = @view _Upred[:, k, :]
+    
+        if makeplot
+            xlabel = "x"
+            ylabel = "u(x, t)"
+       
+            _mu = mu[md._Ib[k]]
+            title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+       
+            idx_pred = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
+            idx_data = idx_pred
+
+            upred = Up[:, idx_pred]
+            udata = Ud[:, idx_data]
+
+            Iplot = 1:8:Nx
+
+            plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
+            plot!(plt, Xdata, upred, w = 2, palette = :tab10)
+            scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
+            png(plt, joinpath(outdir, "train$(k)"))
+    
+            anim = animate1D(Ud, Up, Xdata, Tdata;
+                w = 2, xlabel, ylabel, title)
+            gif(anim, joinpath(outdir, "train$(k).gif"); fps)
+        end
+    end
 
     #==============#
     # inference (via data regression)
@@ -544,11 +551,11 @@ function postprocess_autodecoder(
     #         title = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
     #         _name = k in md._Ib ? "infer_train$(k)" : "infer_test$(k)"
     #
-    #         idx = LinRange(1, size(Up, 2), 11) .|> Base.Fix1(round, Int)
-    #         plt = plot(;title, xlabel, ylabel)
+    #         idx = LinRange(1, size(Up, 2), 10) .|> Base.Fix1(round, Int)
+    #         plt = plot(;title, xlabel, ylabel, legend = false)
     #         plot!(Xdata, Up[:, idx], w = 2.0, label = "Pred", s = :solid)
-    #         plot!(Xdata, Ud[:, idx], w = 2.0, label = "True", s = :dash)
-    #         # png(plt, _name)
+    #         plot!(Xdata, Ud[:, idx], w = 4.0, label = "True", s = :dash)
+              # png(plt, joinpath(outdir, _name))
     #         display(plt)
     #
     #         # anim = animate1D(Ud, Up, Xdata, Tdata;
@@ -594,18 +601,18 @@ function postprocess_autodecoder(
     # check derivative
     #==============#
 
-    # begin
-    #     k = 1
-    #     i = 100
-    #
-    #     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-    #     p0 = _code[2].weight[:, i]
-    #
-    #     plt = GeometryLearning.plot_derivatives1D_autodecoder(decoder, Xdata, p0, md,
-    #         second_derv = false)
-    #     png(plt, joinpath(outdir, "derv"))
-    #     display(plt)
-    # end
+    begin
+        k = 1
+        i = 100
+    
+        decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+        p0 = _code[2].weight[:, i]
+    
+        plt = GeometryLearning.plot_derivatives1D_autodecoder(decoder, Xdata, p0, md,
+            second_derv = false)
+        png(plt, joinpath(outdir, "derv"))
+        display(plt)
+    end
 
     begin
         k = 1
@@ -619,7 +626,7 @@ function postprocess_autodecoder(
         @time _, Up, Tpred = evolve_autodecoder(prob, decoder, md, data, p0;
             rng, device, verbose)
     
-        idx = LinRange(1, size(Up, 2), 11) .|> Base.Fix1(round, Int)
+        idx = LinRange(1, size(Up, 2), 10) .|> Base.Fix1(round, Int)
     
         function uIC(x; μ = -0.5f0, σ = 0.1f0)
             u = @. exp(-1f0/2f0 * ((x-μ)/σ)^2)
@@ -636,9 +643,11 @@ function postprocess_autodecoder(
         utrue = Tuple(uExact(Xdata, md.md_data.c, t) for t in tidx)
         utrue = hcat(utrue...)
     
+        Iplot = 1:4:Nx
+
         plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
-        plot!(plt, Xdata, upred, w = 2, s = :solid)
-        plot!(plt, Xdata, utrue, w = 2, s = :dash)
+        plot!(plt, Xdata, upred, w = 2, s = :solid, palette = :tab10)
+        scatter!(plt, Xdata[Iplot], utrue[Iplot, :], w = 1, palette = :tab10)
     
         error = sum(abs, (upred - utrue).^2) / length(utrue)
         print("MSE: $(error)")
