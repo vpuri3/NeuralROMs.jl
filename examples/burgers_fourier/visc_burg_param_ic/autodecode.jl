@@ -225,7 +225,6 @@ function evolve_autodecoder(
     #============================#
     nlsmaxiters = 10
     abstol = T(1f-6)
-    Δt = T(1f-3)
 
     autodiff_space = AutoForwardDiff()
     ϵ_space = nothing
@@ -235,14 +234,6 @@ function evolve_autodecoder(
 
     timealg = EulerForward()
     # timealg = EulerBackward()
-
-    projection_type = Val(:Galerkin)
-
-    # projection_type = Val(:LSPG)
-    # Δt = T(1f-4)
-
-    # adaptive_timestep = false
-    adaptive_timestep = true
 
     #============================#
     # learn IC
@@ -265,7 +256,7 @@ function evolve_autodecoder(
         abstol,
         verbose,
     )
-    u0 = model(xbatch, p0)
+    u1 = u0 = model(xbatch, p0)
 
     if verbose
         println("#============================#")
@@ -287,11 +278,6 @@ function evolve_autodecoder(
     ps = (p0,)
     us = (u0,)
 
-    # for time-stepper
-    tprevs = (t0,)
-    pprevs = (p0,)
-    uprevs = (u0,)
-
     ##########
     # LOOK INSIDE THE NONLINEAR SOLVER. FOLLOW CROM METHODOLOGY
     # - why is the nonlinear solver converging when it shouldn't???
@@ -301,7 +287,14 @@ function evolve_autodecoder(
     # - can we use variational inference in the NN models?
     ##########
 
+    Δt = T(1f-3)
+
+    adaptive_timestep = true
+    # adaptive_timestep = false
+
     scheme = Galerkin(linsolve, 1f-2, 1f-6) # abstol_inf, abstol_mse
+    # scheme = LeastSqPetrovGalerkin(nlssolve, residual, nlsmaxiters, 1f-6, 1f-3, 1f-6)
+
     integrator = TimeIntegrator(prob, model, timealg, scheme, xbatch, t0, p0;
         adaptive = adaptive_timestep)
 
@@ -326,124 +319,12 @@ function evolve_autodecoder(
         #============================#
         # solve
         #============================#
+        t1, p1, u1, _, _, Δt = perform_timestep!(integrator, Δt)
 
-        p1 = if projection_type isa Val{:LSPG}
-            nlsp = Δt, tprevs, uprevs, pprevs
-
-            nlsp = t1, Δt, t0, p0, u0
-
-            p1, nlssol = nonlinleastsq(
-                model, p0, batch, nlssolve;
-                residual, nlsp, maxiters = nlsmaxiters, abstol,
-            )
-
-            _mse = sum(abs2, nlssol.resid) / length(nlssol.resid)
-            _inf = norm(nlssol.resid, Inf)
-            println("Nonlinear Steps: $(nlssol.stats.nsteps), \
-                MSE: $(round(_mse, sigdigits = 8)), \
-                ||∞: $(round(_inf, sigdigits = 8)), \
-                Ret: $(nlssol.retcode)"
-            )
-
-            if adaptive_timestep
-                if (_mse < abstol) & (nlssol.stats.nsteps < 4)
-                    Δt *= T(2f0)
-                end
-
-                while (_mse > abstol)
-                    if Δt < T(1f-4)
-                        println("Δt = $Δt")
-                        break
-                    end
-
-                    Δt /= T(2f0)
-                    t1 = t0 + Δt
-
-                    l_print = round(_mse; sigdigits = 6)
-                    t_print = round(t1; sigdigits = 6)
-                    Δt_print = round(Δt; sigdigits = 6)
-
-                    println("REPEATING Time Step: $tstep, \
-                        Time: $t_print, MSE: $l_print, Δt: $Δt_print")
-
-                    nlsp = t1, Δt, t0, p0, u0
-
-                    p1, nlssol = nonlinleastsq(
-                        model, p0, batch, nlssolve;
-                        residual, nlsp,
-                        maxiters = nlsmaxiters, abstol,
-                    )
-
-                    _mse = sum(abs2, nlssol.resid) / length(nlssol.resid)
-                    _inf = norm(nlssol.resid, Inf)
-                    println("Nonlinear Steps: $(nlssol.stats.nsteps), \
-                        MSE: $(round(_mse, sigdigits = 8)), \
-                        ||∞: $(round(_inf, sigdigits = 8)), \
-                        Ret: $(nlssol.retcode)"
-                    )
-                end
-            end
-
-            p1
-        elseif projection_type isa Val{:Galerkin}
-
-            # t1, p1, u1, f1, r1, Δt = solve_timestep(integrator, Δt)
-            # update_integrator!(integrator, t1, p1, u1, f1)
-
-            t1, p1, u1, f1, r1, Δt = perform_timestep!(integrator, Δt)
-
-            # p1
-            #
-            # if adaptive_timestep
-            #     # if (_inf < 1f-3) # & linsolve iters
-            #     #     Δt *= T(2f0)
-            #     # end
-            #
-            #     while (_inf > 1f-2)
-            #         if Δt < T(1f-5)
-            #             println("Δt = $Δt")
-            #             break
-            #         end
-            #
-            #         Δt /= T(2f0)
-            #         t1 = t0 + Δt
-            #
-            #         l_print = round(_mse; sigdigits = 6)
-            #         t_print = round(t1; sigdigits = 6)
-            #         Δt_print = round(Δt; sigdigits = 6)
-            #
-            #         println("REPEATING Time Step: $tstep, \
-            #             Time: $t_print, MSE: $l_print, Δt: $Δt_print")
-            #
-            #         J0 = dudp(model, xbatch, p0; autodiff)
-            #         rhs0 = dudtRHS(prob, model, xbatch, p0, t0; autodiff = autodiff_space, ϵ = ϵ_space)
-            #
-            #         dpdt0 = J0 \ vec(rhs0)
-            #         p1 = apply_timestep(timealg, Δt, p0, dpdt0)
-            #
-            #         u1 = model(xbatch, p1)
-            #         rhs1 = dudtRHS(prob, model, xbatch, p1, t1)
-            #         resid = compute_residual(timealg, Δt, u0, u1, rhs1)
-            #
-            #         _mse = sum(abs2, resid) / length(resid)
-            #         _inf = norm(resid, Inf)
-            #         println("Linear Steps: $(0), \
-            #             MSE: $(round(_mse, sigdigits = 8)), \
-            #             ||∞: $(round(_inf, sigdigits = 8))"
-            #         )
-            #     end
-            # end
-
-            p1
-        else
-            error("Projection type must be `Val(:LSPG)`, or `Val(:Galerkin)`.")
-        end
-    
         #============================#
         # Evaluate, save, etc
         #============================#
-        u1 = model(xbatch, p1)
-    
+
         ps = push(ps, p1)
         us = push(us, u1)
         ts = push(ts, t1)

@@ -58,6 +58,7 @@ using LineSearches
 abstract type AbstractNeuralModel end
 abstract type AbstractPDEProblem end
 abstract type AbstractTimeStepper end
+abstract type AbstractSolveScheme end
 
 export AbstractNeuralModel, AbstractPDEProblem, AbstractTimeStepper
 

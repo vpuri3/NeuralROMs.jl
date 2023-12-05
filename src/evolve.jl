@@ -62,23 +62,6 @@ function apply_timestep(
 end
 
 #===========================================================#
-abstract type AbstractSolveScheme end
-
-@concrete mutable struct LeastSqPetrovGalerkin{T} <: AbstractSolveScheme
-    nlsolve
-    residual
-    maxiters
-    abstolInf::T # ||∞
-    abstol2::T   # ||₂
-end
-
-@concrete mutable struct Galerkin{T} <: AbstractSolveScheme
-    linsolve
-    abstolInf::T # ||∞
-    abstolMSE::T # ||₂
-end
-
-#===========================================================#
 @concrete mutable struct TimeIntegrator
     prob
     model
@@ -125,62 +108,23 @@ function TimeIntegrator(
     )
 end
 
-function update_integrator!(int::TimeIntegrator,
+function update_integrator!(integrator::TimeIntegrator,
     t::T,
     p::AbstractArray{T}, # TODO- AbstractVector
     u::AbstractArray{T},
     f::AbstractArray{T},
 ) where{T<:Real}
 
-    int.tprevs = (t, int.tprevs[1:end-1]...)
-    int.pprevs = (p, int.pprevs[1:end-1]...)
-    int.uprevs = (u, int.uprevs[1:end-1]...)
-    int.fprevs = (f, int.fprevs[1:end-1]...)
+    integrator.tprevs = (t, integrator.tprevs[1:end-1]...)
+    integrator.pprevs = (p, integrator.pprevs[1:end-1]...)
+    integrator.uprevs = (u, integrator.uprevs[1:end-1]...)
+    integrator.fprevs = (f, integrator.fprevs[1:end-1]...)
 
-    int
+    integrator
 end
 
-function solve_timestep(int::TimeIntegrator, Δt::Real)
-    solve_timestep(int, int.scheme, int.timealg, Δt)
-end
-
-function solve_timestep(
-    int::TimeIntegrator,
-    scheme::Galerkin,
-    timealg::AbstractTimeStepper,
-    Δt::T
-) where{T}
-
-    @unpack tprevs, pprevs, uprevs, fprevs = int
-    @unpack prob, model, x = int
-    @unpack autodiff, ϵ = int
-
-    xbatch = reshape(x, 1, :)
-
-    t0, p0, u0, f0 = getindex.((tprevs, pprevs, uprevs, fprevs), 1)
-
-    # du/dp (N, n), du/dt (N,)
-    J0 = dudp(model, xbatch, p0; autodiff, ϵ)
-    f0 = dudtRHS(prob, model, xbatch, p0, t0; autodiff, ϵ)
-
-    # solve
-    dpdt0 = J0 \ vec(f0)
-
-    # get new states
-    t1 = t0 + Δt
-    p1 = apply_timestep(timealg, Δt, p0, dpdt0)
-    u1 = model(xbatch, p1)
-    f1 = dudtRHS(prob, model, xbatch, p1, t1)
-
-    # compute residual stats
-    r1 = compute_residual(timealg, Δt, u0, u1, f1)
-
-    # print message
-
-    print("Linear Steps: $(0), ")
-    print_resid_stats(r1, scheme.abstolMSE, scheme.abstolInf)
-
-    t1, p1, u1, f1, r1, Δt
+function solve_timestep(integrator::TimeIntegrator, Δt::Real)
+    solve_timestep(integrator, integrator.scheme, integrator.timealg, Δt)
 end
 
 function print_resid_stats(r::AbstractArray, abstolMSE, abstolInf)
@@ -199,6 +143,7 @@ function perform_timestep!(
     integrator::TimeIntegrator,
     Δt::T;
     Δt_min = T(1e-5),
+    tol_scale = T(10),
 ) where{T}
 
     t1, p1, u1, f1, r1 = solve_timestep(integrator, Δt)
@@ -224,6 +169,12 @@ function perform_timestep!(
             mse_r = sum(abs2, r1) / length(r1)
             inf_r = norm(r1, Inf)
         end
+
+        if (tol_scale * mse_r < abstolMSE) & (tol_scale * inf_r < abstolInf)
+            printstyled("Tolerances are well satisfied. Bumping up Δt.\n",
+                color = :green)
+            Δt *= T(1.25)
+        end
     else
 
     end
@@ -233,5 +184,103 @@ function perform_timestep!(
     return t1, p1, u1, f1, r1, Δt
 end
 
+#===========================================================#
+
+@concrete mutable struct LeastSqPetrovGalerkin{T} <: AbstractSolveScheme
+    nlssolve
+    nlsresidual
+    nlsmaxiters
+    abstolnls::T
+    abstolInf::T # ||∞
+    abstolMSE::T # ||₂
+end
+
+function solve_timestep(
+    integrator::TimeIntegrator,
+    scheme::LeastSqPetrovGalerkin,
+    timealg::AbstractTimeStepper,
+    Δt::T
+) where{T}
+
+    @unpack tprevs, pprevs, uprevs, fprevs = integrator
+    @unpack prob, model, x = integrator
+    @unpack autodiff, ϵ = integrator
+
+    # get stuff jankily
+    xbatch = reshape(x, 1, :)
+    t0, p0, u0, f0 = getindex.((tprevs, pprevs, uprevs, fprevs), 1)
+    batch = (xbatch, u0)
+
+    t1 = t0 + Δt
+    nlsp = t1, Δt, t0, p0, u0
+
+    # solve
+    p1, nlssol = nonlinleastsq(
+        model, p0, batch, scheme.nlssolve;
+        nlsp,
+        residual = scheme.nlsresidual,
+        maxiters = scheme.nlsmaxiters,
+        abstol = scheme.abstolnls,
+    )
+
+    # get new states
+    u1 = model(xbatch, p1)
+    f1 = dudtRHS(prob, model, xbatch, p1, t1)
+
+    # compute residual stats
+    r1 = nlssol.resid # compute_residual(timealg, Δt, u0, u1, f1)
+
+    # print message
+    steps = nlssol.stats.nsteps
+    print("Nonlinear Steps: $steps, ")
+    print_resid_stats(r1, scheme.abstolMSE, scheme.abstolInf)
+
+    t1, p1, u1, f1, r1
+end
+
+@concrete mutable struct Galerkin{T} <: AbstractSolveScheme
+    linsolve
+    abstolInf::T # ||∞ # TODO - switch to reltol
+    abstolMSE::T # ||₂
+end
+
+function solve_timestep(
+    integrator::TimeIntegrator,
+    scheme::Galerkin,
+    timealg::AbstractTimeStepper,
+    Δt::T
+) where{T}
+
+    @unpack tprevs, pprevs, uprevs, fprevs = integrator
+    @unpack prob, model, x = integrator
+    @unpack autodiff, ϵ = integrator
+
+    # get stuff jankily
+    xbatch = reshape(x, 1, :)
+    t0, p0, u0, f0 = getindex.((tprevs, pprevs, uprevs, fprevs), 1)
+
+    # du/dp (N, n), du/dt (N,)
+    J0 = dudp(model, xbatch, p0; autodiff, ϵ)
+    f0 = dudtRHS(prob, model, xbatch, p0, t0; autodiff, ϵ)
+
+    # solve
+    dpdt0 = J0 \ vec(f0)
+
+    # get new states
+    t1 = t0 + Δt
+    p1 = apply_timestep(timealg, Δt, p0, dpdt0)
+    u1 = model(xbatch, p1)
+    f1 = dudtRHS(prob, model, xbatch, p1, t1)
+
+    # compute residual stats
+    r1 = compute_residual(timealg, Δt, u0, u1, f1)
+
+    # print message
+    steps = 0
+    print("Linear Steps: $steps, ")
+    print_resid_stats(r1, scheme.abstolMSE, scheme.abstolInf)
+
+    t1, p1, u1, f1, r1
+end
 #===========================================================#
 #
