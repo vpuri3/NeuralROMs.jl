@@ -185,39 +185,33 @@ function evolve_autodecoder(
     verbose::Bool = true,
 )
     #============================#
-    # set up
-    #============================#
-
-    # Inputs should be
-    # - model::NeuralSpaceModel
-    # - prob::PDEProblem
-    # - data (x, u0)
-    # - tspan
-    # - p0,
-    # - kws...
-
     # data
+    #============================#
     xdata, udata, tdata = data
-    Nx = size(udata, 1)
+    Nx = length(xdata)
 
+    #============================#
     # make model
+    #============================#
     NN, p0, st = freeze_autodecoder(decoder, p0; rng)
     Icode = ones(Int32, 1, Nx)
     model = NeuralSpaceModel(NN, st, Icode,
         metadata.x̄, metadata.σx, metadata.ū, metadata.σu)
 
+    #============================#
     # move to device
+    #============================#
     xdata = xdata |> device
-    Icode = Icode |> device
     udata = udata |> device
     model = model |> device
     p0 = p0 |> device
 
     T = eltype(p0)
 
+    #============================#
     # solvers
+    #============================#
     linsolve = isnothing(linsolve) ? QRFactorization() : linsolve
-
     nlssolve = if isnothing(nlssolve)
         autodiff = AutoForwardDiff()
         linesearch = LineSearch() # TODO
@@ -239,17 +233,15 @@ function evolve_autodecoder(
     # autodiff_space = AutoFiniteDiff()
     # ϵ_space = 0.005f0
 
-    # timestepper = EulerBackward()
-    timestepper = EulerForward()
+    timealg = EulerForward()
+    # timealg = EulerBackward()
 
-    # scheme = LeastSqPetrovGalerkin(nlsolve)
-    # scheme = PODGalerkin(linsolve)
-
-    projection_type = Val(:PODGalerkin)
+    projection_type = Val(:Galerkin)
 
     # projection_type = Val(:LSPG)
     # Δt = T(1f-4)
 
+    # adaptive_timestep = false
     adaptive_timestep = true
 
     #============================#
@@ -282,7 +274,7 @@ function evolve_autodecoder(
     #============================#
     # Set up solver
     #============================#
-    residual = make_residual(prob, timestepper;
+    residual = make_residual(prob, timealg;
         autodiff = autodiff_space,
         ϵ = ϵ_space,
     )
@@ -290,9 +282,15 @@ function evolve_autodecoder(
     tinit, tfinal = extrema(tdata) .|> T
     t0 = t1 = tinit
 
+    # for post-processing
+    ts = (t0,)
     ps = (p0,)
     us = (u0,)
-    ts = (t0,)
+
+    # for time-stepper
+    tprevs = (t0,)
+    pprevs = (p0,)
+    uprevs = (u0,)
 
     ##########
     # LOOK INSIDE THE NONLINEAR SOLVER. FOLLOW CROM METHODOLOGY
@@ -302,6 +300,10 @@ function evolve_autodecoder(
     # - NN partition of Unity model combined with SIRENs
     # - can we use variational inference in the NN models?
     ##########
+
+    scheme = Galerkin(linsolve, 1f-2, 1f-6) # abstol_inf, abstol_mse
+    integrator = TimeIntegrator(prob, model, timealg, scheme, xbatch, t0, p0;
+        adaptive = adaptive_timestep)
 
     #============================#
     # Time loop
@@ -326,9 +328,9 @@ function evolve_autodecoder(
         #============================#
 
         p1 = if projection_type isa Val{:LSPG}
-            nlsp = t1, Δt, t0, p0, u0
+            nlsp = Δt, tprevs, uprevs, pprevs
 
-            # TODO - try the CROM way?
+            nlsp = t1, Δt, t0, p0, u0
 
             p1, nlssol = nonlinleastsq(
                 model, p0, batch, nlssolve;
@@ -337,7 +339,7 @@ function evolve_autodecoder(
 
             _mse = sum(abs2, nlssol.resid) / length(nlssol.resid)
             _inf = norm(nlssol.resid, Inf)
-            println("\tNonlinear Steps: $(nlssol.stats.nsteps), \
+            println("Nonlinear Steps: $(nlssol.stats.nsteps), \
                 MSE: $(round(_mse, sigdigits = 8)), \
                 ||∞: $(round(_inf, sigdigits = 8)), \
                 Ret: $(nlssol.retcode)"
@@ -383,71 +385,58 @@ function evolve_autodecoder(
             end
 
             p1
-        elseif projection_type isa Val{:PODGalerkin}
-            # dU/dp (N, n), dU/dt (N,)
-            # J0 = dudp(model, xbatch, p0; autodiff = autodiff_space, ϵ = ϵ_space)
-            J0 = dudp(model, xbatch, p0; autodiff)
-            rhs0 = dudtRHS(prob, model, xbatch, p0, t0; autodiff = autodiff_space, ϵ = ϵ_space)
+        elseif projection_type isa Val{:Galerkin}
 
-            dpdt0 = J0 \ vec(rhs0)
-            p1 = apply_timestep(timestepper, Δt, p0, dpdt0)
+            # t1, p1, u1, f1, r1, Δt = solve_timestep(integrator, Δt)
+            # update_integrator!(integrator, t1, p1, u1, f1)
 
-            u1 = model(xbatch, p1)
-            rhs1 = dudtRHS(prob, model, xbatch, p1, t1)
-            resid = compute_residual(timestepper, Δt, u0, u1, rhs1)
+            t1, p1, u1, f1, r1, Δt = perform_timestep!(integrator, Δt)
 
-            _mse = sum(abs2, resid) / length(resid)
-            _inf = norm(resid, Inf)
-            println("Linear Steps: $(0), \
-                MSE: $(round(_mse, sigdigits = 8)), \
-                ||∞: $(round(_inf, sigdigits = 8))"
-            )
-
-            p1
-
-            if adaptive_timestep
-                if (_mse < abstol) & (nlssol.stats.nsteps < 4)
-                    Δt *= T(2f0)
-                end
-
-                while (_inf > 1f-3)
-                    if Δt < T(1f-4)
-                        println("Δt = $Δt")
-                        break
-                    end
-
-                    Δt /= T(2f0)
-                    t1 = t0 + Δt
-
-                    l_print = round(_mse; sigdigits = 6)
-                    t_print = round(t1; sigdigits = 6)
-                    Δt_print = round(Δt; sigdigits = 6)
-
-                    println("REPEATING Time Step: $tstep, \
-                        Time: $t_print, MSE: $l_print, Δt: $Δt_print")
-
-                    J0 = dudp(model, xbatch, p0; autodiff)
-                    rhs0 = dudtRHS(prob, model, xbatch, p0, t0; autodiff = autodiff_space, ϵ = ϵ_space)
-
-                    dpdt0 = J0 \ vec(rhs0)
-                    p1 = apply_timestep(timestepper, Δt, p0, dpdt0)
-
-                    u1 = model(xbatch, p1)
-                    rhs1 = dudtRHS(prob, model, xbatch, p1, t1)
-                    resid = compute_residual(timestepper, Δt, u0, u1, rhs1)
-
-                    _mse = sum(abs2, resid) / length(resid)
-                    _inf = norm(resid, Inf)
-                    println("Linear Steps: $(0), \
-                        MSE: $(round(_mse, sigdigits = 8)), \
-                        ||∞: $(round(_inf, sigdigits = 8))"
-                    )
-                end
-            end
+            # p1
+            #
+            # if adaptive_timestep
+            #     # if (_inf < 1f-3) # & linsolve iters
+            #     #     Δt *= T(2f0)
+            #     # end
+            #
+            #     while (_inf > 1f-2)
+            #         if Δt < T(1f-5)
+            #             println("Δt = $Δt")
+            #             break
+            #         end
+            #
+            #         Δt /= T(2f0)
+            #         t1 = t0 + Δt
+            #
+            #         l_print = round(_mse; sigdigits = 6)
+            #         t_print = round(t1; sigdigits = 6)
+            #         Δt_print = round(Δt; sigdigits = 6)
+            #
+            #         println("REPEATING Time Step: $tstep, \
+            #             Time: $t_print, MSE: $l_print, Δt: $Δt_print")
+            #
+            #         J0 = dudp(model, xbatch, p0; autodiff)
+            #         rhs0 = dudtRHS(prob, model, xbatch, p0, t0; autodiff = autodiff_space, ϵ = ϵ_space)
+            #
+            #         dpdt0 = J0 \ vec(rhs0)
+            #         p1 = apply_timestep(timealg, Δt, p0, dpdt0)
+            #
+            #         u1 = model(xbatch, p1)
+            #         rhs1 = dudtRHS(prob, model, xbatch, p1, t1)
+            #         resid = compute_residual(timealg, Δt, u0, u1, rhs1)
+            #
+            #         _mse = sum(abs2, resid) / length(resid)
+            #         _inf = norm(resid, Inf)
+            #         println("Linear Steps: $(0), \
+            #             MSE: $(round(_mse, sigdigits = 8)), \
+            #             ||∞: $(round(_inf, sigdigits = 8))"
+            #         )
+            #     end
+            # end
 
             p1
         else
-            error("Projection type must be `Val(:LSPG)`, or `Val(:PODGalerkin)`.")
+            error("Projection type must be `Val(:LSPG)`, or `Val(:Galerkin)`.")
         end
     
         #============================#
@@ -458,7 +447,7 @@ function evolve_autodecoder(
         ps = push(ps, p1)
         us = push(us, u1)
         ts = push(ts, t1)
-    
+
         if verbose
             println("#============================#")
         end
@@ -667,7 +656,7 @@ function postprocess_autodecoder(
     # end
 
     begin
-        k = 7
+        k = 1
         Ud = Udata[:, k, :]
         data = (Xdata, Ud, Tdata)
     
@@ -694,8 +683,10 @@ function postprocess_autodecoder(
         plot!(plt, Xdata, upred, w = 2, palette = :tab10)
         scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
     
-        error = sum(abs, (upred - udata).^2) / length(udata)
-        print("MSE: $(error)")
+        _mse  = sum(abs2, upred - udata) / length(udata)
+        _rmse = sum(abs2, upred - udata) / sum(abs2, udata) |> sqrt
+        println("MSE : $(_mse)")
+        println("RMSE: $(_rmse)")
     
         png(plt, joinpath(outdir, "evolve_$k"))
         display(plt)

@@ -47,6 +47,7 @@ using Tullio
 # data management
 using ComponentArrays
 using Setfield: @set!
+using UnPack
 using ConcreteStructs
 using IterTools
 
@@ -94,10 +95,12 @@ include("nonlinleastsq.jl")
 export nonlinleastsq
 
 include("evolve.jl")
-export make_residual, residual_learn,
-    compute_residual, apply_timestep, isimplicit,
+export
+    TimeIntegrator, update_integrator!, solve_timestep, perform_timestep!,
+    make_residual, residual_learn,
+    compute_residual, apply_timestep, timeinteg_isimplicit, timeinteg_order,
     EulerForward, EulerBackward,
-    PODGalerkin, LeastSqPetrovGalerkin
+    Galerkin, LeastSqPetrovGalerkin
 
 include("train.jl")
 export train_model, callback, optimize, plot_training
