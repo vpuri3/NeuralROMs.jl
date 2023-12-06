@@ -101,7 +101,7 @@ end
 
 #======================================================#
 function infer_autodecoder(
-    model::NeuralSpaceModel,
+    model::AbstractNeuralModel,
     data::Tuple, # (X, U, T)
     p0::AbstractVector;
     device = Lux.cpu_device(),
@@ -172,47 +172,33 @@ function infer_autodecoder(
 end
 
 #========================================================#
-function evolve_autodecoder(
+function evolve_model(
     prob::AbstractPDEProblem,
-    decoder::NTuple{3, Any},
-    metadata::NamedTuple,
-    data::Tuple,
-    p0::AbstractVector;
-    rng::Random.AbstractRNG = Random.default_rng(),
+    model::AbstractNeuralModel,
+    timealg::AbstractTimeStepper,
+    scheme::AbstractSolveScheme,
+    data::NTuple{3, AbstractVecOrMat},
+    p0::AbstractVector,
+    Δt::Union{Real,Nothing} = nothing;
     nlssolve = nothing,
-    linsolve = nothing,
+    nlsmaxiters = 10,
+    nlsabstol = 1f-7,
+    time_adaptive::Bool = true,
     device = Lux.cpu_device(),
     verbose::Bool = true,
 )
-    #============================#
     # data
-    #============================#
-    xdata, udata, tdata = data
-    Nx = length(xdata)
+    x, u0, tsave = data
 
-    #============================#
-    # make model
-    #============================#
-    NN, p0, st = freeze_autodecoder(decoder, p0; rng)
-    Icode = ones(Int32, 1, Nx)
-    model = NeuralSpaceModel(NN, st, Icode,
-        metadata.x̄, metadata.σx, metadata.ū, metadata.σu)
-
-    #============================#
     # move to device
-    #============================#
-    xdata = xdata |> device
-    udata = udata |> device
+    (x, u0) = (x, u0) |> device
     model = model |> device
     p0 = p0 |> device
-
     T = eltype(p0)
 
-    #============================#
     # solvers
-    #============================#
-    linsolve = isnothing(linsolve) ? QRFactorization() : linsolve
     nlssolve = if isnothing(nlssolve)
+        linsolve = QRFactorization()
         autodiff = AutoForwardDiff()
         linesearch = LineSearch() # TODO
         nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
@@ -221,131 +207,76 @@ function evolve_autodecoder(
     end
 
     #============================#
-    # args/kwargs
+    # learn IC
     #============================#
-    nlsmaxiters = 10
-    abstol = T(1f-6)
+    if verbose
+        println("#============================#")
+        println("Time Step: $(0), Time: 0.0 - learn IC")
+    end
+
+    p0, _ = nonlinleastsq(model, p0, (x, u0), nlssolve;
+        residual = residual_learn,
+        maxiters = nlsmaxiters * 5,
+        termination_condition = AbsTerminationMode(),
+        abstol = nlsabstol,
+        verbose,
+    )
+    u0 = model(x, p0)
+
+    Δt = isnothing(Δt) ? T(1f-2) : T(Δt)
+
+    integrator = TimeIntegrator(prob, model, timealg, scheme, x, tsave, p0;
+        adaptive = time_adaptive)
+
+    evolve_integrator(integrator; verbose)
+end
+
+function evolve_autodecoder(
+    prob::AbstractPDEProblem,
+    decoder::NTuple{3, Any},
+    metadata::NamedTuple,
+    data::NTuple{3, AbstractVecOrMat},
+    p0::AbstractVector;
+    rng::Random.AbstractRNG = Random.default_rng(),
+    device = Lux.cpu_device(),
+    verbose::Bool = true,
+)
+
+    # data, model
+    x, _, _ = data
+
+    NN, p0, st = freeze_autodecoder(decoder, p0; rng)
+    model = NeuralEmbeddingModel(NN, st, x;
+        x̄ = metadata.x̄, σx = metadata.σx,
+        ū = metadata.ū, σu = metadata.σu,
+    )
+
+    # solvers
+    linsolve = QRFactorization()
+    autodiff = AutoForwardDiff()
+    linesearch = LineSearch() # TODO
+    nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
+    nlsmaxiters = 20
 
     autodiff_space = AutoForwardDiff()
     ϵ_space = nothing
-
     # autodiff_space = AutoFiniteDiff()
     # ϵ_space = 0.005f0
 
     timealg = EulerForward()
-    # timealg = EulerBackward()
+    timealg = EulerBackward()
 
-    #============================#
-    # learn IC
-    #============================#
-    tstep = 0
+    Δt = 1f-2
+    time_adaptive = true
 
-    if verbose
-        println("#============================#")
-        println("Time Step: $tstep, time: 0.0 - learn IC")
-    end
+    scheme = Galerkin(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
 
-    xbatch = reshape(xdata, 1, Nx)
-    ubatch = reshape(udata[:, 1], 1, Nx)
-    batch  = (xbatch, ubatch)
-
-    p0, nlssol, = nonlinleastsq(model, p0, batch, nlssolve;
-        residual = residual_learn,
-        maxiters = nlsmaxiters * 5,
-        termination_condition = AbsTerminationMode(),
-        abstol,
-        verbose,
-    )
-    u1 = u0 = model(xbatch, p0)
-
-    if verbose
-        println("#============================#")
-    end
-
-    #============================#
-    # Set up solver
-    #============================#
-    residual = make_residual(prob, timealg;
-        autodiff = autodiff_space,
-        ϵ = ϵ_space,
-    )
-
-    tinit, tfinal = extrema(tdata) .|> T
-    t0 = t1 = tinit
-
-    # for post-processing
-    ts = (t0,)
-    ps = (p0,)
-    us = (u0,)
-
-    ##########
-    # LOOK INSIDE THE NONLINEAR SOLVER. FOLLOW CROM METHODOLOGY
-    # - why is the nonlinear solver converging when it shouldn't???
-    ##########
-    # RANDOM IDEAS
-    # - NN partition of Unity model combined with SIRENs
-    # - can we use variational inference in the NN models?
-    ##########
-
-    Δt = T(1f-3)
-
-    adaptive_timestep = true
-    # adaptive_timestep = false
-
-    scheme = Galerkin(linsolve, 1f-2, 1f-6) # abstol_inf, abstol_mse
+    # residual = make_residual(prob, timealg; autodiff = autodiff_space, ϵ = ϵ_space)
     # scheme = LeastSqPetrovGalerkin(nlssolve, residual, nlsmaxiters, 1f-6, 1f-3, 1f-6)
 
-    integrator = TimeIntegrator(prob, model, timealg, scheme, xbatch, t0, p0;
-        adaptive = adaptive_timestep)
-
-    #============================#
-    # Time loop
-    #============================#
-    while t1 <= tfinal
-    
-        #============================#
-        # set up
-        #============================#
-        tstep += 1
-        batch = (xbatch, u0)
-        t1 = t0 + Δt
-    
-        if verbose
-            t_print  = round(t1; sigdigits=6)
-            Δt_print = round(Δt; sigdigits=6)
-            println("Time Step: $tstep, Time: $t_print, Δt: $Δt_print")
-        end
-    
-        #============================#
-        # solve
-        #============================#
-        t1, p1, u1, _, _, Δt = perform_timestep!(integrator, Δt)
-
-        #============================#
-        # Evaluate, save, etc
-        #============================#
-
-        ps = push(ps, p1)
-        us = push(us, u1)
-        ts = push(ts, t1)
-
-        if verbose
-            println("#============================#")
-        end
-    
-        #============================#
-        # update states
-        #============================#
-        p0 = p1
-        u0 = u1
-        t0 = t1
-    end
-
-    code = mapreduce(getdata, hcat, ps) |> Lux.cpu_device()
-    pred = mapreduce(adjoint, hcat, us) |> Lux.cpu_device()
-    tyms = [ts...]
-
-    return code, pred, tyms
+    evolve_model(prob, model, timealg, scheme, data, p0, Δt;
+        nlssolve, time_adaptive, device, verbose,
+    )
 end
 
 #======================================================#
@@ -414,7 +345,7 @@ function postprocess_autodecoder(
     # _xdata, _Icode = _data[1]
     # _xdata = unnormalizedata(_xdata, md.x̄, md.σx)
     #
-    # model = NeuralSpaceModel(NN, st, _Icode, md.x̄, md.σx, md.ū, md.σu) |> device
+    # model = NeuralEmbeddingModel(NN, st, _Icode, md.x̄, md.σx, md.ū, md.σu) |> device
     # _Upred = model(_xdata |> device, p |> device) |> Lux.cpu_device()
     # _Upred = reshape(_Upred, Nx, length(md._Ib), Nt)
     #
@@ -458,7 +389,7 @@ function postprocess_autodecoder(
     # Icode = ones(Int32, 1, Nx)
     #
     # NN, p0, st = freeze_autodecoder(decoder, p0; rng)
-    # model = NeuralSpaceModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
+    # model = NeuralEmbeddingModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
     #
     # for k in 1:1 # axes(mu, 1)
     #     Ud = Udata[:, k, :]
@@ -538,37 +469,31 @@ function postprocess_autodecoder(
 
     begin
         k = 1
-        Ud = Udata[:, k, :]
-        data = (Xdata, Ud, Tdata)
+        It = 1:100:length(Tdata)
+
+        Ud = Udata[:, k, It]
+        U0 = Ud[:, 1]
+        data = (reshape(Xdata, 1, :), reshape(U0, 1, :), Tdata[It])
     
         decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
         p0 = _code[2].weight[:, 1]
 
-        prob = BurgersInviscid1D()
         # prob = BurgersViscous1D(1/(4f3))
-        @time _, Up, Tpred = evolve_autodecoder(prob, decoder, md, data, p0;
+        prob = BurgersInviscid1D()
+
+        CUDA.@time _, _, Up = evolve_autodecoder(prob, decoder, md, data, p0;
             rng, device, verbose)
 
-        idx_pred = LinRange(1, size(Up, 2), 10) .|> Base.Fix1(round, Int)
-        t_pred   = Tpred[idx_pred]
-    
-        idx_data = Tuple(findmin(abs.(Tdata .- t))[2] for t in t_pred)
-        idx_data = [idx_data...]
-    
-        upred = Up[:, idx_pred]
-        udata = Ud[:, idx_data]
-    
-        Iplot = 1:32:Nx
-    
+        Ix = 1:32:Nx
         plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
-        plot!(plt, Xdata, upred, w = 2, palette = :tab10)
-        scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
-    
-        _mse  = sum(abs2, upred - udata) / length(udata)
-        _rmse = sum(abs2, upred - udata) / sum(abs2, udata) |> sqrt
+        plot!(plt, Xdata, Up, w = 2, palette = :tab10)
+        scatter!(plt, Xdata[Ix], Ud[Ix, :], w = 1, palette = :tab10)
+
+        _mse  = sum(abs2, Up - Ud) / length(Ud)
+        _rmse = sum(abs2, Up - Ud) / sum(abs2, Ud) |> sqrt
         println("MSE : $(_mse)")
         println("RMSE: $(_rmse)")
-    
+
         png(plt, joinpath(outdir, "evolve_$k"))
         display(plt)
     end

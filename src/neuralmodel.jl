@@ -7,7 +7,7 @@ unnormalizedata(u::AbstractArray, μ::Number, σ::Number) = (u * σ) .+ μ
 # For 2D, make X a tuple (X, Y). should work fine with dUdX, etc
 # otherwise need `makeUfromXY`, `makeUfromX_newmodel` type functions
 
-@concrete mutable struct NeuralSpaceModel{T} <: AbstractNeuralModel
+@concrete mutable struct NeuralEmbeddingModel{T} <: AbstractNeuralModel
     NN
     st
     Icode
@@ -19,18 +19,43 @@ unnormalizedata(u::AbstractArray, μ::Number, σ::Number) = (u * σ) .+ μ
     σu::T
 end
 
-function Adapt.adapt_structure(to, model::NeuralSpaceModel)
+function NeuralEmbeddingModel(
+    NN::Lux.AbstractExplicitLayer,
+    st::NamedTuple,
+    x::AbstractArray;
+    Icode::Union{Nothing,AbstractArray{<:Integer}} = nothing,
+    x̄::T  = T(false),
+    σx::T = T(true),
+    ū::T  = T(false),
+    σu::T = T(true),
+) where{T<:Real}
+    Icode = if isnothing(Icode)
+        IT = T isa Type{Float64} ? Int64 : Int32
+        Icode = similar(x, IT)
+        fill!(Icode, true)
+    end
+    NeuralEmbeddingModel(NN, st, Icode, x̄, σx, ū, σu,)
+end
+
+function Adapt.adapt_structure(to, model::NeuralEmbeddingModel)
     st = Adapt.adapt_structure(to, model.st)
     Icode = Adapt.adapt_structure(to, model.Icode)
 
-    NeuralSpaceModel(
+    NeuralEmbeddingModel(
         model.NN, st, Icode, model.x̄, model.σx, model.ū, model.σu,
     )
 end
 
-function (model::NeuralSpaceModel)(x::AbstractArray, p::AbstractVector)
-    # assume x is of shape (1, N). may change to vec later.
-    @assert size(model.Icode) == size(x)
+function (model::NeuralEmbeddingModel)(
+    x::AbstractArray,
+    p::AbstractVector,
+)
+
+    Zygote.@ignore Icode = if isnothing(model.Icode)
+        IT = T isa Type{Float64} ? Int64 : Int32
+        Icode = similar(x, IT)
+        fill!(Icode, true)
+    end
 
     x_norm = normalizedata(x, model.x̄, model.σx)
     batch  = (x_norm, model.Icode)
@@ -40,7 +65,7 @@ function (model::NeuralSpaceModel)(x::AbstractArray, p::AbstractVector)
 end
 
 function dudx1(
-    model::NeuralSpaceModel,
+    model::AbstractNeuralModel,
     x::AbstractArray,
     p::AbstractVector;
     autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
@@ -58,7 +83,7 @@ function dudx1(
 end
 
 function dudx2(
-    model::NeuralSpaceModel,
+    model::AbstractNeuralModel,
     x::AbstractArray,
     p::AbstractVector;
     autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
@@ -76,7 +101,7 @@ function dudx2(
 end
 
 function dudp(
-    model::NeuralSpaceModel,
+    model::AbstractNeuralModel,
     x::AbstractArray,
     p::AbstractVector;
     autodiff::ADTypes.AbstractADType = AutoForwardDiff(),

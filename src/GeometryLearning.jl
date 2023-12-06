@@ -60,7 +60,7 @@ abstract type AbstractPDEProblem end
 abstract type AbstractTimeStepper end
 abstract type AbstractSolveScheme end
 
-export AbstractNeuralModel, AbstractPDEProblem, AbstractTimeStepper
+export AbstractNeuralModel, AbstractPDEProblem, AbstractTimeStepper, AbstractSolveScheme
 
 include("utils.jl")
 export fix_kw, init_siren, scaled_siren_init, remake_ca #, _ntimes
@@ -84,7 +84,7 @@ include("operator.jl")
 export OpKernel, OpConv, OpKernelBilinear, OpConvBilinear, linear_nonlinear
 
 include("neuralmodel.jl")
-export normalizedata, unnormalizedata, NeuralSpaceModel, dudx1, dudx2, dudp
+export normalizedata, unnormalizedata, NeuralEmbeddingModel, dudx1, dudx2, dudp
 
 include("problems.jl")
 export dudtRHS
@@ -97,10 +97,19 @@ export nonlinleastsq
 
 include("evolve.jl")
 export
-    TimeIntegrator, update_integrator!, solve_timestep, perform_timestep!,
+    # integrator type
+    TimeIntegrator,
+    # integrator interface
+    update_integrator!, solve_timestep, perform_timestep!,
+    get_time, get_nexttime, get_Δt, get_tspan, get_state,
+    evolve_integrator,
+    # residual functions
     make_residual, residual_learn,
-    compute_residual, apply_timestep, timeinteg_isimplicit, timeinteg_order,
+    # timestepper types
     EulerForward, EulerBackward,
+    # timestepper interface
+    compute_residual, apply_timestep, timeinteg_isimplicit, timeinteg_order,
+    # solve scheme types
     Galerkin, LeastSqPetrovGalerkin
 
 include("train.jl")
