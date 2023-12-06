@@ -294,8 +294,7 @@ function solve_timestep(
 end
 
 function evolve_integrator(
-    integrator::TimeIntegrator{T};
-    verbose::Bool = true,
+    integrator::TimeIntegrator{T},
 ) where{T}
 
     ts = ()
@@ -309,7 +308,7 @@ function evolve_integrator(
         us = (us..., u)
     end
 
-    # Time loop
+# Time loop
     while get_time(integrator) <= get_tspan(integrator)[2]
 
         update_Δt_for_saving!(integrator)
@@ -355,9 +354,28 @@ function solve_timestep(
 
     t0, p0, u0, f0 = get_state(integrator)
 
+    #=
+    # timealg interface
+
+    make_RHS_term(timealg, fprevs, Δt)
+
+    apply_timestep(timealg, uprevs, fprevs)
+    apply_timestep(timealg, uprevs, rhs_term)
+
+    here:
+    rhs_term = J0 \ make_RHS_term(timealg, fprevs, Δt)
+    p1 = apply_timestep(timealg, pprevs, rhs_term)
+
+    # is it Euler FWD
+    (J*u)_n+1 - (J*u)_n = Δt * (f_n + f_n-1 + ...)
+
+    OR
+
+    J_n+1 * (u_n+1 - u_n) = Δt * (f_n + f_n-1 + ...)
+    =#
+
     # du/dp (N, n), du/dt (N,)
     J0 = dudp(model, x, p0; autodiff, ϵ)
-    # f0 = dudtRHS(prob, model, x, p0, t0; autodiff, ϵ) # already computed above
 
     # solve
     dpdt0 = J0 \ vec(f0)
@@ -429,7 +447,7 @@ function solve_timestep(
     if verbose
         print("Nonlinear Steps: $steps, ")
         print_resid_stats(r1, scheme.abstolMSE, scheme.abstolInf)
-        print(" , RetCode: $(nlssol.retcode)\n")
+        print(" , RetCode: $(nlssol.retcode)")
     end
 
     t1, p1, u1, f1, r1
