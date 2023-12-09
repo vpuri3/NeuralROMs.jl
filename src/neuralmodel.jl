@@ -1,7 +1,20 @@
 
 #===========================================================#
-normalizedata(u::AbstractArray, μ::Number, σ::Number) = (u .- μ) / σ
-unnormalizedata(u::AbstractArray, μ::Number, σ::Number) = (u * σ) .+ μ
+function normalizedata(
+    u::AbstractArray,
+    μ::Union{Number, AbstractVecOrMat},
+    σ::Union{Number, AbstractVecOrMat},
+)
+    (u .- μ) ./ σ
+end
+
+function unnormalizedata(
+    u::AbstractArray,
+    μ::Union{Number, AbstractVecOrMat},
+    σ::Union{Number, AbstractVecOrMat},
+)
+    (u .* σ) .+ μ
+end
 #===========================================================#
 
 # For 2D, make X a tuple (X, Y). should work fine with dUdX, etc

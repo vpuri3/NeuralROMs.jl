@@ -58,9 +58,11 @@ using LineSearches
 abstract type AbstractNeuralModel end
 abstract type AbstractPDEProblem end
 abstract type AbstractTimeStepper end
+abstract type AbstractTimeIntegrator end
 abstract type AbstractSolveScheme end
 
-export AbstractNeuralModel, AbstractPDEProblem, AbstractTimeStepper, AbstractSolveScheme
+export AbstractNeuralModel, AbstractPDEProblem, AbstractTimeStepper,
+    AbstractTimeIntegrator, AbstractSolveScheme
 
 include("utils.jl")
 export fix_kw, init_siren, scaled_siren_init, remake_ca #, _ntimes
@@ -95,22 +97,19 @@ export
 include("nonlinleastsq.jl")
 export nonlinleastsq
 
-include("evolve.jl")
+include("timeintegrator.jl")
+export TimeIntegrator, perform_timestep!, evolve_integrator!, evolve_model
 export
-    # integrator type
-    TimeIntegrator,
-    # integrator interface
-    update_integrator!, solve_timestep, perform_timestep!,
-    get_time, get_nexttime, get_Δt, get_tspan, get_state,
-    evolve_integrator,
-    # residual functions
-    make_residual, residual_learn,
     # timestepper types
     EulerForward, EulerBackward,
     # timestepper interface
-    compute_residual, apply_timestep, timeinteg_isimplicit, timeinteg_order,
+    compute_residual, apply_timestep,
     # solve scheme types
-    Galerkin, LeastSqPetrovGalerkin
+    Galerkin, LeastSqPetrovGalerkin,
+    # residual functions
+    make_residual, residual_learn
+
+include("evolve.jl")
 
 include("train.jl")
 export train_model, callback, optimize, plot_training
