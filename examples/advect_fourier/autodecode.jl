@@ -36,12 +36,6 @@ function test_autodecoder(
     mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
     mu = isa(mu, AbstractArray) ? vec(mu) : mu
 
-    # subsample in space
-    Ix = 1:8:Nx
-    Udata = @view Udata[Ix, :, :]
-    Xdata = @view Xdata[Ix]
-    Nx = length(Xdata)
-
     #==============#
     # load model
     #==============#
@@ -50,27 +44,32 @@ function test_autodecoder(
     md = model["metadata"] # (; ū, σu, _Ib, Ib_, _It, It_, readme)
     close(model)
 
-    # TODO - rm after retraining this model
-    @set! md.σx = sqrt(md.σx)
-    @set! md.σu = sqrt(md.σu)
-
     #==============#
-    # make outdir path
+    # select trajectory, save times
     #==============#
-    mkpath(outdir)
 
-    k = 1# 1, 7
+    k = 1 # 1, 7
     It = LinRange(1,length(Tdata), 10) .|> Base.Fix1(round, Int)
 
     Ud = Udata[:, k, It]
     U0 = Ud[:, 1]
     data = (reshape(Xdata, 1, :), reshape(U0, 1, :), Tdata[It])
 
+    #==============#
+    # solve
+    #==============#
+
     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     p0 = _code[2].weight[:, 1]
 
     CUDA.@time _, _, Up = evolve_autodecoder(prob, decoder, md, data, p0;
         rng, device, verbose)
+
+    #==============#
+    # plot
+    #==============#
+
+    mkpath(outdir)
 
     Ix = 1:32:Nx
     plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
@@ -101,14 +100,14 @@ prob = Advection1D(0.25f0)
 device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "data_advect/", "data.jld2")
 
-modeldir = joinpath(@__DIR__, "model4")
+modeldir = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
 
-# E = 1000
-# l, h, w = 4, 5, 32
-# isdir(modeldir) && rm(modeldir, recursive = true)
-# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 5f-1,
-#     _batchsize = nothing, batchsize_ = nothing, device)
+E = 1000
+l, h, w = 4, 5, 32
+isdir(modeldir) && rm(modeldir, recursive = true)
+model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 5f-1,
+    _batchsize = nothing, batchsize_ = nothing, device)
 
 outdir = joinpath(dirname(modelfile), "results")
 postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
