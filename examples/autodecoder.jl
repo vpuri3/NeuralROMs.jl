@@ -380,74 +380,74 @@ function postprocess_autodecoder(
     _Upred = model(_xdata |> device, p |> device) |> Lux.cpu_device()
     _Upred = reshape(_Upred, Nx, _Ib, Nt)
     
-    for k in _Ib
-        Ud = @view _Udata[:, k, :]
-        Up = @view _Upred[:, k, :]
-    
-        if makeplot
-            xlabel = "x"
-            ylabel = "u(x, t)"
-      
-            _mu = mu[_Ib[k]]
-            title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
-    
-            idx_pred = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
-            idx_data = idx_pred
-    
-            upred = Up[:, idx_pred]
-            udata = Ud[:, idx_data]
-    
-            Iplot = 1:32:Nx
-    
-            plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
-            plot!(plt, Xdata, upred, w = 2, palette = :tab10)
-            scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
-            png(plt, joinpath(outdir, "train$(k)"))
-    
-            anim = animate1D(Ud, Up, Xdata, Tdata;
-                w = 2, xlabel, ylabel, title)
-            gif(anim, joinpath(outdir, "train$(k).gif"); fps)
-        end
-    end
+    # for k in _Ib
+    #     Ud = @view _Udata[:, k, :]
+    #     Up = @view _Upred[:, k, :]
+    #
+    #     if makeplot
+    #         xlabel = "x"
+    #         ylabel = "u(x, t)"
+    #  
+    #         _mu = mu[_Ib[k]]
+    #         title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+    #
+    #         idx_pred = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
+    #         idx_data = idx_pred
+    #
+    #         upred = Up[:, idx_pred]
+    #         udata = Ud[:, idx_data]
+    #
+    #         Iplot = 1:32:Nx
+    #
+    #         plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
+    #         plot!(plt, Xdata, upred, w = 2, palette = :tab10)
+    #         scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
+    #         png(plt, joinpath(outdir, "train$(k)"))
+    #
+    #         anim = animate1D(Ud, Up, Xdata, Tdata;
+    #             w = 2, xlabel, ylabel, title)
+    #         gif(anim, joinpath(outdir, "train$(k).gif"); fps)
+    #     end
+    # end
 
     #==============#
     # inference (via data regression)
     #==============#
 
-    decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-    
-    p0 = _code[2].weight[:, 1]
-    Icode = ones(Int32, 1, Nx)
-    
-    NN, p0, st = freeze_autodecoder(decoder, p0; rng)
-    model = NeuralEmbeddingModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
-    
-    for k in 1:1 # axes(mu, 1)
-        Ud = Udata[:, k, :]
-        data = (Xdata, Ud, Tdata)
-    
-        _, Up, _ = infer_autodecoder(model, data, p0; device, verbose)
-    
-        if makeplot
-            xlabel = "x"
-            ylabel = "u(x, t)"
-    
-            _mu   = mu[k]
-            title = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
-            _name = k in _Ib ? "infer_train$(k)" : "infer_test$(k)"
-    
-            idx = LinRange(1, size(Ud, 2), 101) .|> Base.Fix1(round, Int)
-            plt = plot(;title, xlabel, ylabel, legend = false)
-            plot!(plt, Xdata, Up[:, idx], w = 2.0,  s = :solid)
-            plot!(plt, Xdata, Ud[:, idx], w = 4.0,  s = :dash)
-            png(plt, joinpath(outdir, _name))
-            display(plt)
-    
-            anim = animate1D(Ud, Up, Xdata, Tdata;
-                w = 2, xlabel, ylabel, title)
-            gif(anim, joinpath(outdir, "$(_name).gif"); fps)
-        end
-    end
+    # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    #
+    # p0 = _code[2].weight[:, 1]
+    # Icode = ones(Int32, 1, Nx)
+    #
+    # NN, p0, st = freeze_autodecoder(decoder, p0; rng)
+    # model = NeuralEmbeddingModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
+    #
+    # for k in 1:1 # axes(mu, 1)
+    #     Ud = Udata[:, k, :]
+    #     data = (Xdata, Ud, Tdata)
+    #
+    #     _, Up, _ = infer_autodecoder(model, data, p0; device, verbose)
+    #
+    #     if makeplot
+    #         xlabel = "x"
+    #         ylabel = "u(x, t)"
+    #
+    #         _mu   = mu[k]
+    #         title = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+    #         _name = k in _Ib ? "infer_train$(k)" : "infer_test$(k)"
+    #
+    #         idx = LinRange(1, size(Ud, 2), 101) .|> Base.Fix1(round, Int)
+    #         plt = plot(;title, xlabel, ylabel, legend = false)
+    #         plot!(plt, Xdata, Up[:, idx], w = 2.0,  s = :solid)
+    #         plot!(plt, Xdata, Ud[:, idx], w = 4.0,  s = :dash)
+    #         png(plt, joinpath(outdir, _name))
+    #         display(plt)
+    #
+    #         anim = animate1D(Ud, Up, Xdata, Tdata;
+    #             w = 2, xlabel, ylabel, title)
+    #         gif(anim, joinpath(outdir, "$(_name).gif"); fps)
+    #     end
+    # end
 
     #==============#
     # evolve
@@ -486,20 +486,25 @@ function postprocess_autodecoder(
     # check derivative
     #==============#
     begin
+        second_derv = false
         decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
         ncodes = size(_code[2].weight, 2)
         idx = rand(1:ncodes, 5)
+        idx = 1:1
         for i in idx
             p0 = _code[2].weight[:, i]
 
             p1 = GeometryLearning.plot_derivatives1D_autodecoder(
-                decoder, Xdata, p0, md, second_derv = false,
-                autodiff = AutoFiniteDiff(), ϵ=1f-2)
-            png(p1, joinpath(outdir, "derv_$(i)_FWD_AD"))
+                decoder, Xdata, p0, md; second_derv,
+                autodiff = AutoFiniteDiff(), ϵ=1f-2
+            )
+            png(p1, joinpath(outdir, "derv_$(i)_FD_AD"))
 
             p2 = GeometryLearning.plot_derivatives1D_autodecoder(
-                decoder, Xdata, p0, md, second_derv = false)
-            png(p2, joinpath(outdir, "derv_$(i)_FD_AD"))
+                decoder, Xdata, p0, md; second_derv,
+                autodiff = AutoForwardDiff(),
+            )
+            png(p2, joinpath(outdir, "derv_$(i)_FWD_AD"))
             display(p2)
         end
     end

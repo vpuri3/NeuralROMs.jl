@@ -109,10 +109,10 @@ modelfile = joinpath(modeldir, "model_08.jld2")
 
 # process
 outdir = joinpath(dirname(modelfile), "results")
-# postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-#     makeplot = true, verbose = true)
-test_autodecoder(datafile, modelfile, outdir; rng, device,
+postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
     makeplot = true, verbose = true)
+# test_autodecoder(datafile, modelfile, outdir; rng, device,
+#     makeplot = true, verbose = true)
 #======================================================#
 nothing
 #
