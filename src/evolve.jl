@@ -1,78 +1,134 @@
 #
 #===========================================================#
-#=
-# timealg interface
+"""
+ODE Algorithms for solving
 
-make_RHS_term(timealg, Δt, fprevs)
+```math
+du/dt = f(u, t)
+```
 
-compute_residual(timealg, Δt, unew, fnew, uprevs, fprevs)
+to be discretized as
+```math
+a_-1 * u_n+1 + ... + a_k * u_n-k = Δt ⋅ (b_-1 + f(u_n+1) + ... + b_k * f(u_n-k))
 
-apply_timestep(timealg, uprevs, fprevs, Δt) -> unew
-apply_timestep(timealg, uprevs, rhs_term) -> unew
+⟺
+∑_{i=-1}^k a_i *  u_n+i = Δt * ∑_{i=-1}^k b_i f(u_i)
+```
 
-=#
+# Interface
 
-# function apply_timestep(
-#     timealg::AbstractTimeStepper,
-#     uprevs::NTuple{N, Tv},
-#     fprevs::NTuple{N, Tv},
-#     f::Tv, # unused for explicit
-#     Δt::T,
-# ) where{N,T,Tv<:AbstractArray{T}}
-#     rhs_term = make_RHS_term(timealg, Δt, f, fprevs)
-#     apply_timestep(timealg, uprevs, rhs_term)
-# end
+## overload
+- `isimplicit(timealg)`: if `b_-1 = 0`
+- `adaptiveΔt(timealg)`: if adaptive `Δt` is supported
+- `nsavedsteps(timealg)`: number of saved time-steps
+- `make_f_term(timealg, Δt, fprevs, f)`
+- `make_uprev_term(timealg, uprevs)`
+- `make_unew_term(timealg, u)`
 
-abstract type AbstractRKMethod <: AbstractTimeStepper end
+## implemented
+- `compute_residual(timealg, Δt, fprevs, uprevs, f, u) -> LHS - RHS`
+- `apply_timestep(timealg, Δt, fprevs, uprevs, f)`:
+- `apply_timestep(timealg, fterm, uprevs)`:
+"""
 
-struct EulerForward <: AbstractTimeStepper end
-struct EulerBackward <: AbstractTimeStepper end
+adaptiveΔt(::AbstractTimeAlg) = true # default
 
-struct AB2 <: AbstractTimeStepper end
+function compute_residual(
+    timealg::AbstractTimeAlg,
+    Δt::T,
+    fprevs::NTuple{N, Tv},
+    uprevs::NTuple{N, Tv},
+    f::AbstractArray{T},
+    u::AbstractArray{T},
+) where{N,T<:Number,Tv<:AbstractArray{T}}
+    lhs = make_unew_term(timealg, u) + make_uprev_term(timealg, uprevs)
+    rhs = make_f_term(timealg, Δt, fprevs, f)
+    rhs - lhs
+end
 
-struct RK2 <: AbstractRKMethod end # midpoint
-struct RK4 <: AbstractRKMethod end
+function apply_timestep(
+    timealg::AbstractTimeAlg,
+    Δt::T,
+    fprevs::NTuple{N, Tv},
+    uprevs::NTuple{N, Tv},
+    f::Union{Nothing, Tv},
+) where{N,T<:Number,Tv<:AbstractArray{T}}
+    fterm = make_f_term(timealg, Δt, fprevs, f)
+    apply_timestep(timealg, fterm, uprevs)
+end
+
+function apply_timestep(
+    timealg::AbstractTimeAlg,
+    fterm::AbstractArray{T},
+    uprevs::NTuple{N, Tv},
+) where{N,T<:Number,Tv<:AbstractArray{T}}
+    fterm - make_uprev_term(timealg, uprevs)
+end
+
+#===========================================================#
+# Euler FWD/BWD
+#===========================================================#
+struct EulerForward <: AbstractTimeAlg end
+struct EulerBackward <: AbstractTimeAlg end
 
 isimplicit(::EulerForward) = false
 isimplicit(::EulerBackward) = true
 
-adaptiveΔt(::AbstractTimeStepper) = true
+nsavedstates(::Union{EulerForward, EulerBackward}) = 1
+
+function make_f_term(
+    ::EulerForward,
+    Δt::T,
+    fprevs::NTuple{N, Tv},
+    f::Union{Nothing, Tv},
+) where{N,T<:Number,Tv<:AbstractArray{T}}
+    Δt * (fprevs[1])
+end
+
+function make_f_term(
+    ::EulerBackward,
+    Δt::T,
+    fprevs::NTuple{N, Tv},
+    f::Union{Nothing, Tv},
+) where{N,T<:Number,Tv<:AbstractArray{T}}
+    Δt * f
+end
+
+function make_uprev_term(
+    ::Union{EulerForward, EulerBackward},
+    uprevs::NTuple{N, Tv},
+) where{N,T<:Number,Tv<:AbstractArray{T}}
+    - uprevs[1]
+end
+
+function make_unew_term(
+    ::Union{EulerForward, EulerBackward},
+    u::Tv,
+) where{T<:Number,Tv<:AbstractArray{T}}
+    u
+end
+
+#===========================================================#
+# AB
+#===========================================================#
+abstract type AbstractABMethod <: AbstractTimeAlg end
+struct AB2 <: AbstractTimeAlg end
+
 adaptiveΔt(::AB2) = false
 
-nsavedstates(::Union{EulerForward, EulerBackward}) = 1
+#===========================================================#
+# RK
+#===========================================================#
+abstract type AbstractRKMethod <: AbstractTimeAlg end
+struct RK2 <: AbstractRKMethod end # midpoint
+struct RK4 <: AbstractRKMethod end
+
 nsavedstates(::AbstractRKMethod) = 1
 
-function compute_residual(
-    ::Union{EulerForward, EulerBackward},
-    Δt::Real,
-    u0::AbstractArray,
-    u1::AbstractArray,
-    rhs::AbstractArray,
-)
-    u1 - u0 - Δt * rhs |> vec
-end
-
-function apply_timestep(
-    ::Union{EulerForward, EulerBackward},
-    Δt::Real,
-    u0::AbstractArray,
-    rhs::AbstractArray,
-)
-    @. u0 + Δt * rhs
-end
-
-function print_resid_stats(r::AbstractArray, abstolMSE, abstolInf)
-    mse_r = sum(abs2, r) / length(r)
-    inf_r = norm(r, Inf)
-
-    color_mse = mse_r <= abstolMSE ? :green : :red
-    color_inf = inf_r <= abstolInf ? :green : :red
-
-    printstyled("MSE: $(round(mse_r, sigdigits = 8)) ", color = color_mse)
-    printstyled("||∞: $(round(inf_r, sigdigits = 8))", color = color_inf)
-    return
-end
-
+#===========================================================#
+#===========================================================#
+# Solve Schemes
+#===========================================================#
 #===========================================================#
 
 @concrete mutable struct Galerkin{T} <: AbstractSolveScheme
@@ -91,35 +147,29 @@ function solve_timestep(
     @unpack Δt, tprevs, pprevs, uprevs, fprevs = integrator
     @unpack prob, model, x = integrator
 
-    t0, p0, u0, f0 = get_state(integrator)
+    t0, p0, _, _ = get_state(integrator)
+
+    # explicit time-integrator
+    # ΔuΔt_rhs: RHS of discretized ODE
+    f1 = nothing
+    ΔuΔt_rhs = make_f_term(timealg, Δt, fprevs, f1) # du/dt (N,)
+    J0 = dudp(model, x, p0; autodiff, ϵ)            # du/dp (N, n)
+
+    linprob = LinearProblem(J0, vec(ΔuΔt_rhs))
+    ΔpΔt_rhs = solve(linprob, scheme.linsolve).u
 
     #=
-    rhs_term = J0 \ make_RHS_term(timealg, fprevs, Δt)
-    p1 = apply_timestep(timealg, pprevs, rhs_term)
-
     # is it Euler FWD
-    (J*u)_n+1 - (J*u)_n = Δt * (f_n + f_n-1 + ...)
-
-    OR
-
+    (J*u)_n+1 - (J*u)_n = Δt * (f_n + f_n-1 + ...) OR
     J_n+1 * (u_n+1 - u_n) = Δt * (f_n + f_n-1 + ...)
     =#
 
-    # du/dp (N, n), du/dt (N,)
-    J0 = dudp(model, x, p0; autodiff, ϵ)
-
-    # solv7
-    linprob = LinearProblem(J0, vec(f0))
-    dpdt0 = solve(linprob, scheme.linsolve).u
-
     # get new states
     t1 = t0 + Δt
-    p1 = apply_timestep(timealg, Δt, p0, dpdt0)
+    p1 = apply_timestep(timealg, p0, ΔpΔt_rhs)
     u1 = model(x, p1)
     f1 = dudtRHS(prob, model, x, p1, t1)
-
-    # compute residual stats
-    r1 = compute_residual(timealg, Δt, u0, u1, f1)
+    r1 = compute_residual(timealg, Δt, fprevs, uprevs, f1, u1)
 
     # print message
     steps = 0
@@ -155,7 +205,7 @@ function solve_timestep(
     batch = (x, u0)
 
     #=
-    Next steps: Do LineSearch in GaussNewton solve. Follow CROM implementation.
+    Do LineSearch in GaussNewton solve. Follow CROM implementation.
     =#
 
     t1 = t0 + Δt
@@ -191,7 +241,7 @@ end
 #===========================================================#
 function make_residual(
     prob::AbstractPDEProblem,
-    timestepper::AbstractTimeStepper;
+    timestepper::AbstractTimeAlg;
     autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ = nothing,
 )
@@ -221,6 +271,18 @@ function residual_learn(
     x, û = batch
     u = model(x, p)
     vec(û - u)
+end
+
+function print_resid_stats(r::AbstractArray, abstolMSE, abstolInf)
+    mse_r = sum(abs2, r) / length(r)
+    inf_r = norm(r, Inf)
+
+    color_mse = mse_r <= abstolMSE ? :green : :red
+    color_inf = inf_r <= abstolInf ? :green : :red
+
+    printstyled("MSE: $(round(mse_r, sigdigits = 8)) ", color = color_mse)
+    printstyled("||∞: $(round(inf_r, sigdigits = 8))", color = color_inf)
+    return
 end
 
 #===========================================================#

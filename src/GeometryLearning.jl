@@ -52,16 +52,17 @@ using ConcreteStructs
 using IterTools
 
 # linear/nonlinear solvers
+using LinearSolve
 using NonlinearSolve
 using LineSearches
 
 abstract type AbstractNeuralModel end
 abstract type AbstractPDEProblem end
-abstract type AbstractTimeStepper end
+abstract type AbstractTimeAlg end
 abstract type AbstractTimeIntegrator end
 abstract type AbstractSolveScheme end
 
-export AbstractNeuralModel, AbstractPDEProblem, AbstractTimeStepper,
+export AbstractNeuralModel, AbstractPDEProblem, AbstractTimeAlg,
     AbstractTimeIntegrator, AbstractSolveScheme
 
 include("utils.jl")
