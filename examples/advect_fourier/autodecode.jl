@@ -45,19 +45,22 @@ function test_autodecoder(
     close(model)
 
     #==============#
-    # select trajectory, save times
+    # subsample in space
+    #==============#
+    Udata = @view Udata[md.makedata_kws.Ix, :, :]
+    Xdata = @view Xdata[md.makedata_kws.Ix]
+    Nx = length(Xdata)
+
+    #==============#
+    mkpath(outdir)
     #==============#
 
-    k = 1 # 1, 7
+    k = 1# 1, 7
     It = LinRange(1,length(Tdata), 10) .|> Base.Fix1(round, Int)
 
     Ud = Udata[:, k, It]
     U0 = Ud[:, 1]
     data = (reshape(Xdata, 1, :), reshape(U0, 1, :), Tdata[It])
-
-    #==============#
-    # solve
-    #==============#
 
     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     p0 = _code[2].weight[:, 1]
@@ -65,16 +68,10 @@ function test_autodecoder(
     CUDA.@time _, _, Up = evolve_autodecoder(prob, decoder, md, data, p0;
         rng, device, verbose)
 
-    #==============#
-    # plot
-    #==============#
-
-    mkpath(outdir)
-
-    Ix = 1:32:Nx
+    Ix_plt = 1:8:Nx
     plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
     plot!(plt, Xdata, Up, w = 2, palette = :tab10)
-    scatter!(plt, Xdata[Ix], Ud[Ix, :], w = 1, palette = :tab10)
+    scatter!(plt, Xdata[Ix_plt], Ud[Ix_plt, :], w = 1, palette = :tab10)
 
     _inf  = norm(Up - Ud, Inf)
     _mse  = sum(abs2, Up - Ud) / length(Ud)
@@ -100,20 +97,22 @@ prob = Advection1D(0.25f0)
 device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "data_advect/", "data.jld2")
 
-modeldir = joinpath(@__DIR__, "dump")
+modeldir = joinpath(@__DIR__, "model1")
 modelfile = joinpath(modeldir, "model_08.jld2")
 
-E = 1000
-l, h, w = 4, 5, 32
-isdir(modeldir) && rm(modeldir, recursive = true)
-model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 5f-1,
-    _batchsize = nothing, batchsize_ = nothing, device)
+# train
+# E = 1000
+# l, h, w = 4, 5, 32
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 5f-1,
+#     _batchsize = nothing, batchsize_ = nothing, device)
 
+# process
 outdir = joinpath(dirname(modelfile), "results")
-postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-    makeplot = true, verbose = true)
-# test_autodecoder(datafile, modelfile, outdir; rng, device,
+# postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
 #     makeplot = true, verbose = true)
+test_autodecoder(datafile, modelfile, outdir; rng, device,
+    makeplot = true, verbose = true)
 #======================================================#
 nothing
 #

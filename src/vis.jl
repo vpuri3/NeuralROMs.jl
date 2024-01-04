@@ -60,7 +60,7 @@ function plot_derivatives1D_autodecoder(
     xbatch = reshape(x, 1, Nx)
     Icode = ones(Int32, 1, Nx)
 
-    model = NeuralSpaceModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
+    model = NeuralEmbeddingModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
     u, udx, udxx = dudx2(model, xbatch, p; autodiff, ϵ) .|> vec
 
     plt = plot(xabel = "x", ylabel = "u(x,t)")
