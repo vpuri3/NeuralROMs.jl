@@ -278,6 +278,8 @@ function evolve_model(
     nlsmaxiters = 10,
     nlsabstol = 1f-7,
     time_adaptive::Bool = true,
+    autodiff_space = AutoForwardDiff(),
+    ϵ_space = nothing,
     device = Lux.cpu_device(),
     verbose::Bool = true,
 )
@@ -320,7 +322,8 @@ function evolve_model(
     Δt = isnothing(Δt) ? -(reverse(extrema(tsave))...) / 200 |> T : T(Δt)
 
     integrator = TimeIntegrator(prob, model, timealg, scheme, x, tsave, p0;
-        adaptive = time_adaptive)
+        adaptive = time_adaptive, autodiff = autodiff_space, ϵ = ϵ_space,
+    )
 
     evolve_integrator!(integrator; verbose)
 end

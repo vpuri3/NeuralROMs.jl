@@ -104,7 +104,7 @@ function train_autodecoder(
     rng::Random.AbstractRNG = Random.default_rng(),
     _batchsize = nothing,
     batchsize_ = nothing,
-    λ::Real = 1f0,
+    λ::Real = 0f0,
     device = Lux.cpu_device(),
     makedata_kws = (; Ix = Colon(), _Ib = Colon(), Ib_ = Colon(),
         _It = Colon(), It_ = Colon())
@@ -171,6 +171,9 @@ function train_autodecoder(
     #     nepochs = (nepochs..., round(Int, E / 10))
     #     schedules = (schedules..., Step(1f0, 1f0, Inf32))
     # end
+
+    train_args = (; l, h, w, E, _batchsize, batchsize_, λ)
+    metadata = (; metadata..., train_args)
 
     @time model, ST = train_model(NN, _data; rng,
         _batchsize, batchsize_,
@@ -286,6 +289,7 @@ function evolve_autodecoder(
 
     autodiff_space = AutoForwardDiff()
     ϵ_space = nothing
+
     # autodiff_space = AutoFiniteDiff()
     # ϵ_space = 0.005f0
 
@@ -301,7 +305,7 @@ function evolve_autodecoder(
     # scheme = LeastSqPetrovGalerkin(nlssolve, residual, nlsmaxiters, 1f-6, 1f-3, 1f-6)
 
     evolve_model(prob, model, timealg, scheme, data, p0, Δt;
-        nlssolve, time_adaptive, device, verbose,
+        nlssolve, time_adaptive, autodiff_space, ϵ_space, device, verbose,
     )
 end
 
@@ -380,35 +384,35 @@ function postprocess_autodecoder(
     _Upred = model(_xdata |> device, p |> device) |> Lux.cpu_device()
     _Upred = reshape(_Upred, Nx, _Ib, Nt)
     
-    # for k in _Ib
-    #     Ud = @view _Udata[:, k, :]
-    #     Up = @view _Upred[:, k, :]
-    #
-    #     if makeplot
-    #         xlabel = "x"
-    #         ylabel = "u(x, t)"
-    #  
-    #         _mu = mu[_Ib[k]]
-    #         title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
-    #
-    #         idx_pred = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
-    #         idx_data = idx_pred
-    #
-    #         upred = Up[:, idx_pred]
-    #         udata = Ud[:, idx_data]
-    #
-    #         Iplot = 1:32:Nx
-    #
-    #         plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
-    #         plot!(plt, Xdata, upred, w = 2, palette = :tab10)
-    #         scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
-    #         png(plt, joinpath(outdir, "train$(k)"))
-    #
-    #         anim = animate1D(Ud, Up, Xdata, Tdata;
-    #             w = 2, xlabel, ylabel, title)
-    #         gif(anim, joinpath(outdir, "train$(k).gif"); fps)
-    #     end
-    # end
+    for k in _Ib
+        Ud = @view _Udata[:, k, :]
+        Up = @view _Upred[:, k, :]
+    
+        if makeplot
+            xlabel = "x"
+            ylabel = "u(x, t)"
+     
+            _mu = mu[_Ib[k]]
+            title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+    
+            idx_pred = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
+            idx_data = idx_pred
+    
+            upred = Up[:, idx_pred]
+            udata = Ud[:, idx_data]
+    
+            Iplot = 1:32:Nx
+    
+            plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
+            plot!(plt, Xdata, upred, w = 2, palette = :tab10)
+            scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
+            png(plt, joinpath(outdir, "train$(k)"))
+    
+            anim = animate1D(Ud, Up, Xdata, Tdata;
+                w = 2, xlabel, ylabel, title)
+            gif(anim, joinpath(outdir, "train$(k).gif"); fps)
+        end
+    end
 
     #==============#
     # inference (via data regression)
@@ -422,7 +426,7 @@ function postprocess_autodecoder(
     # NN, p0, st = freeze_autodecoder(decoder, p0; rng)
     # model = NeuralEmbeddingModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
     #
-    # for k in 1:1 # axes(mu, 1)
+    # for k in axes(mu)[1]
     #     Ud = Udata[:, k, :]
     #     data = (Xdata, Ud, Tdata)
     #
@@ -456,7 +460,7 @@ function postprocess_autodecoder(
     # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     # p0 = _code[2].weight[:, 1]
     #
-    # for k in axes(mu, 1)
+    # for k in axes(mu)[1]
     #     Ud = Udata[:, k, :]
     #     data = (Xdata, Ud, Tdata)
     #     @time _, Up, Tpred = evolve_autodecoder(prob, decoder, md, data, p0;
@@ -490,7 +494,7 @@ function postprocess_autodecoder(
         decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
         ncodes = size(_code[2].weight, 2)
         idx = rand(1:ncodes, 5)
-        idx = 1:1
+        # idx = 1:1
         for i in idx
             p0 = _code[2].weight[:, i]
 
