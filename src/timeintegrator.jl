@@ -1,4 +1,6 @@
 #===========================================================#
+# type
+#===========================================================#
 @concrete mutable struct TimeIntegrator{T}
     prob
     model
@@ -29,7 +31,7 @@ end
 function TimeIntegrator(
     prob::AbstractPDEProblem,
     model::AbstractNeuralModel,
-    timealg::AbstractTimeStepper,
+    timealg::AbstractTimeAlg,
     scheme::AbstractSolveScheme,
     x::AbstractArray{T},
     tsave::AbstractVector{T},
@@ -80,6 +82,10 @@ function TimeIntegrator(
     )
 end
 
+#===========================================================#
+# interface
+#===========================================================#
+
 function get_time(integrator::TimeIntegrator)
     integrator.tprevs[1]
 end
@@ -96,8 +102,8 @@ function get_tspan(integrator::TimeIntegrator)
     integrator.tspan
 end
 
-function get_state(int::TimeIntegrator)
-    getindex.((int.tprevs, int.pprevs, int.uprevs, int.fprevs), 1) # t, p, u, f
+function get_state(int::TimeIntegrator) # t, p, u, f
+    getindex.((int.tprevs, int.pprevs, int.uprevs, int.fprevs), 1)
 end
 
 function get_next_savetime(integrator::TimeIntegrator{T}) where{T}
@@ -113,10 +119,14 @@ end
 # call before perform_timestep!
 function update_Δt_for_saving!(
     integrator::TimeIntegrator{T};
-    tol::T = T(1e-6)
+    tol::T = T(1e-6),
+    verbose::Bool = true,
 ) where{T}
     tsv = get_next_savetime(integrator)
     if (tsv - tol) < get_nexttime(integrator)
+        if verbose
+            printstyled("Reducing Δt for saving time-step.", color = :magenta)
+        end
         integrator.Δt = tsv - get_time(integrator)
     end
 end
@@ -132,7 +142,11 @@ function savestep!(
 
     if abs(t - tsv) < tol
 
-        println("SAVING STATE")
+        if verbose
+            time_print = round(get_time(integrator), sigdigits = 8)
+            printstyled("Saving state at time $(time_print)\n",
+                color = :magenta)
+        end
 
         integrator.isave += 1
         integrator.Δt = integrator.Δt_guess
@@ -217,6 +231,14 @@ function perform_timestep!(
 end
 
 function solve_timestep(
+    ::TimeIntegrator,
+    scheme::AbstractSolveScheme;
+    verbose::Bool = true,
+)
+    error("`solve_timestep` has not been implemented for type $scheme.")
+end
+
+function solve_timestep(
     integrator::TimeIntegrator;
     verbose::Bool = true
 )
@@ -228,6 +250,7 @@ function evolve_integrator!(
     verbose::Bool = true,
 ) where{T}
 
+    # save states at `integrator.tsave`
     ts = ()
     ps = ()
     us = ()
@@ -246,7 +269,7 @@ function evolve_integrator!(
 
         perform_timestep!(integrator; verbose)
 
-        state = savestep!(integrator)
+        state = savestep!(integrator; verbose)
 
         if !isnothing(state)
             t, p, u, _ = state
@@ -269,7 +292,7 @@ end
 function evolve_model(
     prob::AbstractPDEProblem,
     model::AbstractNeuralModel,
-    timealg::AbstractTimeStepper,
+    timealg::AbstractTimeAlg,
     scheme::AbstractSolveScheme,
     data::NTuple{3, AbstractVecOrMat},
     p0::AbstractVector,
