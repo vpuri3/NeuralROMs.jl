@@ -5,27 +5,11 @@ Train an autoencoder on 1D Burgers data
 
 using GeometryLearning
 
-using LinearAlgebra, ComponentArrays
-
-using Random, Lux, MLUtils, ParameterSchedulers   # ML
-using OptimizationOptimJL, OptimizationOptimisers # opt
-using LinearSolve, NonlinearSolve, LineSearches   # num
-using Plots, JLD2                                 # vis / save
-using CUDA, LuxCUDA, KernelAbstractions           # GPU
-using Setfield                                    # misc
-
-CUDA.allowscalar(false)
-
-begin
-    nt = Sys.CPU_THREADS
-    nc = min(nt, length(Sys.cpu_info()))
-
-    BLAS.set_num_threads(nc)
-    # FFTW.set_num_threads(nt)
-end
+include(joinpath(pkgdir(GeometryLearning), "examples", "autodecoder.jl"))
 
 #======================================================#
 function test_autodecoder(
+    prob::AbstractPDEProblem,
     datafile::String,
     modelfile::String,
     outdir::String;
@@ -53,12 +37,6 @@ function test_autodecoder(
     mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
     mu = isa(mu, AbstractArray) ? vec(mu) : mu
 
-    # subsample in space
-    Ix = 1:8:Nx
-    Udata = @view Udata[Ix, :, :]
-    Xdata = @view Xdata[Ix]
-    Nx = length(Xdata)
-
     #==============#
     # load model
     #==============#
@@ -67,16 +45,18 @@ function test_autodecoder(
     md = model["metadata"] # (; ū, σu, _Ib, Ib_, _It, It_, readme)
     close(model)
 
-    # TODO - rm after retraining this model
-    @set! md.σx = sqrt(md.σx)
-    @set! md.σu = sqrt(md.σu)
-
     #==============#
-    # make outdir path
+    # subsample in space
+    #==============#
+    Udata = @view Udata[md.makedata_kws.Ix, :, :]
+    Xdata = @view Xdata[md.makedata_kws.Ix]
+    Nx = length(Xdata)
+
     #==============#
     mkpath(outdir)
+    #==============#
 
-    k = 1# 1, 7
+    k = 1 # 1, 7
     It = LinRange(1,length(Tdata), 10) .|> Base.Fix1(round, Int)
 
     Ud = Udata[:, k, It]
@@ -85,9 +65,6 @@ function test_autodecoder(
 
     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     p0 = _code[2].weight[:, 1]
-
-    prob = BurgersInviscid1D()
-    prob = BurgersViscous1D(1/(4f3))
 
     CUDA.@time _, _, Up = evolve_autodecoder(prob, decoder, md, data, p0;
         rng, device, verbose)
@@ -124,48 +101,42 @@ Ix = 1:8:8192
 _Ib, Ib_ = [1, 4, 7], [2, 3, 5, 6]
 _batchsize, batchsize_  = 1024 .* (10, 3000)
 
+makedata_kws = (; Ix, _Ib, Ib_, _It = :, It_ = :)
+
 prob = BurgersInviscid1D()
-prob = BurgersViscous1D(1/(4f3))
+prob = BurgersViscous1D(1f-4)
 
-# for l in (3, 8,)
-#     for h in (5, 8)
-#         for w in (128)
-#             ll = lpad(l, 2, "0")
-#             hh = lpad(h, 2, "0")
-#             ww = lpad(w, 3, "0")
-#
-#             (l == 3) & (h == 5) & (w == 96)
-#
-#             modeldir = joinpath(@__DIR__, "model_dec_sin_$(ll)_$(hh)_$(ww)_reg")
-#
-#             # isdir(modeldir) && rm(modeldir, recursive = true)
-#             # model, STATS = train_autodecoder(l, h, w, datafile, modeldir; device)
-#
-#             modelfile = joinpath(modeldir, "model_08.jld2")
-#             outdir = joinpath(dirname(modelfile), "results")
-#             postprocess_autodecoder(datafile, modelfile, outdir; rng, device,
-#                 makeplot = true, verbose = true)
-#         end
-#     end
-# end
-
-for modeldir in (
-    # joinpath(@__DIR__, "model_dec_sin_03_05_128_reg/"),
-    # joinpath(@__DIR__, "model_dec_sin_08_05_096_reg/"),
-    joinpath(@__DIR__, "model_dec_sin_08_05_128_reg/"),
+E = 2000
+λ = 1f-0
+for (l, w, h) in (
+    (8, 5, 128),
 )
+    ll = lpad(l, 2, "0")
+    hh = lpad(h, 2, "0")
+    ww = lpad(w, 3, "0")
+    modeldir = joinpath(@__DIR__, "model_dec_sin_$(ll)_$(hh)_$(ww)_reg")
     modelfile = joinpath(modeldir, "model_08.jld2")
-    outdir = joinpath(dirname(modelfile), "results")
-    postprocess_autodecoder(datafile, modelfile, outdir; rng, device,
-        makeplot = true, verbose = true)
+
+    # train
+    # l, h, w = 4, 5, 32
+    # datafile = "/home/vedantpu/.julia/dev/GeometryLearning.jl/examples/advect_fourier/data_advect/data.jld2"
+    # isdir(modeldir) && rm(modeldir, recursive = true)
+    # model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 1f-1,
+    #     _batchsize = nothing, batchsize_ = nothing, device)
+
+    # # train
+    # isdir(modeldir) && rm(modeldir, recursive = true)
+    # model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
+    #     λ, _batchsize, batchsize_, device, makedata_kws,
+    # )
+    #
+    # # process
+    # outdir = joinpath(modeldir, "results")
+    # postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+    #     makeplot = true, verbose = true)
+    # test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+    #     makeplot = true, verbose = true)
 end
-
-# modeldir = joinpath(@__DIR__, "model_dec_sin_08_05_128_reg/")
-# modelfile = joinpath(modeldir, "model_08.jld2")
-#
-# outdir = joinpath(dirname(modelfile), "results")
-# postprocess_autodecoder(datafile, modelfile, outdir; rng, device,
-#     makeplot = true, verbose = true)
-
-# nothing
+#======================================================#
+nothing
 #

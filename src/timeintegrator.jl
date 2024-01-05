@@ -125,7 +125,7 @@ function update_Δt_for_saving!(
     tsv = get_next_savetime(integrator)
     if (tsv - tol) < get_nexttime(integrator)
         if verbose
-            printstyled("Reducing Δt for saving time-step.", color = :magenta)
+            printstyled("Reducing Δt for saving time-step.\n", color = :magenta)
         end
         integrator.Δt = tsv - get_time(integrator)
     end

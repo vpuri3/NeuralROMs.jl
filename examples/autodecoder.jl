@@ -47,7 +47,7 @@ function makedata_autodecoder(datafile::String;
     #==============#
     # subsample, test/train split
     #==============#
-    x  = @view x[Ix, :]
+    x  = @view x[:, Ix]
     _u = @view u[Ix, _Ib, _It]
     u_ = @view u[Ix, Ib_, It_]
 
@@ -106,8 +106,7 @@ function train_autodecoder(
     batchsize_ = nothing,
     λ::Real = 0f0,
     device = Lux.cpu_device(),
-    makedata_kws = (; Ix = Colon(), _Ib = Colon(), Ib_ = Colon(),
-        _It = Colon(), It_ = Colon())
+    makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :,),
 )
     _data, _, metadata = makedata_autodecoder(datafile; makedata_kws...)
     dir = modeldir

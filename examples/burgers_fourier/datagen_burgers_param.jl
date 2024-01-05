@@ -68,7 +68,8 @@ function burgers_inviscid(N, mu = LinRange(0.6, 1.2, 7)', p = nothing;
     end
 
     # model setup
-    A = -diffusionOp(1f-4, V, discr)
+    ν = 1f-4
+    A = -diffusionOp(ν, V, discr)
     C = advectionOp((zero(u0),), V, discr;
         vel_update_funcs! = (burgers!,), truncation_fracs = (2//3,))
     F = forcingOp(zero(u0), V, discr; f_update_func! = forcing!)
@@ -104,7 +105,7 @@ function burgers_inviscid(N, mu = LinRange(0.6, 1.2, 7)', p = nothing;
 
     if !isnothing(dir)
         mkpath(dir)
-        metadata = (; readme = "u [Nx, Nbatch, Nt]")
+        metadata = (; ν, readme = "u [Nx, Nbatch, Nt]")
 
         # filename = joinpath(dir, "data.bson")
         # BSON.@save filename x u t mu metadata
