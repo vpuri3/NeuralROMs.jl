@@ -20,28 +20,31 @@ end
 # For 2D, make X a tuple (X, Y). should work fine with dUdX, etc
 # otherwise need `makeUfromXY`, `makeUfromX_newmodel` type functions
 
-@concrete mutable struct NeuralEmbeddingModel{T} <: AbstractNeuralModel
+@concrete mutable struct NeuralEmbeddingModel{Tx, Tu} <: AbstractNeuralModel
     NN
     st
     Icode
 
-    x̄::T
-    σx::T
+    x̄::Tx
+    σx::Tx
 
-    ū::T
-    σu::T
+    ū::Tu
+    σu::Tu
 end
 
 function NeuralEmbeddingModel(
     NN::Lux.AbstractExplicitLayer,
     st::NamedTuple,
-    x::AbstractArray;
+    x::AbstractArray{T},
+    metadata::NamedTuple,
     Icode::Union{Nothing,AbstractArray{<:Integer}} = nothing,
-    x̄::T  = T(false),
-    σx::T = T(true),
-    ū::T  = T(false),
-    σu::T = T(true),
-) where{T<:Real}
+) where{T<:Number}
+    x̄ = metadata.x̄
+    ū = metadata.ū
+
+    σx = metadata.σx
+    σu = metadata.σu
+
     Icode = if isnothing(Icode)
         IT = T isa Type{Float64} ? Int64 : Int32
         Icode = similar(x, IT)
@@ -53,9 +56,13 @@ end
 function Adapt.adapt_structure(to, model::NeuralEmbeddingModel)
     st = Adapt.adapt_structure(to, model.st)
     Icode = Adapt.adapt_structure(to, model.Icode)
+    x̄  = Adapt.adapt_structure(to, model.x̄ )
+    ū  = Adapt.adapt_structure(to, model.ū )
+    σx = Adapt.adapt_structure(to, model.σx)
+    σu = Adapt.adapt_structure(to, model.σu)
 
     NeuralEmbeddingModel(
-        model.NN, st, Icode, model.x̄, model.σx, model.ū, model.σu,
+        model.NN, st, Icode, x̄, σx, ū, σu,
     )
 end
 

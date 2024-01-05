@@ -83,10 +83,10 @@ function burgers_inviscid(N, mu = LinRange(0.6, 1.2, 7)', p = nothing;
     @time sol = solve(prob, odealg, saveat=tsave, callback=odecb)#, dt=1f-5)
     @show sol.retcode
 
-    x = x     |> cpu
+    x = x     |> cpu_device()
     u = sol   |> Array
-    t = sol.t |> cpu
-    V = V     |> cpu
+    t = sol.t |> cpu_device()
+    V = V     |> cpu_device()
 
     # compute derivatives
     udx, ud2x = begin

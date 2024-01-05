@@ -25,59 +25,6 @@ begin
 end
 
 #======================================================#
-function evolve_autodecoder(
-    prob::AbstractPDEProblem,
-    decoder::NTuple{3, Any},
-    metadata::NamedTuple,
-    data::NTuple{3, AbstractVecOrMat},
-    p0::AbstractVector;
-    rng::Random.AbstractRNG = Random.default_rng(),
-    device = Lux.cpu_device(),
-    verbose::Bool = true,
-)
-
-    # data, model
-    x, _, _ = data
-
-    NN, p0, st = freeze_autodecoder(decoder, p0; rng)
-    model = NeuralEmbeddingModel(NN, st, x;
-        x̄ = metadata.x̄, σx = metadata.σx,
-        ū = metadata.ū, σu = metadata.σu,
-    )
-
-    # solvers
-    linsolve = QRFactorization()
-    autodiff = AutoForwardDiff()
-    linesearch = LineSearch() # TODO
-    nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
-    nlsmaxiters = 10
-
-    # linesearch = LineSearch(method = BackTracking(), autodiff = AutoZygote())
-    # nlssolve = GaussNewton(;autodiff = AutoZygote(), linsolve, linesearch)
-    # nlsmaxiters = 20
-
-    autodiff_space = AutoForwardDiff()
-    ϵ_space = nothing
-    # autodiff_space = AutoFiniteDiff()
-    # ϵ_space = 0.005f0
-
-    timealg = EulerForward()
-    # timealg = EulerBackward()
-
-    Δt = 1f-3
-    time_adaptive = true
-
-    scheme = Galerkin(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
-
-    # residual = make_residual(prob, timealg; autodiff = autodiff_space, ϵ = ϵ_space)
-    # scheme = LeastSqPetrovGalerkin(nlssolve, residual, nlsmaxiters, 1f-6, 1f-3, 1f-6)
-
-    evolve_model(prob, model, timealg, scheme, data, p0, Δt;
-        nlssolve, time_adaptive, device, verbose,
-    )
-end
-
-#======================================================#
 function test_autodecoder(
     datafile::String,
     modelfile::String,

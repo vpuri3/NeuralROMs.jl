@@ -40,8 +40,8 @@ function makedata_autodecoder(datafile::String;
     u  = normalizedata(u, ū, σu)
 
     # noramlize x, y separately
-    x̄  = sum(x, dims = 2) / size(x, 2)
-    σx = sum(abs2, x .- x̄, dims = 2) / size(x, 2) |> sqrt
+    x̄  = sum(x, dims = 2) / size(x, 2) |> vec
+    σx = sum(abs2, x .- x̄, dims = 2) / size(x, 2) .|> sqrt |> vec
     x  = normalizedata(x, x̄, σx)
 
     #==============#
@@ -82,12 +82,108 @@ function makedata_autodecoder(datafile::String;
 
     readme = "Train/test on the same trajectory."
 
+    makedata_kws = (; Ix, _Ib, Ib_, _It, It_)
+
     metadata = (; ū, σu, x̄, σx,
-        Nx, Ix, _Ib, Ib_, _It, It_, _Ns, Ns_,
-        md_data, readme,
+        Nx, _Ns, Ns_,
+        makedata_kws, md_data, readme,
     )
 
     (_x, _y), (x_, y_), metadata
+end
+
+#===========================================================#
+
+function train_autodecoder(
+    datafile::String,
+    modeldir::String,
+    l::Int, # latent space size
+    h::Int, # num hidden layers
+    w::Int, # hidden layer width
+    E::Int; # num epochs
+    rng::Random.AbstractRNG = Random.default_rng(),
+    _batchsize = nothing,
+    batchsize_ = nothing,
+    λ::Real = 0f0,
+    device = Lux.cpu_device(),
+    makedata_kws = (; Ix = Colon(), _Ib = Colon(), Ib_ = Colon(),
+        _It = Colon(), It_ = Colon())
+)
+    _data, _, metadata = makedata_autodecoder(datafile; makedata_kws...)
+    dir = modeldir
+
+    #--------------------------------------------#
+    # training hyper-params
+    #--------------------------------------------#
+    lrs = (1f-2, 1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
+    opts = Optimisers.Adam.(lrs)
+    nepochs = (20, round.(Int, E / 7 * ones(7))...)
+    schedules = Step.(lrs, 1f0, Inf32)
+
+    ################
+    # nepochs = (50, E,)
+    # schedules = (
+    #     Step(1f-2, 1f0, Inf32),                        # constant warmup
+    #     # Triangle(λ0 = 1f-5, λ1 = 1f-3, period = 20), # gradual warmup
+    #     # Exp(1f-3, 0.996f0),
+    #     SinExp(λ0 = 1f-5, λ1 = 1f-3, period = 50, γ = 0.995f0),
+    #     # CosAnneal(λ0 = 1f-5, λ1 = 1f-3, period = 50),
+    # )
+    # opts = fill(Optimisers.Adam(), length(nepochs)) |> Tuple
+    ################
+
+    #--------------------------------------------#
+    # architecture hyper-params
+    #--------------------------------------------#
+    act = sin
+
+    init_wt_in = scaled_siren_init(3f1)
+    init_wt_hd = scaled_siren_init(1f0)
+    init_wt_fn = glorot_uniform
+
+    init_bias = rand32 # zeros32
+    use_bias_fn = false
+
+    # lossfun = mse
+    lossfun = l2reg(mse, λ; property = :decoder)
+
+    _batchsize = isnothing(_batchsize) ? metadata.Nx * 10 : _batchsize
+    batchsize_ = isnothing(batchsize_) ? numobs(_data)    : batchsize_
+
+    #----------------------#----------------------#
+
+    in_layer = Dense(l+1, w, act; init_weight = init_wt_in, init_bias)
+    hd_layer = Dense(w  , w, act; init_weight = init_wt_hd, init_bias)
+    fn_layer = Dense(w  , 1; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
+
+    decoder = Chain(
+        in_layer,
+        fill(hd_layer, h)...,
+        fn_layer,
+    )
+
+    NN = AutoDecoder(decoder, metadata._Ns, l)
+
+    # # second order optimizer
+    # # if it can fit on 11 gb vRAM on 2080Ti
+    # if Lux.parameterlength(decoder) < 35_000
+    #     opts = (opts..., LBFGS(),)
+    #     nepochs = (nepochs..., round(Int, E / 10))
+    #     schedules = (schedules..., Step(1f0, 1f0, Inf32))
+    # end
+
+    train_args = (; l, h, w, E, _batchsize, batchsize_, λ)
+    metadata = (; metadata..., train_args)
+
+    @time model, ST = train_model(NN, _data; rng,
+        _batchsize, batchsize_,
+        opts, nepochs, schedules,
+        device, dir, metadata, lossfun
+    )
+
+    plot_training(ST...) |> display
+
+    model
 end
 
 #======================================================#
@@ -162,6 +258,57 @@ function infer_autodecoder(
     return code, upred, MSEs
 end
 
+#======================================================#
+function evolve_autodecoder(
+    prob::AbstractPDEProblem,
+    decoder::NTuple{3, Any},
+    metadata::NamedTuple,
+    data::NTuple{3, AbstractVecOrMat},
+    p0::AbstractVector;
+    rng::Random.AbstractRNG = Random.default_rng(),
+    device = Lux.cpu_device(),
+    verbose::Bool = true,
+)
+
+    # data, model
+    x, _, _ = data
+
+    NN, p0, st = freeze_autodecoder(decoder, p0; rng)
+    model = NeuralEmbeddingModel(NN, st, x, metadata)
+
+    # solvers
+    linsolve = QRFactorization()
+    autodiff = AutoForwardDiff()
+    linesearch = LineSearch() # TODO
+    nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
+    nlsmaxiters = 10
+
+    # linesearch = LineSearch(method = BackTracking(), autodiff = AutoZygote())
+    # nlssolve = GaussNewton(;autodiff = AutoZygote(), linsolve, linesearch)
+    # nlsmaxiters = 20
+
+    autodiff_space = AutoForwardDiff()
+    ϵ_space = nothing
+
+    # autodiff_space = AutoFiniteDiff()
+    # ϵ_space = 0.005f0
+
+    timealg = EulerForward()
+    # timealg = EulerBackward()
+
+    Δt = 1f-3
+    time_adaptive = true
+
+    scheme = Galerkin(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
+
+    # residual = make_residual(prob, timealg; autodiff = autodiff_space, ϵ = ϵ_space)
+    # scheme = LeastSqPetrovGalerkin(nlssolve, residual, nlsmaxiters, 1f-6, 1f-3, 1f-6)
+
+    evolve_model(prob, model, timealg, scheme, data, p0, Δt;
+        nlssolve, time_adaptive, autodiff_space, ϵ_space, device, verbose,
+    )
+end
+
 #===========================================================#
 function postprocess_autodecoder(
     prob::AbstractPDEProblem,
@@ -197,30 +344,37 @@ function postprocess_autodecoder(
     #==============#
     model = jldopen(modelfile)
     NN, p, st = model["model"]
-    md = model["metadata"] # (; ū, σu, _Ib, Ib_, _It, It_, readme)
+    md = model["metadata"]
     close(model)
 
     #==============#
     mkpath(outdir)
     #==============#
 
+    #==============#
     # subsample in space
-    Udata = @view Udata[md.Ix, :, :]
-    Xdata = @view Xdata[md.Ix]
+    #==============#
+    Udata = @view Udata[md.makedata_kws.Ix, :, :]
+    Xdata = @view Xdata[md.makedata_kws.Ix]
     Nx = length(Xdata)
 
     #==============#
     # train/test split
     #==============#
-    _Udata = @view Udata[:, md._Ib, :] # un-normalized
-    Udata_ = @view Udata[:, md.Ib_, :]
+    _Udata = @view Udata[:, md.makedata_kws._Ib, :] # un-normalized
+    Udata_ = @view Udata[:, md.makedata_kws.Ib_, :]
 
     #==============#
     # from training data
     #==============#
+    _Ib = if isa(md.makedata_kws._Ib, Colon)
+        1:size(Udata, 2)
+    end
+    Ib_ = if isa(md.makedata_kws.Ib_, Colon)
+        1:size(Udata, 2)
+    end
 
-    _data, _, _ = makedata_autodecoder(datafile;
-        Ix = md.Ix, _Ib = md._Ib, Ib_ = md.Ib_, _It = md._It, It_ = md.It_)
+    _data, _, _ = makedata_autodecoder(datafile; md.makedata_kws...)
     _xdata, _Icode = _data[1]
     _xdata = unnormalizedata(_xdata, md.x̄, md.σx)
 
@@ -228,17 +382,17 @@ function postprocess_autodecoder(
     
     model = NeuralEmbeddingModel(NN, st, _Icode, md.x̄, md.σx, md.ū, md.σu) |> device
     _Upred = model(_xdata |> device, p |> device) |> Lux.cpu_device()
-    _Upred = reshape(_Upred, Nx, length(md._Ib), Nt)
+    _Upred = reshape(_Upred, Nx, _Ib, Nt)
     
-    for k in 1:1 # length(md._Ib)
+    for k in _Ib
         Ud = @view _Udata[:, k, :]
         Up = @view _Upred[:, k, :]
     
         if makeplot
             xlabel = "x"
             ylabel = "u(x, t)"
-      
-            _mu = mu[md._Ib[k]]
+     
+            _mu = mu[_Ib[k]]
             title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
     
             idx_pred = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
@@ -252,7 +406,7 @@ function postprocess_autodecoder(
             plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
             plot!(plt, Xdata, upred, w = 2, palette = :tab10)
             scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
-            png(plt, "train$(k)")
+            png(plt, joinpath(outdir, "train$(k)"))
     
             anim = animate1D(Ud, Up, Xdata, Tdata;
                 w = 2, xlabel, ylabel, title)
@@ -264,40 +418,40 @@ function postprocess_autodecoder(
     # inference (via data regression)
     #==============#
 
-    decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-    
-    p0 = _code[2].weight[:, 1]
-    Icode = ones(Int32, 1, Nx)
-    
-    NN, p0, st = freeze_autodecoder(decoder, p0; rng)
-    model = NeuralEmbeddingModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
-    
-    for k in 1:1 # axes(mu, 1)
-        Ud = Udata[:, k, :]
-        data = (Xdata, Ud, Tdata)
-    
-        _, Up, _ = infer_autodecoder(model, data, p0; device, verbose)
-    
-        if makeplot
-            xlabel = "x"
-            ylabel = "u(x, t)"
-    
-            _mu   = mu[k]
-            title = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
-            _name = k in md._Ib ? "infer_train$(k)" : "infer_test$(k)"
-    
-            idx = LinRange(1, size(Ud, 2), 101) .|> Base.Fix1(round, Int)
-            plt = plot(;title, xlabel, ylabel, legend = false)
-            plot!(plt, Xdata, Up[:, idx], w = 2.0,  s = :solid)
-            plot!(plt, Xdata, Ud[:, idx], w = 4.0,  s = :dash)
-            png(plt, _name)
-            display(plt)
-    
-            anim = animate1D(Ud, Up, Xdata, Tdata;
-                w = 2, xlabel, ylabel, title)
-            gif(anim, joinpath(outdir, "$(_name).gif"); fps)
-        end
-    end
+    # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    #
+    # p0 = _code[2].weight[:, 1]
+    # Icode = ones(Int32, 1, Nx)
+    #
+    # NN, p0, st = freeze_autodecoder(decoder, p0; rng)
+    # model = NeuralEmbeddingModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
+    #
+    # for k in axes(mu)[1]
+    #     Ud = Udata[:, k, :]
+    #     data = (Xdata, Ud, Tdata)
+    #
+    #     _, Up, _ = infer_autodecoder(model, data, p0; device, verbose)
+    #
+    #     if makeplot
+    #         xlabel = "x"
+    #         ylabel = "u(x, t)"
+    #
+    #         _mu   = mu[k]
+    #         title = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+    #         _name = k in _Ib ? "infer_train$(k)" : "infer_test$(k)"
+    #
+    #         idx = LinRange(1, size(Ud, 2), 101) .|> Base.Fix1(round, Int)
+    #         plt = plot(;title, xlabel, ylabel, legend = false)
+    #         plot!(plt, Xdata, Up[:, idx], w = 2.0,  s = :solid)
+    #         plot!(plt, Xdata, Ud[:, idx], w = 4.0,  s = :dash)
+    #         png(plt, joinpath(outdir, _name))
+    #         display(plt)
+    #
+    #         anim = animate1D(Ud, Up, Xdata, Tdata;
+    #             w = 2, xlabel, ylabel, title)
+    #         gif(anim, joinpath(outdir, "$(_name).gif"); fps)
+    #     end
+    # end
 
     #==============#
     # evolve
@@ -306,7 +460,7 @@ function postprocess_autodecoder(
     # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     # p0 = _code[2].weight[:, 1]
     #
-    # for k in axes(mu, 1)
+    # for k in axes(mu)[1]
     #     Ud = Udata[:, k, :]
     #     data = (Xdata, Ud, Tdata)
     #     @time _, Up, Tpred = evolve_autodecoder(prob, decoder, md, data, p0;
@@ -318,12 +472,12 @@ function postprocess_autodecoder(
     #
     #         _mu   = mu[k]
     #         title = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
-    #         _name = k in md._Ib ? "evolve_train$(k)" : "evolve_test$(k)"
+    #         _name = k in _Ib ? "evolve_train$(k)" : "evolve_test$(k)"
     #
     #         plt = plot(; title, xlabel, ylabel, legend = false)
     #         plot!(plt, Xdata, Up[:, idx], w = 2.0,  s = :solid)
     #         plot!(plt, Xdata, Ud[:, idx], w = 4.0,  s = :dash)
-    #         png(plt, _name)
+    #         png(plt, joinpath(outdir, _name))
     #         display(plt)
     #
     #         anim = animate1D(Ud, Up, Xdata, Tdata;
@@ -336,20 +490,25 @@ function postprocess_autodecoder(
     # check derivative
     #==============#
     begin
+        second_derv = false
         decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-        ncodes = _code[2].weight
+        ncodes = size(_code[2].weight, 2)
         idx = rand(1:ncodes, 5)
+        # idx = 1:1
         for i in idx
             p0 = _code[2].weight[:, i]
 
             p1 = GeometryLearning.plot_derivatives1D_autodecoder(
-                decoder, Xdata, p0, md, second_derv = false,
-                autodiff = AutoFiniteDiff(), ϵ=1f-2)
-            png(p1, joinpath(outdir, "derv_$(i)_FWD_AD"))
+                decoder, Xdata, p0, md; second_derv,
+                autodiff = AutoFiniteDiff(), ϵ=1f-2
+            )
+            png(p1, joinpath(outdir, "derv_$(i)_FD_AD"))
 
             p2 = GeometryLearning.plot_derivatives1D_autodecoder(
-                decoder, Xdata, p0, md, second_derv = false)
-            png(p2, joinpath(outdir, "derv_$(i)_FD_AD"))
+                decoder, Xdata, p0, md; second_derv,
+                autodiff = AutoForwardDiff(),
+            )
+            png(p2, joinpath(outdir, "derv_$(i)_FWD_AD"))
             display(p2)
         end
     end
@@ -368,96 +527,6 @@ function postprocess_autodecoder(
 end
 
 #===========================================================#
-
-function train_autodecoder(
-    datafile::String,
-    modeldir::String,
-    l::Int, # latent space size
-    h::Int, # num hidden layers
-    w::Int, # hidden layer width
-    E::Int; # num epochs
-    rng::Random.AbstractRNG = Random.default_rng(),
-    _batchsize = nothing,
-    batchsize_ = nothing,
-    λ::Real = 1f0,
-    device = Lux.cpu_device(),
-    makedata_kws = (; Ix = Colon(), _Ib = Colon(), Ib_ = Colon(),
-        _It = Colon(), It_ = Colon())
-)
-    _data, _, metadata = makedata_autodecoder(datafile; makedata_kws...)
-    dir = modeldir
-
-    #--------------------------------------------#
-    # training hyper-params
-    #--------------------------------------------#
-    lrs = (1f-2, 1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
-    opts = Optimisers.Adam.(lrs)
-    nepochs = (20, round.(Int, E / 7 * ones(7))...)
-    schedules = Step.(lrs, 1f0, Inf32)
-
-    ################
-    # nepochs = (50, E,)
-    # schedules = (
-    #     Step(1f-2, 1f0, Inf32),                        # constant warmup
-    #     # Triangle(λ0 = 1f-5, λ1 = 1f-3, period = 20), # gradual warmup
-    #     # Exp(1f-3, 0.996f0),
-    #     SinExp(λ0 = 1f-5, λ1 = 1f-3, period = 50, γ = 0.995f0),
-    #     # CosAnneal(λ0 = 1f-5, λ1 = 1f-3, period = 50),
-    # )
-    # opts = fill(Optimisers.Adam(), length(nepochs)) |> Tuple
-    ################
-
-    #--------------------------------------------#
-    # architecture hyper-params
-    #--------------------------------------------#
-    act = sin
-
-    init_wt_in = scaled_siren_init(3f1)
-    init_wt_hd = scaled_siren_init(1f0)
-    init_wt_fn = glorot_uniform
-
-    init_bias = rand32 # zeros32
-    use_bias_fn = false
-
-    # lossfun = mse
-    lossfun = l2reg(mse, λ; property = :decoder)
-
-    _batchsize = isnothing(_batchsize) ? metadata.Nx * 10 : _batchsize
-    batchsize_ = isnothing(batchsize_) ? numobs(_data)    : batchsize_
-
-    #----------------------#----------------------#
-
-    in_layer = Dense(l+1, w, act; init_weight = init_wt_in, init_bias)
-    hd_layer = Dense(w  , w, act; init_weight = init_wt_hd, init_bias)
-    fn_layer = Dense(w  , 1; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
-
-    decoder = Chain(
-        in_layer,
-        fill(hd_layer, h)...,
-        fn_layer,
-    )
-
-    NN = AutoDecoder(decoder, metadata._Ns, l)
-
-    # # second order optimizer
-    # # if it can fit on 11 gb vRAM on 2080Ti
-    # if Lux.parameterlength(decoder) < 35_000
-    #     opts = (opts..., LBFGS(),)
-    #     nepochs = (nepochs..., round(Int, E / 10))
-    #     schedules = (schedules..., Step(1f0, 1f0, Inf32))
-    # end
-
-    @time model, ST = train_model(NN, _data; rng,
-        _batchsize, batchsize_,
-        opts, nepochs, schedules,
-        device, dir, metadata, lossfun
-    )
-
-    plot_training(ST...) |> display
-
-    model
-end
-
 
 nothing
 #
