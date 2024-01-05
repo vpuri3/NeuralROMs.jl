@@ -166,7 +166,7 @@ function solve_timestep(
 
     # get new states
     t1 = t0 + Δt
-    p1 = apply_timestep(timealg, p0, ΔpΔt_rhs)
+    p1 = apply_timestep(timealg, ΔpΔt_rhs, pprevs)
     u1 = model(x, p1)
     f1 = dudtRHS(prob, model, x, p1, t1)
     r1 = compute_residual(timealg, Δt, fprevs, uprevs, f1, u1)
