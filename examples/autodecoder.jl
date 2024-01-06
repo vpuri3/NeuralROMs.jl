@@ -146,8 +146,10 @@ function train_autodecoder(
     # lossfun = mse
     lossfun = l2reg(mse, λ; property = :decoder)
 
-    _batchsize = isnothing(_batchsize) ? metadata.Nx * 10 : _batchsize
-    batchsize_ = isnothing(batchsize_) ? numobs(_data)    : batchsize_
+    Nx = makedata_kws.Ix isa Colon ? metadata.Nx : length(makedata_kws.Ix)
+
+    _batchsize = isnothing(_batchsize) ? Nx * 10       : _batchsize
+    batchsize_ = isnothing(batchsize_) ? numobs(_data) : batchsize_
 
     #----------------------#----------------------#
 
@@ -366,12 +368,8 @@ function postprocess_autodecoder(
     #==============#
     # from training data
     #==============#
-    _Ib = if isa(md.makedata_kws._Ib, Colon)
-        1:size(Udata, 2)
-    end
-    Ib_ = if isa(md.makedata_kws.Ib_, Colon)
-        1:size(Udata, 2)
-    end
+    _Ib = isa(md.makedata_kws._Ib, Colon) ? (1:size(Udata, 2)) : md.makedata_kws._Ib
+    Ib_ = isa(md.makedata_kws.Ib_, Colon) ? (1:size(Udata, 2)) : md.makedata_kws.Ib_
 
     _data, _, _ = makedata_autodecoder(datafile; md.makedata_kws...)
     _xdata, _Icode = _data[1]
@@ -379,39 +377,39 @@ function postprocess_autodecoder(
 
     @show md
     
-    model = NeuralEmbeddingModel(NN, st, _Icode, md.x̄, md.σx, md.ū, md.σu) |> device
-    _Upred = model(_xdata |> device, p |> device) |> Lux.cpu_device()
-    _Upred = reshape(_Upred, Nx, _Ib, Nt)
-    
-    for k in _Ib
-        Ud = @view _Udata[:, k, :]
-        Up = @view _Upred[:, k, :]
-    
-        if makeplot
-            xlabel = "x"
-            ylabel = "u(x, t)"
-     
-            _mu = mu[_Ib[k]]
-            title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
-    
-            idx_pred = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
-            idx_data = idx_pred
-    
-            upred = Up[:, idx_pred]
-            udata = Ud[:, idx_data]
-    
-            Iplot = 1:32:Nx
-    
-            plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
-            plot!(plt, Xdata, upred, w = 2, palette = :tab10)
-            scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
-            png(plt, joinpath(outdir, "train$(k)"))
-    
-            anim = animate1D(Ud, Up, Xdata, Tdata;
-                w = 2, xlabel, ylabel, title)
-            gif(anim, joinpath(outdir, "train$(k).gif"); fps)
-        end
-    end
+    # model = NeuralEmbeddingModel(NN, st, _Icode, md.x̄, md.σx, md.ū, md.σu) |> device
+    # _Upred = model(_xdata |> device, p |> device) |> Lux.cpu_device()
+    # _Upred = reshape(_Upred, Nx, length(_Ib), Nt)
+    #
+    # for (i, k) in enumerate(_Ib)
+    #     Ud = @view _Udata[:, i, :]
+    #     Up = @view _Upred[:, i, :]
+    #
+    #     if makeplot
+    #         xlabel = "x"
+    #         ylabel = "u(x, t)"
+    # 
+    #         _mu = mu[_Ib[i]]
+    #         title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+    #
+    #         idx_pred = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
+    #         idx_data = idx_pred
+    #
+    #         upred = Up[:, idx_pred]
+    #         udata = Ud[:, idx_data]
+    #
+    #         Iplot = 1:32:Nx
+    #
+    #         plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
+    #         plot!(plt, Xdata, upred, w = 2, palette = :tab10)
+    #         scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
+    #         png(plt, joinpath(outdir, "train$(k)"))
+    #
+    #         anim = animate1D(Ud, Up, Xdata, Tdata;
+    #             w = 2, xlabel, ylabel, title)
+    #         gif(anim, joinpath(outdir, "train$(k).gif"); fps)
+    #     end
+    # end
 
     #==============#
     # inference (via data regression)
@@ -493,7 +491,6 @@ function postprocess_autodecoder(
         decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
         ncodes = size(_code[2].weight, 2)
         idx = rand(1:ncodes, 5)
-        # idx = 1:1
         for i in idx
             p0 = _code[2].weight[:, i]
 

@@ -106,10 +106,11 @@ makedata_kws = (; Ix, _Ib, Ib_, _It = :, It_ = :)
 prob = BurgersInviscid1D()
 prob = BurgersViscous1D(1f-4)
 
-E = 2000
+E = 1400
 λ = 1f-0
-for (l, w, h) in (
-    (8, 5, 128),
+for (l, h, w) in (
+    (8, 10, 64),
+    # (8, 5, 128),
 )
     ll = lpad(l, 2, "0")
     hh = lpad(h, 2, "0")
@@ -117,25 +118,17 @@ for (l, w, h) in (
     modeldir = joinpath(@__DIR__, "model_dec_sin_$(ll)_$(hh)_$(ww)_reg")
     modelfile = joinpath(modeldir, "model_08.jld2")
 
-    # train
-    # l, h, w = 4, 5, 32
-    # datafile = "/home/vedantpu/.julia/dev/GeometryLearning.jl/examples/advect_fourier/data_advect/data.jld2"
+    ## train
     # isdir(modeldir) && rm(modeldir, recursive = true)
     # model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 1f-1,
-    #     _batchsize = nothing, batchsize_ = nothing, device)
+    #     _batchsize, batchsize_, makedata_kws, device)
 
-    # # train
-    # isdir(modeldir) && rm(modeldir, recursive = true)
-    # model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
-    #     λ, _batchsize, batchsize_, device, makedata_kws,
-    # )
-    #
-    # # process
-    # outdir = joinpath(modeldir, "results")
+    ## process
+    outdir = joinpath(modeldir, "results")
     # postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
     #     makeplot = true, verbose = true)
-    # test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-    #     makeplot = true, verbose = true)
+    test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+        makeplot = true, verbose = true)
 end
 #======================================================#
 nothing
