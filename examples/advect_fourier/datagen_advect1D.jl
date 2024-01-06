@@ -15,8 +15,6 @@ using Plots, JLD2
 
 CUDA.allowscalar(false)
 
-_pi = Float32(pi)
-
 function uIC(x; μ = -0.5f0, σ = 0.1f0)
     u = @. exp(-1f0/2f0 * ((x-μ)/σ)^2)
     reshape(u, :, 1)

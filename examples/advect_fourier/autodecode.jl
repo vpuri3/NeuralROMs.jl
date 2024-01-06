@@ -66,7 +66,7 @@ function test_autodecoder(
     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     p0 = _code[2].weight[:, 1]
 
-    CUDA.@time _, _, Up = evolve_autodecoder(prob, decoder, md, data, p0;
+    @time _, _, Up = evolve_autodecoder(prob, decoder, md, data, p0;
         rng, device, verbose)
 
     Ix_plt = 1:4:Nx
@@ -102,11 +102,11 @@ modeldir = joinpath(@__DIR__, "model1")
 modelfile = joinpath(modeldir, "model_08.jld2")
 
 # train
-E = 1000
-l, h, w = 4, 5, 32
-isdir(modeldir) && rm(modeldir, recursive = true)
-model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 1f-1,
-    _batchsize = nothing, batchsize_ = nothing, device)
+# E = 1000
+# l, h, w = 4, 5, 32
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 1f-1,
+#     _batchsize = nothing, batchsize_ = nothing, device)
 
 # process
 outdir = joinpath(modeldir, "results")
