@@ -54,6 +54,29 @@ function forwarddiff_deriv2(f,
     fx, df, d2f
 end
 
+function forwarddiff_deriv4(f,
+    x::ADInputTypes{T},
+) where{T}
+
+    tag1 = ForwardDiff.Tag(f, T)
+    tag2 = ForwardDiff.Tag(f, T)
+    tag3 = ForwardDiff.Tag(f, T)
+    tag4 = ForwardDiff.Tag(f, T)
+
+    z = x
+    z = Dual{typeof(tag1)}.(z, one(T))
+    z = Dual{typeof(tag2)}.(z, one(T))
+    z = Dual{typeof(tag3)}.(z, one(T))
+    z = Dual{typeof(tag4)}.(z, one(T))
+
+    fz = f(z)
+    fx = value.(value.(fz))
+    df = value.(partials.(fz, 1))
+    d2f = partials.(partials.(fz, 1), 1)
+
+    fx, df, d2f
+end
+
 function forwarddiff_jacobian(f,
     x::ADInputTypes{T},
 ) where{T}

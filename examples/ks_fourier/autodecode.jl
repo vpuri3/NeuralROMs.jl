@@ -91,9 +91,9 @@ end
 #======================================================#
 
 rng = Random.default_rng()
-Random.seed!(rng, 460)
+Random.seed!(rng, 111)
 
-prob = Advection1D(0.25f0)
+prob = KuramotoSivashinsky1D()
 
 device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "data_ks/", "data.jld2")
@@ -102,18 +102,18 @@ modeldir = joinpath(@__DIR__, "model1")
 modelfile = joinpath(modeldir, "model_08.jld2")
 
 ## train
-E = 1000
-l, h, w = 2, 5, 64
-isdir(modeldir) && rm(modeldir, recursive = true)
-model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 0f-0,
-    _batchsize = nothing, batchsize_ = nothing, device)
+# E = 2000
+# l, h, w = 16, 5, 128
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 5f-1, # 1f-1
+#     _batchsize = nothing, batchsize_ = nothing, device)
 
 ## process
 outdir = joinpath(modeldir, "results")
 postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
     makeplot = true, verbose = true)
-test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-    makeplot = true, verbose = true)
+# test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+#     makeplot = true, verbose = true)
 #======================================================#
 nothing
 #

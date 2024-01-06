@@ -93,7 +93,8 @@ include("problems.jl")
 export dudtRHS
 export
     Advection1D, AdvectionDiffusion1D,
-    BurgersInviscid1D, BurgersViscous1D
+    BurgersInviscid1D, BurgersViscous1D,
+    KuramotoSivashinsky1D
 
 include("nonlinleastsq.jl")
 export nonlinleastsq

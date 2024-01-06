@@ -111,6 +111,8 @@ function train_autodecoder(
     _data, _, metadata = makedata_autodecoder(datafile; makedata_kws...)
     dir = modeldir
 
+    Nx = isa(makedata_kws.Ix, Colon) ? metadata.Nx : length(makedata_kws.Ix)
+
     #--------------------------------------------#
     # training hyper-params
     #--------------------------------------------#
@@ -146,8 +148,8 @@ function train_autodecoder(
     # lossfun = mse
     lossfun = l2reg(mse, λ; property = :decoder)
 
-    _batchsize = isnothing(_batchsize) ? metadata.Nx * 10 : _batchsize
-    batchsize_ = isnothing(batchsize_) ? numobs(_data)    : batchsize_
+    _batchsize = isnothing(_batchsize) ? Nx * 10       : _batchsize
+    batchsize_ = isnothing(batchsize_) ? numobs(_data) : batchsize_
 
     #----------------------#----------------------#
 
@@ -173,6 +175,8 @@ function train_autodecoder(
 
     train_args = (; l, h, w, E, _batchsize, batchsize_, λ)
     metadata = (; metadata..., train_args)
+
+    @show train_args
 
     @time model, ST = train_model(NN, _data; rng,
         _batchsize, batchsize_,
@@ -407,7 +411,9 @@ function postprocess_autodecoder(
             scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
             png(plt, joinpath(outdir, "train$(k)"))
     
-            anim = animate1D(Ud, Up, Xdata, Tdata;
+            Itplt = LinRange(1, size(Ud, 2), 100) .|> Base.Fix1(round, Int)
+
+            anim = animate1D(Ud[:, Itplt], Up[:, Itplt], Xdata, Tdata[Itplt];
                 w = 2, xlabel, ylabel, title)
             gif(anim, joinpath(outdir, "train$(k).gif"); fps)
         end
@@ -489,11 +495,10 @@ function postprocess_autodecoder(
     # check derivative
     #==============#
     begin
-        second_derv = false
+        second_derv = true
         decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
         ncodes = size(_code[2].weight, 2)
         idx = rand(1:ncodes, 5)
-        # idx = 1:1
         for i in idx
             p0 = _code[2].weight[:, i]
 

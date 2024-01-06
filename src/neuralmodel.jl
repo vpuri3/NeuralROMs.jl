@@ -120,6 +120,24 @@ function dudx2(
     end
 end
 
+function dudx4(
+    model::AbstractNeuralModel,
+    x::AbstractArray,
+    p::AbstractVector;
+    autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
+    ϵ = nothing,
+)
+    function dudx4_internal(x)
+        model(x, p)
+    end
+
+    if isa(autodiff, AutoFiniteDiff)
+        finitediff_deriv4(dudx4_internal, x; ϵ)
+    elseif isa(autodiff, AutoForwardDiff)
+        forwarddiff_deriv4(dudx4_internal, x)
+    end
+end
+
 function dudp(
     model::AbstractNeuralModel,
     x::AbstractArray,
