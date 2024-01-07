@@ -24,8 +24,8 @@ function train_model(
     rng::Random.AbstractRNG = Random.default_rng(),
 #
     _batchsize::Int = 32,
-    batchsize_::Int = _batchsize,
-    __batchsize::Int = numobs(_data), # > batchsize for BFGS, callback
+    batchsize_::Int = numobs(_data),
+    __batchsize::Int = batchsize_, # > batchsize for BFGS, callback
 #
     opts::NTuple{M, Any} = (Optimisers.Adam(1f-3),),
     nepochs::NTuple{M, Int} = (100,),
