@@ -176,7 +176,7 @@ end
 
 function perform_timestep!(
     integrator::TimeIntegrator{T};
-    Δt_min::T = T(1e-5),
+    Δt_min::T = T(5e-6),
     tol_scale::T = T(10),
     verbose::Bool = true,
 ) where{T}
