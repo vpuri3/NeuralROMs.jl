@@ -135,6 +135,8 @@ function dudx4(
         finitediff_deriv4(dudx4_internal, x; ϵ)
     elseif isa(autodiff, AutoForwardDiff)
         forwarddiff_deriv4(dudx4_internal, x)
+    else
+        error("Got unsupported `autodiff = `$autodiff")
     end
 end
 

@@ -94,10 +94,9 @@ function dudtRHS(
     autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ = nothing,
 )
-    # u, udx1, udx2, _, udx4 = dudx4(model, x, p; autodiff, ϵ)
-    #
-    # @. -udx2 - udx4 -u * udx1 # -lapl (anti-diffusion), biharmonic, convection
-    nothing
+    u, ud1x, ud2x, _, ud4x = dudx4(model, x, p; autodiff, ϵ)
+
+    @. -ud2x - ud4x - (u * ud1x) # -lapl (anti-diffusion), biharmonic, convection
 end
 
 #===================================================#

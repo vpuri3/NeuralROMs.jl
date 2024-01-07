@@ -84,7 +84,7 @@ function test_autodecoder(
     png(plt, joinpath(outdir, "evolve_$k"))
     display(plt)
 
-    nothing
+    Xdata, Up, Ud[Ix_plt, :]
 end
 #======================================================#
 # main
@@ -108,12 +108,16 @@ modelfile = joinpath(modeldir, "model_08.jld2")
 # model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 5f-1, # 1f-1
 #     _batchsize = nothing, batchsize_ = nothing, device)
 
+# ideas for fixing evolution
+# - reduce tolerance in evolution
+# - add more snapshots in training
+
 ## process
 outdir = joinpath(modeldir, "results")
-postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-    makeplot = true, verbose = true)
-# test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+# postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
 #     makeplot = true, verbose = true)
+x, u, _ = test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+    makeplot = true, verbose = true)
 #======================================================#
 nothing
 #

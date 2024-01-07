@@ -72,8 +72,9 @@ include("metrics.jl")
 export mae, mse, pnorm, l2reg, rsquare
 
 include("autodiff.jl")
-export forwarddiff_deriv1, forwarddiff_deriv2, forwarddiff_jacobian,
-    finitediff_deriv1, finitediff_deriv2, finitediff_jacobian
+export
+    forwarddiff_deriv1, forwarddiff_deriv2, forwarddiff_deriv4, forwarddiff_jacobian,
+    finitediff_deriv1, finitediff_deriv2, finitediff_deriv4, finitediff_jacobian
 
 include("layers.jl")
 export Atten, Diag, PermutedBatchNorm, SplitRows, ImplicitEncoderDecoder,

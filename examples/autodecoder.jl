@@ -370,12 +370,8 @@ function postprocess_autodecoder(
     #==============#
     # from training data
     #==============#
-    _Ib = if isa(md.makedata_kws._Ib, Colon)
-        1:size(Udata, 2)
-    end
-    Ib_ = if isa(md.makedata_kws.Ib_, Colon)
-        1:size(Udata, 2)
-    end
+    _Ib = isa(md.makedata_kws._Ib, Colon) ? (1:size(Udata, 2)) : md.makedata_kws._Ib
+    Ib_ = isa(md.makedata_kws.Ib_, Colon) ? (1:size(Udata, 2)) : md.makedata_kws.Ib_
 
     _data, _, _ = makedata_autodecoder(datafile; md.makedata_kws...)
     _xdata, _Icode = _data[1]
@@ -404,7 +400,7 @@ function postprocess_autodecoder(
             upred = Up[:, idx_pred]
             udata = Ud[:, idx_data]
     
-            Iplot = 1:32:Nx
+            Iplot = 1:8:Nx
     
             plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
             plot!(plt, Xdata, upred, w = 2, palette = :tab10)
@@ -496,20 +492,26 @@ function postprocess_autodecoder(
     #==============#
     begin
         second_derv = true
+        third_derv = false
+        fourth_derv = true
+
         decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
         ncodes = size(_code[2].weight, 2)
-        idx = rand(1:ncodes, 5)
+        idx = LinRange(1, ncodes, 10) .|> Base.Fix1(round, Int)
+
         for i in idx
             p0 = _code[2].weight[:, i]
 
             p1 = GeometryLearning.plot_derivatives1D_autodecoder(
-                decoder, Xdata, p0, md; second_derv,
-                autodiff = AutoFiniteDiff(), ϵ=1f-2
+                decoder, Xdata, p0, md;
+                second_derv,
+                autodiff = AutoFiniteDiff(), ϵ=1f-2,
             )
             png(p1, joinpath(outdir, "derv_$(i)_FD_AD"))
 
             p2 = GeometryLearning.plot_derivatives1D_autodecoder(
-                decoder, Xdata, p0, md; second_derv,
+                decoder, Xdata, p0, md;
+                second_derv, third_derv, fourth_derv,
                 autodiff = AutoForwardDiff(),
             )
             png(p2, joinpath(outdir, "derv_$(i)_FWD_AD"))
