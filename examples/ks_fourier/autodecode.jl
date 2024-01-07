@@ -102,11 +102,11 @@ modeldir = joinpath(@__DIR__, "model1")
 modelfile = joinpath(modeldir, "model_08.jld2")
 
 ## train
-# E = 2000
-# l, h, w = 16, 5, 128
-# isdir(modeldir) && rm(modeldir, recursive = true)
-# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 5f-1, # 1f-1
-#     _batchsize = nothing, batchsize_ = nothing, device)
+E = 2000
+l, h, w = 16, 5, 128
+isdir(modeldir) && rm(modeldir, recursive = true)
+model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 5f-1, # 1f-1
+    _batchsize = nothing, batchsize_ = nothing, device)
 
 # ideas for fixing evolution
 # - add more snapshots in training
@@ -114,10 +114,10 @@ modelfile = joinpath(modeldir, "model_08.jld2")
 
 ## process
 outdir = joinpath(modeldir, "results")
-# postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-#     makeplot = true, verbose = true)
-x, u, _ = test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
     makeplot = true, verbose = true)
+# x, u, _ = test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+#     makeplot = true, verbose = true)
 #======================================================#
 nothing
 #
