@@ -109,8 +109,8 @@ modelfile = joinpath(modeldir, "model_08.jld2")
 #     _batchsize = nothing, batchsize_ = nothing, device)
 
 # ideas for fixing evolution
-# - reduce tolerance in evolution
 # - add more snapshots in training
+# - rewrite datagen in Real space to make sure everything matches with ML evolution
 
 ## process
 outdir = joinpath(modeldir, "results")

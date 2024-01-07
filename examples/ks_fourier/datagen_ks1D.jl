@@ -29,9 +29,10 @@ https://royalsocietypublishing.org/doi/epdf/10.1098/rspa.2014.0932
 """
 
 T = Float32
+len = T(10pi)
 
 function uIC(x; μ=zero(T), σ=T(0.5))
-    u = @. exp(-1f0/2f0 * ((x-μ)/σ)^2)
+    u = @. exp(-T(1/10) * ((x-μ)/σ)^2)
     reshape(u, :, 1)
 end
 
@@ -47,7 +48,7 @@ end
 
 function ks1D(N, len, mu = nothing, p = nothing;
     tspan=(T(0), T(10)),
-    ntsave=500,
+    ntsave=2000,
     odealg=SSPRK43(),
     odekw = (;),
     device = cpu_device(),
@@ -163,7 +164,6 @@ function ks1D(N, len, mu = nothing, p = nothing;
 end
 
 N = 256
-len = T(10pi)
 mu = nothing
 
 device = cpu_device()
