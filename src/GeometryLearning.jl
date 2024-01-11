@@ -69,7 +69,7 @@ include("utils.jl")
 export fix_kw, init_siren, scaled_siren_init, remake_ca #, _ntimes
 
 include("metrics.jl")
-export mae, mse, pnorm, l2reg, rsquare
+export mae, mse, rsquare, pnorm, l1reg, l2reg, elasticreg
 
 include("autodiff.jl")
 export
@@ -88,7 +88,10 @@ include("operator.jl")
 export OpKernel, OpConv, OpKernelBilinear, OpConvBilinear, linear_nonlinear
 
 include("neuralmodel.jl")
-export normalizedata, unnormalizedata, NeuralEmbeddingModel, dudx1, dudx2, dudp
+export
+    normalizedata, unnormalizedata,
+    NeuralModel, NeuralEmbeddingModel,
+    dudx1, dudx2, dudx4, dudp
 
 include("problems.jl")
 export dudtRHS
@@ -118,6 +121,8 @@ include("train.jl")
 export train_model, callback, optimize, plot_training
 
 include("vis.jl")
-export animate1D, plot_1D_surrogate_steady
+export
+    animate1D, plot_1D_surrogate_steady,
+    plot_derivatives1D, plot_derivatives1D_autodecoder
 
 end # module

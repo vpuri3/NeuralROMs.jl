@@ -1,10 +1,13 @@
 #===============================================================#
 function animate1D(u::AbstractMatrix,
     x::AbstractVector,
-    t::AbstractVector;
+    t::AbstractVector = [];
     title = "",
     kwargs...
 )
+    if isempty(t)
+        t = 1:size(v, 2)
+    end
 
     ylims = begin
         mi = minimum(u)
@@ -23,10 +26,13 @@ end
 function animate1D(u::AbstractMatrix,
     v::AbstractMatrix,
     x::AbstractVector,
-    t::AbstractVector;
+    t::AbstractVector = [];
     title = "",
     kwargs...
 )
+    if isempty(t)
+        t = 1:size(v, 2)
+    end
 
     ylims = begin
         mi = minimum(u)
@@ -44,6 +50,34 @@ function animate1D(u::AbstractMatrix,
 end
 
 #===============================================================#
+
+function plot_derivatives1D(
+    model::NTuple{3, Any},
+    x::AbstractVector,
+    md::NamedTuple;
+    second_derv::Bool = false,
+    third_derv::Bool  = false,
+    fourth_derv::Bool = false,
+    autodiff = AutoForwardDiff(),
+    ϵ = nothing,
+)
+    NN, p, st = model
+    xbatch = reshape(x, 1, :)
+
+    model = NeuralModel(NN, st, md)
+    u, ud1x, ud2x, ud3x, ud4x = dudx4(model, xbatch, p; autodiff, ϵ) .|> vec
+
+    plt = plot(xabel = "x", ylabel = "u(x,t)")
+
+    plot!(plt, x, u, label = "u"  , w = 3.0)
+    # plot!(plt, x, ud1x, label = "udx", w = 3.0)
+
+    second_derv && plot!(plt, x, ud2x, label = "ud2x", w = 3.0)
+    third_derv  && plot!(plt, x, ud3x, label = "ud3x", w = 3.0)
+    fourth_derv && plot!(plt, x, ud4x, label = "ud4x", w = 3.0)
+
+    return plt
+end
 
 function plot_derivatives1D_autodecoder(
     decoder::NTuple{3, Any},

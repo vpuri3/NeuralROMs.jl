@@ -20,6 +20,54 @@ end
 # For 2D, make X a tuple (X, Y). should work fine with dUdX, etc
 # otherwise need `makeUfromXY`, `makeUfromX_newmodel` type functions
 
+#===========================================================#
+@concrete mutable struct NeuralModel{Tx, Tu} <: AbstractNeuralModel
+    NN
+    st
+
+    x̄::Tx
+    σx::Tx
+
+    ū::Tu
+    σu::Tu
+end
+
+function NeuralModel(
+    NN::Lux.AbstractExplicitLayer,
+    st::NamedTuple,
+    metadata::NamedTuple,
+)
+    x̄ = metadata.x̄
+    ū = metadata.ū
+
+    σx = metadata.σx
+    σu = metadata.σu
+
+    NeuralModel(NN, st, x̄, σx, ū, σu,)
+end
+
+function Adapt.adapt_structure(to, model::NeuralModel)
+    st = Adapt.adapt_structure(to, model.st)
+    x̄  = Adapt.adapt_structure(to, model.x̄ )
+    ū  = Adapt.adapt_structure(to, model.ū )
+    σx = Adapt.adapt_structure(to, model.σx)
+    σu = Adapt.adapt_structure(to, model.σu)
+
+    NeuralModel(
+        model.NN, st, x̄, σx, ū, σu,
+    )
+end
+
+function (model::NeuralModel)(
+    x::AbstractArray,
+    p::AbstractVector,
+)
+    x_norm = normalizedata(x, model.x̄, model.σx)
+    u_norm = model.NN(x_norm, p, model.st)[1]
+    unnormalizedata(u_norm, model.ū, model.σu)
+end
+
+#===========================================================#
 @concrete mutable struct NeuralEmbeddingModel{Tx, Tu} <: AbstractNeuralModel
     NN
     st
@@ -83,6 +131,8 @@ function (model::NeuralEmbeddingModel)(
 
     unnormalizedata(u_norm, model.ū, model.σu)
 end
+
+#===========================================================#
 
 function dudx1(
     model::AbstractNeuralModel,

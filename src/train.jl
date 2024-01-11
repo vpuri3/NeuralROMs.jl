@@ -43,6 +43,8 @@ function train_model(
 #
     early_stopping::Union{Bool, Nothing} = nothing,
     patience::Union{Int, Nothing} = nothing,
+#
+    cb_epoch = nothing, # (NN, p, st) -> nothing
 ) where{M}
 
     # create data loaders
@@ -59,7 +61,7 @@ function train_model(
     # callback functions
     STATS = Int[], Float32[], Float32[] # EPOCH, _LOSS, LOSS_
 
-    cb = makecallback(NN, __loader, loader_, lossfun; io, STATS, stats = false)
+    cb = makecallback(NN, __loader, loader_, lossfun; io, STATS, cb_epoch)
     cb_stats = makecallback(NN, __loader, loader_, lossfun; io, stats = true)
 
     # parameters
@@ -229,7 +231,7 @@ end
 $SIGNATURES
 
 """
-function statistics(
+function printstatistics(
     NN::Lux.AbstractExplicitLayer,
     p::Union{NamedTuple, AbstractVector},
     st::NamedTuple,
@@ -305,7 +307,8 @@ function makecallback(
     lossfun;
     STATS::Union{Nothing, NTuple{3, Any}} = nothing,
     stats::Bool = false,
-    io = stdout,
+    io::IO = stdout,
+    cb_epoch = nothing, # (NN, p, st) -> nothing
 )
     _loss = (p, st) -> fullbatch_metric(NN, p, st, _loader, lossfun)
     loss_ = (p, st) -> fullbatch_metric(NN, p, st, loader_, lossfun)
@@ -313,17 +316,20 @@ function makecallback(
     kwargs = (; _loss, loss_,)
 
     if stats
-        _stats = (p, st; io = io) -> statistics(NN, p, st, _loader; io)
-        stats_ = (p, st; io = io) -> statistics(NN, p, st, loader_; io)
+        _printstatistics = (p, st; io = io) -> printstatistics(NN, p, st, _loader; io)
+        printstatistics_ = (p, st; io = io) -> printstatistics(NN, p, st, loader_; io)
 
-        kwargs = (;kwargs..., _stats, stats_)
+        kwargs = (;kwargs..., _printstatistics, printstatistics_)
     end
 
     if !isnothing(STATS)
         kwargs = (;kwargs..., STATS)
     end
 
-    (p, st; epoch = 0, nepoch = 0, io = io) -> callback(p, st; io, epoch, nepoch, kwargs...)
+    function makecallback_internal(p, st; epoch = 0, nepoch = 0, io = io)
+        isnothing(cb_epoch) || cb_epoch(NN, p, st)
+        callback(p, st; io, epoch, nepoch, kwargs...)
+    end
 end
 
 """
@@ -336,8 +342,8 @@ function callback(p, st;
     _loss  = nothing,
     loss_  = nothing,
     #
-    _stats = nothing,
-    stats_ = nothing,
+    _printstatistics = nothing,
+    printstatistics_ = nothing,
     #
     STATS  = nothing,
     #
@@ -394,16 +400,16 @@ function callback(p, st;
 
     println(io)
 
-    if !isnothing(_stats)
+    if !isnothing(_printstatistics)
         println(io, "#======================#")
         println(io, "TRAIN STATS")
-        _stats(p, st; io)
+        _printstatistics(p, st; io)
         println(io, "#======================#")
     end
-    if !isnothing(stats_) 
+    if !isnothing(printstatistics_) 
         println(io, "#======================#")
         println(io, "TEST  STATS")
-        stats_(p, st; io)
+        printstatistics_(p, st; io)
         println(io, "#======================#")
     end
 
@@ -561,7 +567,7 @@ function optimize(
             " with data set of $dsize samples."
 
         @assert length(__loader) == 1 "__loader must have exactly one minibatch."
-        
+
         _loader = __loader
     end
 
