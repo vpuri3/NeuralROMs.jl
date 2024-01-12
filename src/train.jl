@@ -31,18 +31,19 @@ function train_model(
     nepochs::NTuple{M, Int} = (100,),
     schedules::Union{Nothing, NTuple{M, ParameterSchedulers.AbstractSchedule}} = nothing,
 #
+    early_stoppings::Union{Bool, NTuple{M, Bool}, Nothing} = nothing,
+    patience_fracs::Union{Real, NTuple{M, Real}, Nothing} = nothing,
+    weight_decays::Union{Real, NTuple{M, Real}} = 0f0,
+#
     dir::String = "dump",
-    name = "model",
-    metadata = nothing,
+    name::String = "model",
+    metadata::NamedTuple = (;),
     io::IO = stdout,
 #
     p = nothing,
     st = nothing,
     lossfun = mse,
     device = Lux.cpu_device,
-#
-    early_stopping::Union{Bool, Nothing} = nothing,
-    patience::Union{Int, Nothing} = nothing,
 #
     cb_epoch = nothing, # (NN, p, st) -> nothing
 ) where{M}
@@ -88,15 +89,45 @@ function train_model(
 
     time0 = time()
 
-    for iopt in eachindex(nepochs)
+    if early_stoppings isa Union{Bool, Nothing}
+        early_stoppings = fill(early_stoppings, M)
+    end
+
+    if patience_fracs isa Union{Bool, Nothing}
+        patience_fracs = fill(patience_fracs, M)
+    end
+
+    if weight_decays isa Real
+        weight_decays = fill(weight_decays, M)
+    end
+
+    for iopt in 1:M
         time1 = time()
 
         opt = opts[iopt]
         nepoch = nepochs[iopt]
         schedule = isnothing(schedules) ? nothing : schedules[iopt]
 
+        early_stopping = early_stoppings[iopt]
+        patience_frac = patience_fracs[iopt]
+        patience = isnothing(patience_frac) ? nothing : round(Int, patience_frac * nepoch)
+
         if !isnothing(opt_st) & isa(opt, Optimisers.AbstractRule)
             @set! opt_st.rule = opt
+        end
+
+        weight_decay = weight_decays[iopt]
+
+        if !iszero(weight_decay) & (opt isa OptimiserChain)
+            isWD = Base.Fix2(isa, WeightDecay)
+            iWD = findall(isWD, opt.opts)
+
+            if !isempty(iWD)
+                @assert length(iWD) == 1 """More than one WeightDecay() found
+                    in optimiser chain $opt."""
+                iWD = iWD[1]
+                @set! opt.opts[iWD].gamma = weight_decay
+            end
         end
 
         println(io, "#======================#")
@@ -123,7 +154,6 @@ function train_model(
     end
 
     # TODO - output a train.log file with timings.
-    # TODO - use TensorBoardLogging
 
     println(io, "#======================#")
     println(io, "Optimization done")
@@ -490,13 +520,15 @@ function optimize(
 
     for epoch in 1:nepoch
         # update LR
-        isnothing(schedule) || Optimisers.adjust!(opt_st, schedule(epoch))
+        LR = schedule(epoch)
+        LR_round = round(LR; sigdigits = 3)
+        isnothing(schedule) || Optimisers.adjust!(opt_st, LR)
 
         # progress bar
         prog = ProgressMeter.Progress(
             num_batches;
             barglyphs = ProgressMeter.BarGlyphs("[=> ]"),
-            desc = "Epoch [$epoch / $nepoch] LR: $(round(opt_st.rule.eta; sigdigits = 3))",
+            desc = "Epoch [$epoch / $nepoch] LR: $LR_round",
             dt = 1e-4, barlen = 25, color = :normal, showspeed = true, output = io,
         )
 

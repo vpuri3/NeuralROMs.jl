@@ -88,12 +88,13 @@ function AutoDecoder(
     code_len::Int;
     init_weight = randn32,
     code = nothing,
+    EmbeddingType::Type{<:Lux.AbstractExplicitLayer} = Lux.Embedding
 )
     code = if isnothing(code)
-        if num_batches == 1
+        if isone(num_batches)
             # TODO - scatter doesn't work for Zygote over ForwardDiff on GPU.
             # OneEmbedding avoids calls to scatter
-            Embedding(num_batches => code_len; init_weight)
+            EmbeddingType(num_batches => code_len; init_weight)
             # OneEmbedding(code_len; init_weight)
         else
             Embedding(num_batches => code_len; init_weight)
@@ -167,8 +168,9 @@ function (e::OneEmbedding)(x::AbstractArray{<:Integer}, ps, st)
     end
 
     code = ps.weight * o'
+    code_re = reshape(code, e.len, size(x)...)
 
-    return reshape(code, e.len, size(x)...), st
+    return code_re, st
 end
 
 #======================================================#
@@ -205,6 +207,9 @@ end
 function get_hyperdecoder(NN::Lux.AbstractExplicitLayer, p, st)
     NN.weight_generator.code, p.weight_generator.code, st.weight_generator.code
 end
+
+#======================================================#
+# Hyper Network
 #======================================================#
 struct HyperNet{W <: Lux.AbstractExplicitLayer, C <: Lux.AbstractExplicitLayer, A} <:
        Lux.AbstractExplicitContainerLayer{(:weight_generator, :evaluator)}
