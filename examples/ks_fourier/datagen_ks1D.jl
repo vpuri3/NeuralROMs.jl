@@ -31,6 +31,11 @@ https://royalsocietypublishing.org/doi/epdf/10.1098/rspa.2014.0932
 T = Float32
 len = T(10pi)
 
+function uData(x; σ = 0.3f0)
+    u = @. sin(1f1 * Float32(pi) * x) * exp(-(x/σ)^2)
+    reshape(u, :, 1)
+end
+
 function uIC(x; μ=zero(T), σ=T(0.5))
     u = @. exp(-T(1/10) * ((x-μ)/σ)^2)
     reshape(u, :, 1)
@@ -47,8 +52,8 @@ odecb = begin
 end
 
 function ks1D(N, len, mu = nothing, p = nothing;
-    tspan=(T(0), T(10)),
-    ntsave=2000,
+    tspan=(T(0), T(5)),
+    ntsave=5000,
     odealg=SSPRK43(),
     odekw = (;),
     device = cpu_device(),
@@ -65,6 +70,7 @@ function ks1D(N, len, mu = nothing, p = nothing;
 
     # get initial condition
     u0 = uIC(x) # mu parameter dependence
+    # u0 = uData(x) # mu parameter dependence
     V  = make_transform(V, u0; p)
     û0 = transformOp(V) * u0
 
@@ -76,6 +82,8 @@ function ks1D(N, len, mu = nothing, p = nothing;
     V  = V  |> device
     u0 = u0 |> device
     û0 = û0 |> device
+
+    V  = make_transform(V, u0; p)
 
     # operators
     Â = laplaceOp(Vh, discr) # -Δ
@@ -91,7 +99,7 @@ function ks1D(N, len, mu = nothing, p = nothing;
     prob = SplitODEProblem(L, N, û0, tspan, p)
 
     # solve
-    @time sol = solve(prob, odealg, saveat=tsave, abstol = T(1f-4), callback = odecb)
+    @time sol = solve(prob, odealg, saveat=tsave, abstol = T(1e-3), callback = odecb)
     @show sol.retcode
 
     # move back to device
@@ -119,6 +127,24 @@ function ks1D(N, len, mu = nothing, p = nothing;
 
         reshape(u_re, sz), reshape(du_re, sz), reshape(d2u_re, sz)
     end
+
+    # V, x, u, udx, ud2x = begin
+    #     N1 = 1024
+    #
+    #     V1 = FourierSpace(N1; domain) |> Float32
+    #     V1 = make_transform(V1, similar(u, N1, Nb * Nt))
+    #     J = interpOp(V1, V)
+    #
+    #     N, Nb, Nt = size(u)
+    #
+    #     u    = J * reshape(u   , N, Nb * Nt)
+    #     udx  = J * reshape(udx , N, Nb * Nt)
+    #     ud2x = J * reshape(ud2x, N, Nb * Nt)
+    #
+    #     sz = N1, Nb, Nt
+    #
+    #     V1, points(V1)[1], reshape(u, sz), reshape(udx, sz), reshape(ud2x, sz)
+    # end
 
     mu = isnothing(mu) ? fill(nothing, size(u, 2)) |> Tuple : mu
 
@@ -165,10 +191,12 @@ end
 
 N = 256
 mu = nothing
+tspan=(T(0), T(10))
+ntsave=1000
 
 device = cpu_device()
 dir = joinpath(@__DIR__, "data_ks")
-(sol, V), (x, u, t, mu) = ks1D(N, len; device, dir)
+(sol, V), (x, u, t, mu) = ks1D(N, len; tspan, ntsave, device, dir)
 
 nothing
 #
