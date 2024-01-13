@@ -98,22 +98,23 @@ prob = Advection1D(0.25f0)
 device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "data_advect/", "data.jld2")
 
-modeldir = joinpath(@__DIR__, "model1")
+modeldir = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
+cb_epoch = nothing
 
-# train
-# E = 1000
-# l, h, w = 4, 5, 32
-# isdir(modeldir) && rm(modeldir, recursive = true)
-# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 1f-1,
-#     _batchsize = nothing, batchsize_ = nothing, device)
+## train
+E = 100
+l, h, w = 4, 5, 32
+isdir(modeldir) && rm(modeldir, recursive = true)
+model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 1f-1,
+    _batchsize = nothing, batchsize_ = nothing, cb_epoch, device)
 
-# process
-outdir = joinpath(modeldir, "results")
-postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-    makeplot = true, verbose = true)
-test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-    makeplot = true, verbose = true)
+## process
+# outdir = joinpath(modeldir, "results")
+# postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+#     makeplot = true, verbose = true)
+# test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+#     makeplot = true, verbose = true)
 #======================================================#
 nothing
 #
