@@ -146,6 +146,10 @@ function freeze_autodecoder(
 end
 
 #======================================================#
+# Split Decoder
+#======================================================#
+
+#======================================================#
 struct OneEmbedding{F} <: Lux.AbstractExplicitLayer
     len::Int
     init::F

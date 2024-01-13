@@ -23,8 +23,6 @@ begin
 end
 
 #======================================================#
-# data gen
-#======================================================#
 function uData(x; σ = 0.3f0)
     @. sin(1f1 * Float32(pi) * x) * exp(-(x/σ)^2)
 end
@@ -51,8 +49,6 @@ function datagen_reg(_N, datafile; N_ = 32768)
     nothing
 end
 
-#======================================================#
-# model setup
 #======================================================#
 function train_reg(
     datafile::String,
@@ -139,18 +135,14 @@ function train_reg(
         in_layer = Dense(l+1, w, act; init_weight = init_wt_in, init_bias)
         hd_layer = Dense(w  , w, act; init_weight = init_wt_hd, init_bias)
         fn_layer = Dense(w  , 1; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
-    
-        # in_layer = Dense(l+1, w, sin)
-        # hd_layer = Dense(w  , w, sin)
-        # fn_layer = Dense(w  , 1)
-    
+
         Chain(
             in_layer,
             fill(hd_layer, h)...,
             fn_layer,
         )
     end
-    
+
     NN = AutoDecoder(decoder, 1, l)
 
     #--------------------------------------------#
@@ -219,6 +211,7 @@ function train_reg(
     model, ST
 end
 
+#======================================================#
 function post_reg(
     datafile::String,
     modelfile::String,
@@ -329,17 +322,11 @@ _N, N_ = 512, 8192 # 512, 32768
 _batchsize = 32
 fps = Int(E / 5)
 
-# l, h, w = 1, 5, 32
 l, h, w = 1, 5, 32
-
 λ1s = (0.0f0,)
 λ2s = (0.0f0,) # 0.01f0
 weight_decays = 0.005f0 # 5f-3
 
-### NOTES
-# (1) (x -> NN1) .* (ũ -> NN2) vs (vcat(ũ, x) -> NN)
-# (3) Adam() + L1/L2 vs AdamW(;) w. weight_decay
-#
 ### TODO
 # - POU networks. Inspiration from Finite Element methods. Some relation to DeepONets.
 #   Take a second look at my Git repo, slides. And reread N. Trask's paper.

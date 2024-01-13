@@ -43,7 +43,7 @@ function train_model(
     p = nothing,
     st = nothing,
     lossfun = mse,
-    device = Lux.cpu_device,
+    device = Lux.cpu_device(),
 #
     cb_epoch = nothing, # (NN, p, st) -> nothing
 ) where{M}
@@ -159,7 +159,9 @@ function train_model(
     println(io, "Optimization done")
     println(io, "#======================#")
 
-    (NN, p, st) |> Lux.cpu_device(), STATS
+    p, st = Lux.cpu_device()((p, st))
+
+    (NN, p, st), STATS
 end
 
 #===============================================================#
