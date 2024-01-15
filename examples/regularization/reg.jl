@@ -24,7 +24,11 @@ end
 
 #======================================================#
 function uData(x; σ = 0.3f0)
-    @. sin(1f1 * Float32(pi) * x) * exp(-(x/σ)^2)
+    # @. tanh(5f0 * x)
+    # @. sin(1f0 * Float32(pi) * x)
+    # @. sin(1f0 * Float32(pi) * x) * exp(-(x/σ)^2)
+    # @. sin(5f0 * Float32(pi) * x * x) * exp(-(x/σ)^2)
+    @. (x-0.25) * sin(1f1 * Float32(pi) * x) * exp(-(x/σ)^2)
 end
 
 function datagen_reg(_N, datafile; N_ = 32768)
@@ -125,8 +129,7 @@ function train_reg(
     init_bias = rand32 # zeros32
     use_bias_fn = false
 
-    # lossfun = iszero(λ) ? mse : l2reg(mse, λ) # ; property = :decoder)
-    lossfun = elasticreg(mse, λ1, λ2) # ; property = :decoder)
+    lossfun = elasticreg(mse, λ1, λ2; property = :decoder)
 
     #--------------------------------------------#
     # AutoDecoder
@@ -206,8 +209,6 @@ function train_reg(
         cb_epoch,
     )
 
-    plot_training(ST...) |> display
-
     model, ST
 end
 
@@ -239,26 +240,34 @@ function post_reg(
     autodiff = AutoForwardDiff()
     ϵ = nothing
 
-    u, ud1x, ud2x = dudx2(model, xbatch, p; autodiff, ϵ) .|> vec
-    ũ, ũd1x, ũd2x = forwarddiff_deriv2(uData, x)
+    u, ud1x, ud2x, ud3x, ud4x = dudx4(model, xbatch, p; autodiff, ϵ) .|> vec
+    ũ, ũd1x, ũd2x, ũd3x, ũd4x = forwarddiff_deriv4(uData, x)
 
     # print errors
     begin
         ud0_den = mse(u   , 0*u) |> sqrt
         ud1_den = mse(ũd1x, 0*u) |> sqrt
         ud2_den = mse(ũd2x, 0*u) |> sqrt
+        ud3_den = mse(ũd3x, 0*u) |> sqrt
+        ud4_den = mse(ũd4x, 0*u) |> sqrt
 
         ud0x_relrmse_er = sqrt(mse(u   , ũ   )) / ud0_den
         ud1x_relrmse_er = sqrt(mse(ud1x, ũd1x)) / ud1_den
         ud2x_relrmse_er = sqrt(mse(ud2x, ũd2x)) / ud2_den
+        ud3x_relrmse_er = sqrt(mse(ud3x, ũd3x)) / ud3_den
+        ud4x_relrmse_er = sqrt(mse(ud4x, ũd4x)) / ud4_den
 
         ud0x_relinf_er = norm(u    - ũ   , Inf) / ud0_den
         ud1x_relinf_er = norm(ud1x - ũd1x, Inf) / ud1_den
         ud2x_relinf_er = norm(ud2x - ũd2x, Inf) / ud2_den
+        ud3x_relinf_er = norm(ud3x - ũd3x, Inf) / ud3_den
+        ud4x_relinf_er = norm(ud4x - ũd4x, Inf) / ud4_den
 
-        @show round.((ud0x_relrmse_er, ud0x_relinf_er), digits = 8)
-        @show round.((ud1x_relrmse_er, ud1x_relinf_er), digits = 8)
-        @show round.((ud2x_relrmse_er, ud2x_relinf_er), digits = 8)
+        @show round.((ud0x_relrmse_er, ud0x_relinf_er), sigdigits = 8)
+        @show round.((ud1x_relrmse_er, ud1x_relinf_er), sigdigits = 8)
+        @show round.((ud2x_relrmse_er, ud2x_relinf_er), sigdigits = 8)
+        @show round.((ud3x_relrmse_er, ud3x_relinf_er), sigdigits = 8)
+        @show round.((ud4x_relrmse_er, ud4x_relinf_er), sigdigits = 8)
     end
 
     # if !isempty(params)
@@ -291,6 +300,8 @@ function post_reg(
     p0 = plot(xabel = "x", title = "u(x,t)")
     p1 = plot(xabel = "x", title = "u'(x,t)")
     p2 = plot(xabel = "x", title = "u''(x,t)")
+    p3 = plot(xabel = "x", title = "u'''(x,t)")
+    p4 = plot(xabel = "x", title = "u''''(x,t)")
 
     plot!(p0, x, ũ, label = "Ground Truth"  , w = 4, c = :black)
     plot!(p0, x, u, label = "Prediction"  , w = 2, c = :red)
@@ -301,11 +312,19 @@ function post_reg(
     plot!(p2, x, ũd2x, label = "Ground Truth", w = 4, c = :black)
     plot!(p2, x, ud2x, label = "Prediction", w = 2, c = :red)
 
+    plot!(p3, x, ũd3x, label = "Ground Truth", w = 4, c = :black)
+    plot!(p3, x, ud3x, label = "Prediction", w = 2, c = :red)
+
+    plot!(p4, x, ũd4x, label = "Ground Truth", w = 4, c = :black)
+    plot!(p4, x, ud4x, label = "Prediction", w = 2, c = :red)
+
     png(p0, joinpath(outdir, "derv0"))
     png(p1, joinpath(outdir, "derv1"))
     png(p2, joinpath(outdir, "derv2"))
+    png(p3, joinpath(outdir, "derv3"))
+    png(p4, joinpath(outdir, "derv4"))
 
-    display(plot(p0, p1, p2))
+    p0, p1, p2, p3, p4
 end
 
 #======================================================#
@@ -323,18 +342,45 @@ _batchsize = 32
 fps = Int(E / 5)
 
 l, h, w = 1, 5, 32
-λ1s = (0.0f0,)
-λ2s = (0.0f0,) # 0.01f0
+λ1s = (0.00f0,) # 0.00f0
+λ2s = (0.00f0,) # 0.00f0
 weight_decays = 0.005f0 # 5f-3
 
+# E = 2000
+# l, h, w = 1, 5, 128
+# λ1s = (0.10f0,)
+# λ2s = (0.00f0,)
+# weight_decays = 0.0075f0
+
+### NOTES
+#
+# - Look at KS case again: derivatives are bounded, and ∂_xxxx NN(x) is smooth.
+#   Apply the post-processing scripts from here over there.
+#
+# - What is the rate at which the error goes to shit for
+#   u(x) -> u'(x) -> u''(x). i.e. differentiation scales error by x.
+#   what is the condition number of differentiation?
+#
+# https://arxiv.org/pdf/2207.06283.pdf
+# - Test with advection case:
+#   Add a variational loss term `(1/σ²)||ũ||₂` (can this be a new contribution??)
+#   This ensures that a compact latent space is learned and improves
+#   the speed of convergence [DeepSDF ss 4.2]. Initialize `ũ ~ N(0,0.1²)`.
+#   This should reduce number of temporal samples needed. Do study on advection eqn?
+#
+# - Insert `ũ` into layers 1, 5, 9, and `x` into every layer. Maybe this
+#   reduced noise in ∂ₓNN(x)
+#
 ### TODO
+#
 # - POU networks. Inspiration from Finite Element methods. Some relation to DeepONets.
 #   Take a second look at my Git repo, slides. And reread N. Trask's paper.
 #   We can also involve a bilinear layer of some sort. Not sure.
 #   Likely that such a network where two NNs are multiplied would need a smaller LR
 #   and many more iters than a deep NN. Read the papers.
+#
 # - add features `x` -> `[x, x^2, x^3, tan(x)]`, or devise an architecutre that lets
-#   you multiply trunks. Kind of like multihead transformer.
+#   you multiply trunks. Kind of like MHT and self-attention.
 #   With sinosudal transformer, how would MHA work? We want terms like x^2, but
 #   `sin(x) * sin(x) ~ sin(2x)`.
 ###
@@ -363,7 +409,10 @@ for (i, (λ1, λ2)) in enumerate(zip(λ1s, λ2s))
     # global ps = (ps..., _ps)
 
     ## process
-    post_reg(datafile, modelfile, outdir, _ps, fps)
+    p0, p1, p2, p3, p4 = post_reg(datafile, modelfile, outdir, _ps, fps)
+
+    ptrain = plot_training(STATS...)
+    plot(ptrain, p0, p1, p2, p3, p4; size = (1200, 800)) |> display
 end
 
 # jldsave(joinpath(@__DIR__, "ps.jld2"); ps)
