@@ -72,9 +72,9 @@ L2 Regularization
 """
 function l2reg(lossfun, λ::Real; property = nothing)
     function l2reg_internal(NN, p, st::NamedTuple, batch::Tuple)
+        T  = eltype(p)
         l, st, stats = lossfun(NN, p, st, batch)
 
-        T  = eltype(p)
         _p = isnothing(property) ? p : getproperty(p, property)
 
         r2 = λ * sum(abs2, _p) / length(_p) * T(0.5)
@@ -91,9 +91,9 @@ Elastic Regularization (L1 + L2)
 """
 function elasticreg(lossfun, λ1::Real, λ2::Real; property = nothing)
     function elasticreg_internal(NN, p, st::NamedTuple, batch::Tuple)
+        T  = eltype(p)
         l, st, stats = lossfun(NN, p, st, batch)
 
-        T  = eltype(p)
         _p = isnothing(property) ? p : getproperty(p, property)
         N  = length(_p)
 
@@ -103,6 +103,27 @@ function elasticreg(lossfun, λ1::Real, λ2::Real; property = nothing)
         lreg = l + r1 + r2
 
         lreg, st, (; stats, l, r1, r2)
+    end
+end
+
+"""
+    vaeloss(lossfun, σ; property)(NN, p, st, batch) -> l, st, stats
+
+VAE loss: `lossfun(..) + 1/σ² ||ũ||₂²`
+"""
+function vaeloss(lossfun, σ::Real; property = nothing)
+    function vaeloss_internal(NN, p, st::NamedTuple, batch::Tuple)
+        T  = eltype(p)
+        l, st, stats = lossfun(NN, p, st, batch)
+
+        _p = isnothing(property) ? p : getproperty(p, property)
+        N  = length(_p)
+
+        lreg = iszero(σ) ? zero(T) : σ * sum(abs2, _p) / N
+
+        lvae = l + lreg
+
+        lvae, st, (; stats, l, lreg)
     end
 end
 
