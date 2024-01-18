@@ -109,7 +109,7 @@ function ks1D(N, len, mu = nothing, p = nothing;
     V = V     |> cpu_device()
 
     # compute derivatives
-    u, udx, ud2x = begin
+    u, udx, ud2x, ud3x, ud4x = begin
         Nk, Nx = size(transformOp(V))
         _, Nb, Nt = size(û)
         û_re = reshape(û, Nk, Nb * Nt)
@@ -122,10 +122,10 @@ function ks1D(N, len, mu = nothing, p = nothing;
 
         du_re  = Dx * u_re
         d2u_re = Dx * du_re
+        d3u_re = Dx * d2u_re
+        d4u_re = Dx * d3u_re
 
-        sz = (Nx, Nb, Nt)
-
-        reshape(u_re, sz), reshape(du_re, sz), reshape(d2u_re, sz)
+        reshape.((u_re, du_re, d2u_re, d3u_re, d4u_re), Nx, Nb, Nt)
     end
 
     # V, x, u, udx, ud2x = begin

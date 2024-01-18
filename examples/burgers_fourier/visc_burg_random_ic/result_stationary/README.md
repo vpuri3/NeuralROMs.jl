@@ -1,1 +1,0 @@
-Train from time 0-5, test on 0-10.
