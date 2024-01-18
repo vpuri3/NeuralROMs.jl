@@ -23,18 +23,23 @@ begin
 end
 
 #======================================================#
-function uData(x; σ = 0.3f0)
-    # @. tanh(5f0 * x)
-    # @. sin(1f0 * Float32(pi) * x)
-    # @. sin(1f0 * Float32(pi) * x) * exp(-(x/σ)^2)
-    # @. sin(5f0 * Float32(pi) * x * x) * exp(-(x/σ)^2)
-    @. (x-0.25) * sin(1f1 * Float32(pi) * x) * exp(-(x/σ)^2)
+function uData(x; σ = 1.0f0)
+    pi32 = Float32(pi)
+
+    # @. tanh(2f0 * x)
+    # @. sin(1f0 * x)
+
+    # @. sin(5f0 * x^1) * exp(-(x/σ)^2)
+    # @. sin(3f0 * x^2) * exp(-(x/σ)^2)
+    @. (x - pi32/2f0) * sin(3f0 * x) * exp(-(x/σ)^2)
 end
 
 function datagen_reg(_N, datafile; N_ = 32768)
+    pi32 = Float32(pi)
+    L = pi32
 
-    _x = LinRange(-1f0, 1f0, _N) |> Array
-    x_ = LinRange(-1f0, 1f0, N_) |> Array
+    _x = LinRange(-L, L, _N) |> Array
+    x_ = LinRange(-L, L, N_) |> Array
 
     _u = uData(_x)
     u_ = uData(x_)
@@ -50,7 +55,7 @@ function datagen_reg(_N, datafile; N_ = 32768)
     plt = plot(_x, _u, w = 3)
     png(plt, filename)
 
-    nothing
+    plt
 end
 
 #======================================================#
@@ -334,7 +339,7 @@ rng = Random.default_rng()
 Random.seed!(rng, 460)
 
 datafile = joinpath(@__DIR__, "data_reg.jld2")
-device = Lux.cpu_device()
+device = Lux.gpu_device()
 
 E = 2000
 _N, N_ = 512, 8192 # 512, 32768
@@ -344,13 +349,13 @@ fps = Int(E / 5)
 l, h, w = 1, 5, 32
 λ1s = (0.00f0,) # 0.00f0
 λ2s = (0.00f0,) # 0.00f0
-weight_decays = 0.005f0 # 5f-3
+weight_decays = 0.01f0 # 1f-2
 
-# E = 2000
-# l, h, w = 1, 5, 128
-# λ1s = (0.10f0,)
-# λ2s = (0.00f0,)
-# weight_decays = 0.0075f0
+# # uData(x) = sin(πx)
+# l, h, w = 1, 5, 32
+# λ1s = (0.00f0,) # 0.00f0
+# λ2s = (0.00f0,) # 0.00f0
+# weight_decays = 0.04f0
 
 ### NOTES
 #
@@ -362,32 +367,23 @@ weight_decays = 0.005f0 # 5f-3
 #   what is the condition number of differentiation?
 #
 # https://arxiv.org/pdf/2207.06283.pdf
-# - Test with advection case:
-#   Add a variational loss term `(1/σ²)||ũ||₂` (can this be a new contribution??)
+# - (Test with advection case)
+#   Add a variational loss term `(1/σ²)||ũ||₂`
 #   This ensures that a compact latent space is learned and improves
 #   the speed of convergence [DeepSDF ss 4.2]. Initialize `ũ ~ N(0,0.1²)`.
 #   This should reduce number of temporal samples needed. Do study on advection eqn?
 #
 # - Insert `ũ` into layers 1, 5, 9, and `x` into every layer. Maybe this
 #   reduced noise in ∂ₓNN(x)
+# - modify `Optimisers.WeightDecay` to only apply decay to decoder??
 #
-### TODO
+# https://arxiv.org/pdf/2202.08345.pdf
+# - Use or modify Lux.WeightNorm (https://arxiv.org/pdf/1602.07868.pdf)
 #
-# - POU networks. Inspiration from Finite Element methods. Some relation to DeepONets.
-#   Take a second look at my Git repo, slides. And reread N. Trask's paper.
-#   We can also involve a bilinear layer of some sort. Not sure.
-#   Likely that such a network where two NNs are multiplied would need a smaller LR
-#   and many more iters than a deep NN. Read the papers.
-#
-# - add features `x` -> `[x, x^2, x^3, tan(x)]`, or devise an architecutre that lets
-#   you multiply trunks. Kind of like MHT and self-attention.
-#   With sinosudal transformer, how would MHA work? We want terms like x^2, but
-#   `sin(x) * sin(x) ~ sin(2x)`.
-###
 
 # ps = ()
 
-datagen_reg(_N, datafile; N_)
+datagen_reg(_N, datafile; N_) |> display
 
 for (i, (λ1, λ2)) in enumerate(zip(λ1s, λ2s))
     _ps = []
@@ -412,10 +408,22 @@ for (i, (λ1, λ2)) in enumerate(zip(λ1s, λ2s))
     p0, p1, p2, p3, p4 = post_reg(datafile, modelfile, outdir, _ps, fps)
 
     ptrain = plot_training(STATS...)
-    plot(ptrain, p0, p1, p2, p3, p4; size = (1200, 800)) |> display
+    plot(ptrain, p0, p1, p2, p3, p4; size = (1300, 800)) |> display
 end
 
 # jldsave(joinpath(@__DIR__, "ps.jld2"); ps)
 #======================================================#
 nothing
 #
+### LATER
+#
+# - POU networks. Inspiration from Finite Element methods. Some relation to DeepONets.
+#   Take a second look at my Git repo, slides. And reread N. Trask's paper.
+#   We can also involve a bilinear layer of some sort. Not sure.
+#   Likely that such a network where two NNs are multiplied would need a smaller LR
+#   and many more iters than a deep NN. Read the papers.
+# - add features `x` -> `[x, x^2, x^3, tan(x)]`, or devise an architecutre that lets
+#   you multiply trunks. Kind of like MHT and self-attention.
+#   With sinosudal transformer, how would MHA work? We want terms like x^2, but
+#   `sin(x) * sin(x) ~ sin(2x)`.
+###
