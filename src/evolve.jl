@@ -131,7 +131,7 @@ nsavedstates(::AbstractRKMethod) = 1
 #===========================================================#
 #===========================================================#
 
-@concrete mutable struct Galerkin{T} <: AbstractSolveScheme
+@concrete mutable struct GalerkinProjection{T} <: AbstractSolveScheme
     linsolve
     abstolInf::T # ||∞ # TODO - switch to reltol
     abstolMSE::T # ||₂
@@ -139,7 +139,7 @@ end
 
 function solve_timestep(
     integrator::TimeIntegrator{T},
-    scheme::Galerkin;
+    scheme::GalerkinProjection;
     verbose::Bool = true,
 ) where{T}
 
@@ -151,17 +151,30 @@ function solve_timestep(
 
     # explicit time-integrator
     # ΔuΔt_rhs: RHS of discretized ODE
-    f1 = nothing
+    f1 = nothing # This will error with implicit integrator
     ΔuΔt_rhs = make_f_term(timealg, Δt, fprevs, f1) # du/dt (N,)
     J0 = dudp(model, x, p0; autodiff, ϵ)            # du/dp (N, n)
 
+    # this is FWD Euler
     linprob = LinearProblem(J0, vec(ΔuΔt_rhs))
     ΔpΔt_rhs = solve(linprob, scheme.linsolve).u
 
-    #=
-    # is it Euler FWD
-    (J*u)_n+1 - (J*u)_n = Δt * (f_n + f_n-1 + ...) OR
-    J_n+1 * (u_n+1 - u_n) = Δt * (f_n + f_n-1 + ...)
+
+    #= GalerkinProjection
+
+    original: u' = f(u, t)
+    ROM map : u = g(ũ)
+
+    ⟹  J(ũ) *  ũ' = f(ũ, t)
+
+    ⟹  ũ' = pinv(J)  (ũ) * f(ũ, t)
+
+    solve with timestepper
+    ⟹  ũ' = f̃(ũ, t)
+
+    e.g.
+    (J*u)_n+1 - (J*u)_n = Δt * (f_n + f_n-1 + ...)
+
     =#
 
     # get new states
@@ -205,7 +218,8 @@ function solve_timestep(
     batch = (x, u0)
 
     #=
-    Do LineSearch in GaussNewton solve. Follow CROM implementation.
+    TODO LSPG: Do LineSearch in GaussNewton solve. Follow CROM implementation.
+    TODO LSPG: See if regularizing codes improves performance.
     =#
 
     t1 = t0 + Δt

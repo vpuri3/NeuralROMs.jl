@@ -111,7 +111,7 @@ export
     # timestepper interface
     compute_residual, apply_timestep,
     # solve scheme types
-    Galerkin, LeastSqPetrovGalerkin,
+    GalerkinProjection, LeastSqPetrovGalerkin,
     # residual functions
     make_residual, residual_learn
 
