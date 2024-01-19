@@ -80,9 +80,9 @@ nsavedstates(::Union{EulerForward, EulerBackward}) = 1
 function make_f_term(
     ::EulerForward,
     Δt::T,
-    fprevs::NTuple{N, Tv},
-    f::Union{Nothing, Tv},
-) where{N,T<:Number,Tv<:AbstractArray{T}}
+    fprevs::NTuple{N, Tf},
+    f::Union{Nothing, Tf},
+) where{N,T<:Number,Tf<:AbstractArray{T}}
     Δt * (fprevs[1])
 end
 
@@ -90,24 +90,24 @@ end
 function make_f_term(
     ::EulerBackward,
     Δt::T,
-    fprevs::NTuple{N, Tv},
-    f::Union{Nothing, Tv},
-) where{N,T<:Number,Tv<:AbstractArray{T}}
+    fprevs::NTuple{N, Tf},
+    f::Union{Nothing, Tf},
+) where{N,T<:Number,Tf<:AbstractArray{T}}
     Δt * f
 end
 
 # EulerFWD/BWD
 function make_uprev_term(
     ::Union{EulerForward, EulerBackward},
-    uprevs::NTuple{N, Tv},
-) where{N,T<:Number,Tv<:AbstractArray{T}}
+    uprevs::NTuple{N, Tu},
+) where{N,T<:Number,Tu<:AbstractArray{T}}
     - uprevs[1]
 end
 
 function make_unew_term(
     ::Union{EulerForward, EulerBackward},
-    u::Tv,
-) where{T<:Number,Tv<:AbstractArray{T}}
+    u::Tu,
+) where{T<:Number,Tu<:AbstractArray{T}}
     u
 end
 
@@ -132,23 +132,23 @@ isimplicit(::AbstractRKMethod) = false
 function make_f_term(
     ::RK2,
     Δt::T,
-    fprevs::NTuple{N, Tv},
-    f::Union{Nothing, Tv},
-) where{N,T<:Number,Tv<:AbstractArray{T}}
+    fprevs::NTuple{N, Tf},
+    f::Union{Nothing, Tf},
+) where{N,T<:Number,Tf<:AbstractArray{T}}
     # Δt * (fprevs[1])
 end
 
 function make_uprev_term(
     ::RK2,
-    uprevs::NTuple{N, Tv},
-) where{N,T<:Number,Tv<:AbstractArray{T}}
+    uprevs::NTuple{N, Tu},
+) where{N,T<:Number,Tu<:AbstractArray{T}}
     # - uprevs[1]
 end
 
 function make_unew_term(
     ::RK2,
-    u::Tv,
-) where{T<:Number,Tv<:AbstractArray{T}}
+    u::Tu,
+) where{T<:Number,Tu<:AbstractArray{T}}
     # u
 end
 
@@ -192,12 +192,12 @@ function solve_timestep(
 
     t0, _, _, _, _ = get_state(integrator)
 
-    if isimplicit(timealg)
+    p1 = if isimplicit(timealg)
         @error """GalerkinProjection with implicit time-integrator is
         not implemetned"""
     else
         f1 = nothing
-        p1 = apply_timestep(timealg, Δt, f̃prevs, pprevs, f1)
+        apply_timestep(timealg, Δt, f̃prevs, pprevs, f1)
     end
 
     # get new states
