@@ -27,8 +27,8 @@ a_-1 * u_n+1 + ... + a_k * u_n-k = Δt ⋅ (b_-1 + f(u_n+1) + ... + b_k * f(u_n-
 
 ## implemented
 - `compute_residual(timealg, Δt, fprevs, uprevs, f, u) -> LHS - RHS`
-- `apply_timestep(timealg, Δt, fprevs, uprevs, f)`:
-- `apply_timestep(timealg, fterm, uprevs)`:
+- `apply_timestep(timealg, Δt, fprevs, uprevs, f) -> u_n+1`
+- `apply_timestep(timealg, fterm, uprevs) -> u_n+1`
 """
 
 adaptiveΔt(::AbstractTimeAlg) = true # default
@@ -36,11 +36,11 @@ adaptiveΔt(::AbstractTimeAlg) = true # default
 function compute_residual(
     timealg::AbstractTimeAlg,
     Δt::T,
-    fprevs::NTuple{N, Tv},
-    uprevs::NTuple{N, Tv},
-    f::AbstractArray{T},
-    u::AbstractArray{T},
-) where{N,T<:Number,Tv<:AbstractArray{T}}
+    fprevs::NTuple{N, Tf},
+    uprevs::NTuple{N, Tu},
+    f::Tf,
+    u::Tu,
+) where{N,T<:Number,Tf<:AbstractArray{T}, Tu<:AbstractArray{T}}
     lhs = make_unew_term(timealg, u) + make_uprev_term(timealg, uprevs)
     rhs = make_f_term(timealg, Δt, fprevs, f)
     rhs - lhs
@@ -49,10 +49,10 @@ end
 function apply_timestep(
     timealg::AbstractTimeAlg,
     Δt::T,
-    fprevs::NTuple{N, Tv},
-    uprevs::NTuple{N, Tv},
-    f::Union{Nothing, Tv},
-) where{N,T<:Number,Tv<:AbstractArray{T}}
+    fprevs::NTuple{N, Tf},
+    uprevs::NTuple{N, Tu},
+    f::Union{Nothing, Tf},
+) where{N,T<:Number,Tf<:AbstractArray{T}, Tu<:AbstractArray{T}}
     fterm = make_f_term(timealg, Δt, fprevs, f)
     apply_timestep(timealg, fterm, uprevs)
 end
@@ -76,6 +76,7 @@ isimplicit(::EulerBackward) = true
 
 nsavedstates(::Union{EulerForward, EulerBackward}) = 1
 
+# EulerFWD
 function make_f_term(
     ::EulerForward,
     Δt::T,
@@ -85,6 +86,7 @@ function make_f_term(
     Δt * (fprevs[1])
 end
 
+# EulerBWD
 function make_f_term(
     ::EulerBackward,
     Δt::T,
@@ -94,6 +96,7 @@ function make_f_term(
     Δt * f
 end
 
+# EulerFWD/BWD
 function make_uprev_term(
     ::Union{EulerForward, EulerBackward},
     uprevs::NTuple{N, Tv},
@@ -124,6 +127,30 @@ struct RK2 <: AbstractRKMethod end # midpoint
 struct RK4 <: AbstractRKMethod end
 
 nsavedstates(::AbstractRKMethod) = 1
+isimplicit(::AbstractRKMethod) = false
+
+function make_f_term(
+    ::RK2,
+    Δt::T,
+    fprevs::NTuple{N, Tv},
+    f::Union{Nothing, Tv},
+) where{N,T<:Number,Tv<:AbstractArray{T}}
+    # Δt * (fprevs[1])
+end
+
+function make_uprev_term(
+    ::RK2,
+    uprevs::NTuple{N, Tv},
+) where{N,T<:Number,Tv<:AbstractArray{T}}
+    # - uprevs[1]
+end
+
+function make_unew_term(
+    ::RK2,
+    u::Tv,
+) where{T<:Number,Tv<:AbstractArray{T}}
+    # u
+end
 
 #===========================================================#
 #===========================================================#
@@ -131,6 +158,22 @@ nsavedstates(::AbstractRKMethod) = 1
 #===========================================================#
 #===========================================================#
 
+"""
+# GalerkinProjection
+
+original: `u' = f(u, t)`
+ROM map : `u = g(ũ)`
+
+`⟹  J(ũ) *  ũ' = f(ũ, t)`
+
+`⟹  ũ' = pinv(J)  (ũ) * f(ũ, t)`
+
+solve with timestepper
+`⟹  ũ' = f̃(ũ, t)`
+
+e.g.
+`(J*u)_n+1 - (J*u)_n = Δt * (f_n + f_n-1 + ...)`
+"""
 @concrete mutable struct GalerkinProjection{T} <: AbstractSolveScheme
     linsolve
     abstolInf::T # ||∞ # TODO - switch to reltol
@@ -144,44 +187,24 @@ function solve_timestep(
 ) where{T}
 
     @unpack timealg, autodiff, ϵ = integrator
-    @unpack Δt, tprevs, pprevs, uprevs, fprevs = integrator
+    @unpack Δt, pprevs, uprevs, fprevs, f̃prevs = integrator
     @unpack prob, model, x = integrator
 
-    t0, p0, _, _ = get_state(integrator)
+    t0, _, _, _, _ = get_state(integrator)
 
-    # explicit time-integrator
-    # ΔuΔt_rhs: RHS of discretized ODE
-    f1 = nothing # This will error with implicit integrator
-    ΔuΔt_rhs = make_f_term(timealg, Δt, fprevs, f1) # du/dt (N,)
-    J0 = dudp(model, x, p0; autodiff, ϵ)            # du/dp (N, n)
-
-    # this is FWD Euler
-    linprob = LinearProblem(J0, vec(ΔuΔt_rhs))
-    ΔpΔt_rhs = solve(linprob, scheme.linsolve).u
-
-
-    #= GalerkinProjection
-
-    original: u' = f(u, t)
-    ROM map : u = g(ũ)
-
-    ⟹  J(ũ) *  ũ' = f(ũ, t)
-
-    ⟹  ũ' = pinv(J)  (ũ) * f(ũ, t)
-
-    solve with timestepper
-    ⟹  ũ' = f̃(ũ, t)
-
-    e.g.
-    (J*u)_n+1 - (J*u)_n = Δt * (f_n + f_n-1 + ...)
-
-    =#
+    if isimplicit(timealg)
+        @error """GalerkinProjection with implicit time-integrator is
+        not implemetned"""
+    else
+        f1 = nothing
+        p1 = apply_timestep(timealg, Δt, f̃prevs, pprevs, f1)
+    end
 
     # get new states
     t1 = t0 + Δt
-    p1 = apply_timestep(timealg, ΔpΔt_rhs, pprevs)
     u1 = model(x, p1)
     f1 = dudtRHS(prob, model, x, p1, t1)
+    f̃1 = compute_f̃(f1, p1, x, model, scheme; autodiff, ϵ)
     r1 = compute_residual(timealg, Δt, fprevs, uprevs, f1, u1)
 
     # print message
@@ -192,8 +215,29 @@ function solve_timestep(
         println()
     end
 
-    t1, p1, u1, f1, r1
+    t1, p1, u1, f1, f̃1, r1
 end
+
+function compute_f̃(
+    f::AbstractVecOrMat,
+    p::AbstractVector,
+    x::AbstractArray,
+    model::AbstractNeuralModel,
+    scheme::GalerkinProjection;
+    autodiff = AutoForwardDiff(),
+    ϵ = nothing
+)
+    J = dudp(model, x, p; autodiff, ϵ) # du/dp (N, n)
+
+    linprob = LinearProblem(J, vec(f))
+    linsol  = solve(linprob, scheme.linsolve)
+
+    # TODO compute_f̃: add stats?
+    
+    linsol.u
+end
+
+#===========================================================#
 
 @concrete mutable struct LeastSqPetrovGalerkin{T} <: AbstractSolveScheme
     nlssolve
@@ -214,7 +258,7 @@ function solve_timestep(
     @unpack Δt, tprevs, pprevs, uprevs, fprevs = integrator
     @unpack prob, model, x = integrator
 
-    t0, p0, u0, f0 = get_state(integrator)
+    t0, p0, u0, _, _ = get_state(integrator)
     batch = (x, u0)
 
     #=
@@ -249,7 +293,7 @@ function solve_timestep(
         print(" , RetCode: $(nlssol.retcode)\n")
     end
 
-    t1, p1, u1, f1, r1
+    t1, p1, u1, f1, nothing, r1
 end
 
 #===========================================================#

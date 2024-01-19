@@ -22,6 +22,7 @@
     pprevs
     uprevs
     fprevs
+    f̃prevs # for GalerkinProjection
 
     adaptive::Bool
     autodiff
@@ -65,19 +66,21 @@ function TimeIntegrator(
     t0 = first(tspan)
     u0 = model(x, p0)
     f0 = dudtRHS(prob, model, x, p0, t0; autodiff, ϵ)
+    f̃0 = compute_f̃(f0, p0, x, model, scheme; autodiff, ϵ)
 
     # previous states
-    nstates = nsavedstates(timealg)
+    nstates = nsavedstates(timealg) - 1
     tprevs = (t0, (T(NaN) for _ in 1:nstates)...)
     pprevs = (p0, (fill!(similar(p0), NaN) for _ in 1:nstates - 1)...)
     uprevs = (u0, (fill!(similar(u0), NaN) for _ in 1:nstates - 1)...)
     fprevs = (f0, (fill!(similar(f0), NaN) for _ in 1:nstates - 1)...)
+    f̃prevs = (f̃0, (fill!(similar(f̃0), NaN) for _ in 1:nstates - 1)...)
 
     TimeIntegrator(
         prob, model, timealg, scheme,
         x, Δt, Δt,
         tspan, tsave, tstep, isave,
-        tprevs, pprevs, uprevs, fprevs,
+        tprevs, pprevs, uprevs, fprevs, f̃prevs,
         adaptive, autodiff, ϵ,
     )
 end
@@ -102,8 +105,11 @@ function get_tspan(integrator::TimeIntegrator)
     integrator.tspan
 end
 
-function get_state(int::TimeIntegrator) # t, p, u, f
-    getindex.((int.tprevs, int.pprevs, int.uprevs, int.fprevs), 1)
+"""
+returns `t, p, u, f, f̃`
+"""
+function get_state(int::TimeIntegrator)
+    getindex.((int.tprevs, int.pprevs, int.uprevs, int.fprevs, int.f̃prevs), 1)
 end
 
 function get_next_savetime(integrator::TimeIntegrator{T}) where{T}
@@ -162,6 +168,7 @@ function update_integrator!(integrator::TimeIntegrator,
     p::AbstractArray{T},
     u::AbstractArray{T},
     f::AbstractArray{T},
+    f̃::Union{AbstractArray{T}, Nothing},
 ) where{T<:Real}
 
     integrator.tstep += 1
@@ -170,6 +177,10 @@ function update_integrator!(integrator::TimeIntegrator,
     integrator.pprevs = (p, integrator.pprevs[1:end-1]...)
     integrator.uprevs = (u, integrator.uprevs[1:end-1]...)
     integrator.fprevs = (f, integrator.fprevs[1:end-1]...)
+
+    if !isnothing(f̃)
+        integrator.f̃prevs = (f̃, integrator.f̃prevs[1:end-1]...)
+    end
 
     integrator
 end
@@ -189,7 +200,7 @@ function perform_timestep!(
         println("Time Step: $tstep, Time: $t_print, Δt: $Δt_print")
     end
 
-    t1, p1, u1, f1, r1 = solve_timestep(integrator; verbose)
+    t1, p1, u1, f1, f̃1, r1 = solve_timestep(integrator; verbose)
 
     @unpack scheme, timealg = integrator
     @unpack abstolInf, abstolMSE = scheme
@@ -225,7 +236,7 @@ function perform_timestep!(
         end
     end
 
-    update_integrator!(integrator, t1, p1, u1, f1)
+    update_integrator!(integrator, t1, p1, u1, f1, f̃1)
 
     return r1
 end
