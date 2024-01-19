@@ -314,11 +314,11 @@ function evolve_autodecoder(
     Δt = 1f-3
     time_adaptive = true
 
+    ## Galerkin
     scheme = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
-    scheme = GalerkinProjection(linsolve, 1f-0, 1f-2) # abstol_inf, abstol_mse
 
-    # residual = make_residual(prob, timealg; autodiff = autodiff_space, ϵ = ϵ_space)
-    # scheme = LeastSqPetrovGalerkin(nlssolve, residual, nlsmaxiters, 1f-6, 1f-3, 1f-6)
+    ## LSPG
+    # scheme = LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, 1f-6, 1f-3, 1f-6)
 
     evolve_model(prob, model, timealg, scheme, data, p0, Δt;
         nlssolve, time_adaptive, autodiff_space, ϵ_space, device, verbose,

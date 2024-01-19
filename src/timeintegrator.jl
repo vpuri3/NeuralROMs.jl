@@ -22,7 +22,7 @@
     pprevs
     uprevs
     fprevs
-    f̃prevs # for GalerkinProjection
+    f̃prevs   # Galerkin only
 
     adaptive::Bool
     autodiff
@@ -66,7 +66,12 @@ function TimeIntegrator(
     t0 = first(tspan)
     u0 = model(x, p0)
     f0 = dudtRHS(prob, model, x, p0, t0; autodiff, ϵ)
-    f̃0 = compute_f̃(f0, p0, x, model, scheme; autodiff, ϵ)
+
+    f̃0 = if scheme isa GalerkinProjection
+        compute_f̃(f0, p0, x, model, scheme; autodiff, ϵ)
+    else
+        p0 * NaN
+    end
 
     # previous states
     nstates = nsavedstates(timealg) - 1

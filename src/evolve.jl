@@ -10,7 +10,6 @@ du/dt = f(u, t)
 to be discretized as
 ```math
 a_-1 * u_n+1 + ... + a_k * u_n-k = Δt ⋅ (b_-1 + f(u_n+1) + ... + b_k * f(u_n-k))
-
 ⟺
 ∑_{i=-1}^k a_i *  u_n+i = Δt * ∑_{i=-1}^k b_i f(u_i)
 ```
@@ -18,12 +17,16 @@ a_-1 * u_n+1 + ... + a_k * u_n-k = Δt ⋅ (b_-1 + f(u_n+1) + ... + b_k * f(u_n-
 # Interface
 
 ## overload
-- `isimplicit(timealg)`: if `b_-1 = 0`
-- `adaptiveΔt(timealg)`: if adaptive `Δt` is supported
-- `nsavedsteps(timealg)`: number of saved time-steps
+
+Algorithm:
 - `make_f_term(timealg, Δt, fprevs, f)`
 - `make_uprev_term(timealg, uprevs)`
 - `make_unew_term(timealg, u)`
+
+Traits:
+- `isimplicit(timealg)`: if `b_-1 = 0`
+- `adaptiveΔt(timealg)`: if adaptive `Δt` is supported
+- `nsavedsteps(timealg)`: number of saved time-steps
 
 ## implemented
 - `compute_residual(timealg, Δt, fprevs, uprevs, f, u) -> LHS - RHS`
@@ -36,12 +39,15 @@ adaptiveΔt(::AbstractTimeAlg) = true # default
 function compute_residual(
     timealg::AbstractTimeAlg,
     Δt::T,
-    fprevs::NTuple{N, Tf},
-    uprevs::NTuple{N, Tu},
-    f::Tf,
-    u::Tu,
-) where{N,T<:Number,Tf<:AbstractArray{T}, Tu<:AbstractArray{T}}
-    lhs = make_unew_term(timealg, u) + make_uprev_term(timealg, uprevs)
+    fprevs::NTuple{N, AbstractArray{T}},
+    uprevs::NTuple{N, AbstractArray{T}},
+    f::AbstractArray, # `f, u` at postulated time step
+    u::AbstractArray,
+) where{N,T<:Number}
+    lhs_uprev = make_uprev_term(timealg, uprevs)
+    lhs_unew  = make_unew_term(timealg, u)
+
+    lhs = lhs_uprev + lhs_unew
     rhs = make_f_term(timealg, Δt, fprevs, f)
     rhs - lhs
 end
@@ -49,19 +55,19 @@ end
 function apply_timestep(
     timealg::AbstractTimeAlg,
     Δt::T,
-    fprevs::NTuple{N, Tf},
-    uprevs::NTuple{N, Tu},
-    f::Union{Nothing, Tf},
-) where{N,T<:Number,Tf<:AbstractArray{T}, Tu<:AbstractArray{T}}
+    fprevs::NTuple{N, AbstractArray{T}},
+    uprevs::NTuple{N, AbstractArray{T}},
+    f::AbstractArray,
+) where{N,T<:Number}
     fterm = make_f_term(timealg, Δt, fprevs, f)
     apply_timestep(timealg, fterm, uprevs)
 end
 
 function apply_timestep(
     timealg::AbstractTimeAlg,
-    fterm::AbstractArray{T},
-    uprevs::NTuple{N, Tv},
-) where{N,T<:Number,Tv<:AbstractArray{T}}
+    fterm::AbstractArray,
+    uprevs::NTuple{N, AbstractArray{T}},
+) where{N,T<:Number}
     fterm - make_uprev_term(timealg, uprevs)
 end
 
@@ -80,34 +86,34 @@ nsavedstates(::Union{EulerForward, EulerBackward}) = 1
 function make_f_term(
     ::EulerForward,
     Δt::T,
-    fprevs::NTuple{N, Tf},
-    f::Union{Nothing, Tf},
-) where{N,T<:Number,Tf<:AbstractArray{T}}
-    Δt * (fprevs[1])
+    fprevs::NTuple{N, AbstractArray{T}},
+    f::Union{Nothing, AbstractArray},
+) where{N,T<:Number}
+    Δt * fprevs[1]
 end
 
 # EulerBWD
 function make_f_term(
     ::EulerBackward,
     Δt::T,
-    fprevs::NTuple{N, Tf},
-    f::Union{Nothing, Tf},
-) where{N,T<:Number,Tf<:AbstractArray{T}}
+    fprevs::NTuple{N, AbstractArray{T}},
+    f::Union{Nothing, AbstractArray},
+) where{N,T<:Number}
     Δt * f
 end
 
 # EulerFWD/BWD
 function make_uprev_term(
     ::Union{EulerForward, EulerBackward},
-    uprevs::NTuple{N, Tu},
-) where{N,T<:Number,Tu<:AbstractArray{T}}
+    uprevs::NTuple{N, AbstractArray{T}},
+) where{N,T<:Number}
     - uprevs[1]
 end
 
 function make_unew_term(
     ::Union{EulerForward, EulerBackward},
-    u::Tu,
-) where{T<:Number,Tu<:AbstractArray{T}}
+    u::AbstractArray,
+)
     u
 end
 
@@ -135,20 +141,21 @@ function make_f_term(
     fprevs::NTuple{N, Tf},
     f::Union{Nothing, Tf},
 ) where{N,T<:Number,Tf<:AbstractArray{T}}
-    # Δt * (fprevs[1])
+    0 * fprevs[1]
 end
 
 function make_uprev_term(
     ::RK2,
     uprevs::NTuple{N, Tu},
 ) where{N,T<:Number,Tu<:AbstractArray{T}}
-    # - uprevs[1]
+    - uprevs[1]
 end
 
 function make_unew_term(
     ::RK2,
     u::Tu,
 ) where{T<:Number,Tu<:AbstractArray{T}}
+    # need to evaluate rhs
     # u
 end
 
@@ -196,6 +203,10 @@ function solve_timestep(
         @error """GalerkinProjection with implicit time-integrator is
         not implemetned"""
     else
+        function dpdt_rhs(p, t)
+            compute_f̃(p, x, t, prob, model, scheme; autodiff, ϵ)
+        end
+
         f1 = nothing
         apply_timestep(timealg, Δt, f̃prevs, pprevs, f1)
     end
@@ -216,6 +227,20 @@ function solve_timestep(
     end
 
     t1, p1, u1, f1, f̃1, r1
+end
+
+function compute_f̃(
+    p::AbstractVector,
+    x::AbstractArray,
+    t::Real,
+    prob::AbstractPDEProblem,
+    model::AbstractNeuralModel,
+    scheme::GalerkinProjection;
+    autodiff = AutoForwardDiff(),
+    ϵ = nothing
+)
+    f = dudtRHS(prob, model, x, p, t)
+    compute_f̃(f, p, x, model, scheme; autodiff, ϵ)
 end
 
 function compute_f̃(
@@ -241,7 +266,6 @@ end
 
 @concrete mutable struct LeastSqPetrovGalerkin{T} <: AbstractSolveScheme
     nlssolve
-    nlsresidual
     nlsmaxiters
     abstolnls::T
     abstolInf::T # ||∞
@@ -254,36 +278,32 @@ function solve_timestep(
     verbose::Bool = true,
 ) where{T}
 
-    @unpack timealg, autodiff, ϵ = integrator
-    @unpack Δt, tprevs, pprevs, uprevs, fprevs = integrator
-    @unpack prob, model, x = integrator
-
-    t0, p0, u0, _, _ = get_state(integrator)
-    batch = (x, u0)
-
     #=
     TODO LSPG: Do LineSearch in GaussNewton solve. Follow CROM implementation.
     TODO LSPG: See if regularizing codes improves performance.
     =#
 
-    t1 = t0 + Δt
-    nlsp = t1, Δt, t0, p0, u0
+    @unpack timealg, autodiff, ϵ, Δt = integrator
+    @unpack prob, model, x = integrator
+
+    t0, p0, u0, _, _ = get_state(integrator)
+
+    batch = (x, u0)
+    residual = make_residual(integrator)
 
     # solve
     p1, nlssol = nonlinleastsq(
         model, p0, batch, scheme.nlssolve;
-        nlsp,
-        residual = scheme.nlsresidual,
+        residual,
         maxiters = scheme.nlsmaxiters,
         abstol = scheme.abstolnls,
     )
 
     # get new states
+    t1 = t0 + Δt
     u1 = model(x, p1)
     f1 = dudtRHS(prob, model, x, p1, t1)
-
-    # compute residual stats
-    r1 = nlssol.resid # compute_residual(timealg, Δt, u0, u1, f1)
+    r1 = nlssol.resid
 
     # print message
     steps = nlssol.stats.nsteps
@@ -298,25 +318,24 @@ end
 
 #===========================================================#
 function make_residual(
-    prob::AbstractPDEProblem,
-    timestepper::AbstractTimeAlg;
-    autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
-    ϵ = nothing,
+    integrator::TimeIntegrator,
 )
+    @unpack prob, timealg, autodiff, ϵ = integrator
+    @unpack Δt, uprevs, fprevs = integrator
+
     function make_residual_internal(
         model::AbstractNeuralModel,
-        p::AbstractVector,
+        p1::AbstractVector,
         batch::NTuple{2, Any},
         nlsp,
     )
         x, _ = batch
-        t1, Δt, t0, p0, u0 = nlsp
+        t1 = get_time(integrator) + Δt
 
-        _p, _t = isimplicit(timestepper) ? (p, t1) : (p0, t0)
+        u1 = model(x, p1)
+        f1 = dudtRHS(prob, model, x, p1, t1; autodiff, ϵ)
 
-        rhs = dudtRHS(prob, model, x, _p, _t; autodiff, ϵ)
-        u1  = model(x, p)
-        compute_residual(timestepper, Δt, u0, u1, rhs)
+        compute_residual(timealg, Δt, fprevs, uprevs, f1, u1)
     end
 end
 
