@@ -308,16 +308,11 @@ function evolve_autodecoder(
     # autodiff_space = AutoFiniteDiff()
     # ϵ_space = 0.005f0
 
-    timealg = EulerForward()
-    # timealg = EulerBackward()
-
     Δt = 1f-3
     adaptive = true
 
-    timealg = EulerForward()
-    # timealg = RK2()
-    # timealg = RK4()
-    Δt = 1f-0
+    timealg = EulerForward() # RK2() , RK4()
+    Δt = 1f-1
     adaptive = false
 
     ## Galerkin
