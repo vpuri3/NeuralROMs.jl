@@ -105,17 +105,17 @@ export nonlinleastsq
 
 include("timeintegrator.jl")
 export TimeIntegrator, perform_timestep!, evolve_integrator!, evolve_model
+
+include("evolve.jl")
 export
     # timestepper types
-    EulerForward, EulerBackward,
+    EulerForward, EulerBackward, RK2, RK4,
     # timestepper interface
     compute_residual, apply_timestep,
     # solve scheme types
     GalerkinProjection, LeastSqPetrovGalerkin,
     # residual functions
     make_residual, residual_learn
-
-include("evolve.jl")
 
 include("train.jl")
 export train_model, callback, optimize, plot_training

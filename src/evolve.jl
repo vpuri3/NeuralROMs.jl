@@ -19,57 +19,22 @@ a_-1 * u_n+1 + ... + a_k * u_n-k = Δt ⋅ (b_-1 + f(u_n+1) + ... + b_k * f(u_n-
 ## overload
 
 Algorithm:
-- `make_f_term(timealg, Δt, fprevs, f)`
-- `make_uprev_term(timealg, uprevs)`
-- `make_unew_term(timealg, u)`
+- `compute_residual(timealg, Δt, fprevs, uprevs, tprevs, f, u, f_func) -> LHS - RHS`
+   `f, u` at postulated timestep
+   `f_func: (u, t) -> f(u, t)` to be used in multistage methods like RK
+   Pass in `f_func = nothing` if not to be used
+
+- `apply_timestep(timealg, Δt, fprevs, uprevs, tprevs, f, f_func) -> u_n+1`
+   `f` at postulated timestep. Pass in `f = nothing` for explicit timestepper
+   `f_func: (u, t) -> f(u, t)` to be used in multistage methods like RK
 
 Traits:
 - `isimplicit(timealg)`: if `b_-1 = 0`
 - `adaptiveΔt(timealg)`: if adaptive `Δt` is supported
-- `nsavedsteps(timealg)`: number of saved time-steps
-
-## implemented
-- `compute_residual(timealg, Δt, fprevs, uprevs, f, u) -> LHS - RHS`
-- `apply_timestep(timealg, Δt, fprevs, uprevs, f) -> u_n+1`
-- `apply_timestep(timealg, fterm, uprevs) -> u_n+1`
+- `nsavedstates(timealg)`: number of saved steps (not including present step)
 """
 
 adaptiveΔt(::AbstractTimeAlg) = true # default
-
-function compute_residual(
-    timealg::AbstractTimeAlg,
-    Δt::T,
-    fprevs::NTuple{N, AbstractArray{T}},
-    uprevs::NTuple{N, AbstractArray{T}},
-    f::AbstractArray, # `f, u` at postulated time step
-    u::AbstractArray,
-) where{N,T<:Number}
-    lhs_uprev = make_uprev_term(timealg, uprevs)
-    lhs_unew  = make_unew_term(timealg, u)
-
-    lhs = lhs_uprev + lhs_unew
-    rhs = make_f_term(timealg, Δt, fprevs, f)
-    rhs - lhs
-end
-
-function apply_timestep(
-    timealg::AbstractTimeAlg,
-    Δt::T,
-    fprevs::NTuple{N, AbstractArray{T}},
-    uprevs::NTuple{N, AbstractArray{T}},
-    f::Union{Nothing, AbstractArray},
-) where{N,T<:Number}
-    fterm = make_f_term(timealg, Δt, fprevs, f)
-    apply_timestep(timealg, fterm, uprevs)
-end
-
-function apply_timestep(
-    timealg::AbstractTimeAlg,
-    fterm::AbstractArray,
-    uprevs::NTuple{N, AbstractArray{T}},
-) where{N,T<:Number}
-    fterm - make_uprev_term(timealg, uprevs)
-end
 
 #===========================================================#
 # Euler FWD/BWD
@@ -80,41 +45,131 @@ struct EulerBackward <: AbstractTimeAlg end
 isimplicit(::EulerForward) = false
 isimplicit(::EulerBackward) = true
 
-nsavedstates(::Union{EulerForward, EulerBackward}) = 1
+nsavedstates(::Union{EulerForward, EulerBackward}) = 0
 
-# EulerFWD
-function make_f_term(
+###
+# compute_residual
+###
+
+function compute_residual(
     ::EulerForward,
     Δt::T,
     fprevs::NTuple{N, AbstractArray{T}},
-    f::Union{Nothing, AbstractArray},
+    uprevs::NTuple{N, AbstractArray{T}},
+    tprevs::NTuple{N, T},
+    f::AbstractArray,
+    u::AbstractArray,
+    f_func,
 ) where{N,T<:Number}
-    Δt * fprevs[1]
+    lhs = u - uprevs[1]
+    rhs = Δt * fprevs[1]
+    lhs - rhs
 end
 
-# EulerBWD
-function make_f_term(
+function compute_residual(
     ::EulerBackward,
     Δt::T,
     fprevs::NTuple{N, AbstractArray{T}},
-    f::Union{Nothing, AbstractArray},
-) where{N,T<:Number}
-    Δt * f
-end
-
-# EulerFWD/BWD
-function make_uprev_term(
-    ::Union{EulerForward, EulerBackward},
     uprevs::NTuple{N, AbstractArray{T}},
+    tprevs::NTuple{N, T},
+    f::AbstractArray,
+    u::AbstractArray,
+    f_func,
 ) where{N,T<:Number}
-    - uprevs[1]
+    lhs = u - uprevs[1]
+    rhs = Δt * f
+    lhs - rhs
 end
 
-function make_unew_term(
-    ::Union{EulerForward, EulerBackward},
+###
+# apply_timestep
+###
+
+function apply_timestep(
+    ::EulerForward,
+    Δt::T,
+    fprevs::NTuple{N, AbstractArray{T}},
+    uprevs::NTuple{N, AbstractArray{T}},
+    tprevs::NTuple{N, T},
+    f::Union{Nothing, AbstractArray},
+    f_func,
+) where{N,T<:Number}
+    uprevs[1] + Δt * fprevs[1]
+end
+
+function apply_timestep(
+    ::EulerBackward,
+    Δt::T,
+    fprevs::NTuple{N, AbstractArray{T}},
+    uprevs::NTuple{N, AbstractArray{T}},
+    tprevs::NTuple{N, T},
+    f::Union{Nothing, AbstractArray},
+    f_func,
+) where{N,T<:Number}
+    uprevs[1] + Δt * f
+end
+
+#===========================================================#
+# RK
+#===========================================================#
+abstract type AbstractRKMethod <: AbstractTimeAlg end
+struct RK2 <: AbstractRKMethod end # midpoint
+struct RK4 <: AbstractRKMethod end
+
+nsavedstates(::AbstractRKMethod) = 0
+isimplicit(::AbstractRKMethod) = false
+
+###
+# apply_timestep
+###
+
+function apply_timestep(
+    ::RK2,
+    Δt::T,
+    fprevs::NTuple{N, AbstractArray{T}},
+    uprevs::NTuple{N, AbstractArray{T}},
+    tprevs::NTuple{N, T},
+    f::Union{Nothing, AbstractArray},
+    f_func,
+) where{N,T<:Number}
+    k1 = Δt * fprevs[1]
+    k2 = Δt * f_func(uprevs[1] + k1 / T(2), tprevs[1] + Δt / T(2))
+
+    uprevs[1] + k2
+end
+
+function apply_timestep(
+    ::RK4,
+    Δt::T,
+    fprevs::NTuple{N, AbstractArray{T}},
+    uprevs::NTuple{N, AbstractArray{T}},
+    tprevs::NTuple{N, T},
+    f::Union{Nothing, AbstractArray},
+    f_func,
+) where{N,T<:Number}
+    k1 = Δt * fprevs[1]
+    k2 = Δt * f_func(uprevs[1] + k1 / T(2), tprevs[1] + Δt / T(2))
+    k3 = Δt * f_func(uprevs[1] + k2 / T(2), tprevs[1] + Δt / T(2))
+    k4 = Δt * f_func(uprevs[1] + k3       , tprevs[1] + Δt       )
+
+    uprevs[1] + k2 / T(6) + k2 / T(3) + k3 / T(3) + k4 / T(6)
+end
+
+###
+# compute_residual
+###
+
+function compute_residual(
+    ::Union{RK2, RK4},
+    Δt::T,
+    fprevs::NTuple{N, AbstractArray{T}},
+    uprevs::NTuple{N, AbstractArray{T}},
+    tprevs::NTuple{N, T},
+    f::AbstractArray,
     u::AbstractArray,
-)
-    u
+    f_func,
+) where{N,T<:Number} # RK1 residual
+    zero(T) * u
 end
 
 #===========================================================#
@@ -124,40 +179,8 @@ abstract type AbstractABMethod <: AbstractTimeAlg end
 struct AB2 <: AbstractTimeAlg end
 
 adaptiveΔt(::AB2) = false
-
-#===========================================================#
-# RK
-#===========================================================#
-abstract type AbstractRKMethod <: AbstractTimeAlg end
-struct RK2 <: AbstractRKMethod end # midpoint
-struct RK4 <: AbstractRKMethod end
-
-nsavedstates(::AbstractRKMethod) = 1
-isimplicit(::AbstractRKMethod) = false
-
-function make_f_term(
-    ::RK2,
-    Δt::T,
-    fprevs::NTuple{N, Tf},
-    f::Union{Nothing, Tf},
-) where{N,T<:Number,Tf<:AbstractArray{T}}
-    0 * fprevs[1]
-end
-
-function make_uprev_term(
-    ::RK2,
-    uprevs::NTuple{N, Tu},
-) where{N,T<:Number,Tu<:AbstractArray{T}}
-    - uprevs[1]
-end
-
-function make_unew_term(
-    ::RK2,
-    u::Tu,
-) where{T<:Number,Tu<:AbstractArray{T}}
-    # need to evaluate rhs
-    # u
-end
+nsavedstates(::AbstractABMethod) = 1
+isimplicit(::AbstractABMethod) = false
 
 #===========================================================#
 #===========================================================#
@@ -194,7 +217,7 @@ function solve_timestep(
 ) where{T}
 
     @unpack timealg, autodiff, ϵ = integrator
-    @unpack Δt, pprevs, uprevs, fprevs, f̃prevs = integrator
+    @unpack Δt, pprevs, uprevs, tprevs, fprevs, f̃prevs = integrator
     @unpack prob, model, x = integrator
 
     t0, _, _, _, _ = get_state(integrator)
@@ -207,8 +230,8 @@ function solve_timestep(
             compute_f̃(p, x, t, prob, model, scheme; autodiff, ϵ)
         end
 
-        f1 = nothing
-        apply_timestep(timealg, Δt, f̃prevs, pprevs, f1)
+        f̃1 = nothing
+        apply_timestep(timealg, Δt, f̃prevs, pprevs, tprevs, f̃1, dpdt_rhs)
     end
 
     # get new states
@@ -216,7 +239,7 @@ function solve_timestep(
     u1 = model(x, p1)
     f1 = dudtRHS(prob, model, x, p1, t1)
     f̃1 = compute_f̃(f1, p1, x, model, scheme; autodiff, ϵ)
-    r1 = compute_residual(timealg, Δt, fprevs, uprevs, f1, u1)
+    r1 = compute_residual(timealg, Δt, fprevs, uprevs, tprevs, f1, u1, nothing) #TODO
 
     # print message
     steps = 0
@@ -303,6 +326,7 @@ function solve_timestep(
     t1 = t0 + Δt
     u1 = model(x, p1)
     f1 = dudtRHS(prob, model, x, p1, t1)
+    f̃1 = nothing
     r1 = nlssol.resid
 
     # print message
@@ -313,7 +337,7 @@ function solve_timestep(
         print(" , RetCode: $(nlssol.retcode)\n")
     end
 
-    t1, p1, u1, f1, nothing, r1
+    t1, p1, u1, f1, f̃1, r1
 end
 
 #===========================================================#
@@ -321,7 +345,7 @@ function make_residual(
     integrator::TimeIntegrator,
 )
     @unpack prob, timealg, autodiff, ϵ = integrator
-    @unpack Δt, uprevs, fprevs = integrator
+    @unpack Δt, uprevs, fprevs, tprevs = integrator
 
     function make_residual_internal(
         model::AbstractNeuralModel,
@@ -335,7 +359,14 @@ function make_residual(
         u1 = model(x, p1)
         f1 = dudtRHS(prob, model, x, p1, t1; autodiff, ϵ)
 
-        compute_residual(timealg, Δt, fprevs, uprevs, f1, u1)
+        function dudt_rhs(u, t)
+            if timealg isa AbstractRKMethod
+                @error "Not implemented LSPG for multistage methods yet."
+            end
+            # dudtRHS(prob, model, x, p, t)
+        end
+
+        compute_residual(timealg, Δt, fprevs, uprevs, tprevs, f1, u1, dudt_rhs)
     end
 end
 

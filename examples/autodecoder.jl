@@ -312,7 +312,13 @@ function evolve_autodecoder(
     # timealg = EulerBackward()
 
     Δt = 1f-3
-    time_adaptive = true
+    adaptive = true
+
+    timealg = EulerForward()
+    # timealg = RK2()
+    # timealg = RK4()
+    Δt = 1f-0
+    adaptive = false
 
     ## Galerkin
     scheme = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
@@ -321,7 +327,7 @@ function evolve_autodecoder(
     # scheme = LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, 1f-6, 1f-3, 1f-6)
 
     evolve_model(prob, model, timealg, scheme, data, p0, Δt;
-        nlssolve, time_adaptive, autodiff_space, ϵ_space, device, verbose,
+        nlssolve, adaptive, autodiff_space, ϵ_space, device, verbose,
     )
 end
 

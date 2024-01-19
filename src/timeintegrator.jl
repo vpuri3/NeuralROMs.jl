@@ -74,7 +74,7 @@ function TimeIntegrator(
     end
 
     # previous states
-    nstates = nsavedstates(timealg) - 1
+    nstates = nsavedstates(timealg)
     tprevs = (t0, (T(NaN) for _ in 1:nstates)...)
     pprevs = (p0, (fill!(similar(p0), NaN) for _ in 1:nstates - 1)...)
     uprevs = (u0, (fill!(similar(u0), NaN) for _ in 1:nstates - 1)...)
@@ -114,7 +114,13 @@ end
 returns `t, p, u, f, f̃`
 """
 function get_state(int::TimeIntegrator)
-    getindex.((int.tprevs, int.pprevs, int.uprevs, int.fprevs, int.f̃prevs), 1)
+    fields = (int.tprevs, int.pprevs, int.uprevs, int.fprevs, int.f̃prevs)
+    getindex.(fields, 1)
+end
+
+function get_saved_states(int::TimeIntegrator)
+    fields = (int.tprevs, int.pprevs, int.uprevs, int.fprevs, int.f̃prevs)
+    Tuple(f[2:end] for f in fields)
 end
 
 function get_next_savetime(integrator::TimeIntegrator{T}) where{T}
@@ -316,7 +322,7 @@ function evolve_model(
     nlssolve = nothing,
     nlsmaxiters = 10,
     nlsabstol = 1f-7,
-    time_adaptive::Bool = true,
+    adaptive::Bool = true,
     autodiff_space = AutoForwardDiff(),
     ϵ_space = nothing,
     device = Lux.cpu_device(),
@@ -361,7 +367,7 @@ function evolve_model(
     Δt = isnothing(Δt) ? -(reverse(extrema(tsave))...) / 200 |> T : T(Δt)
 
     integrator = TimeIntegrator(prob, model, timealg, scheme, x, tsave, p0;
-        adaptive = time_adaptive, autodiff = autodiff_space, ϵ = ϵ_space,
+        Δt, adaptive, autodiff = autodiff_space, ϵ = ϵ_space,
     )
 
     evolve_integrator!(integrator; verbose)
