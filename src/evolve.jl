@@ -57,7 +57,7 @@ function apply_timestep(
     Δt::T,
     fprevs::NTuple{N, AbstractArray{T}},
     uprevs::NTuple{N, AbstractArray{T}},
-    f::AbstractArray,
+    f::Union{Nothing, AbstractArray},
 ) where{N,T<:Number}
     fterm = make_f_term(timealg, Δt, fprevs, f)
     apply_timestep(timealg, fterm, uprevs)
