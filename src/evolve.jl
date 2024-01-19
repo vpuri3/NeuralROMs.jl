@@ -220,7 +220,7 @@ function solve_timestep(
     @unpack Δt, pprevs, uprevs, tprevs, fprevs, f̃prevs = integrator
     @unpack prob, model, x = integrator
 
-    t0, _, _, _, _ = get_state(integrator)
+    t0, p0, _, _, _ = get_state(integrator)
 
     p1 = if isimplicit(timealg)
         @error """GalerkinProjection with implicit time-integrator is
@@ -230,8 +230,18 @@ function solve_timestep(
             compute_f̃(p, x, t, prob, model, scheme; autodiff, ϵ)
         end
 
-        f̃1 = nothing
-        apply_timestep(timealg, Δt, f̃prevs, pprevs, tprevs, f̃1, dpdt_rhs)
+        # f̃1 = nothing
+        # apply_timestep(timealg, Δt, f̃prevs, pprevs, tprevs, f̃1, dpdt_rhs)
+
+        ############
+        # TODO look at janky EulerFWD
+        ############
+        # ΔuΔt_rhs = Δt * fprevs[1]            # du/dt (N,)
+        # J0 = dudp(model, x, p0; autodiff, ϵ) # du/dp (N, n)
+        #
+        # linprob = LinearProblem(J0, vec(ΔuΔt_rhs))
+        # ΔpΔt_rhs = solve(linprob, scheme.linsolve).u
+        # p0 + ΔpΔt_rhs
     end
 
     # get new states

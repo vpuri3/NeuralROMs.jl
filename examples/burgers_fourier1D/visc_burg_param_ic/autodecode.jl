@@ -56,7 +56,7 @@ function test_autodecoder(
     mkpath(outdir)
     #==============#
 
-    k = 1 # 1, 7
+    k = 7 # 1, 7
     It = LinRange(1,length(Tdata), 10) .|> Base.Fix1(round, Int)
 
     Ud = Udata[:, k, It]
@@ -66,7 +66,17 @@ function test_autodecoder(
     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     p0 = _code[2].weight[:, 1]
 
-    CUDA.@time _, _, Up = evolve_autodecoder(prob, decoder, md, data, p0;
+    ## time evolution prams
+    timealg = EulerForward() # EulerForward(), RK2(), RK4()
+    Δt = 1f-3
+    adaptive = false
+
+    # timealg = EulerForward() # EulerForward(), RK2(), RK4()
+    # Δt = 1f-4
+    # adaptive = false
+
+    @time _, _, Up = evolve_autodecoder(
+        prob, decoder, md, data, p0, timealg, Δt, adaptive;
         rng, device, verbose)
 
     Ix = 1:32:Nx

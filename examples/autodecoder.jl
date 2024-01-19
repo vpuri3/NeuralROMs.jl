@@ -113,7 +113,8 @@ function train_autodecoder(
     rng::Random.AbstractRNG = Random.default_rng(),
     _batchsize = nothing,
     batchsize_ = nothing,
-    λ::Real = 0f0,
+    λ1::Real = 0f0,
+    λ2::Real = 0f0,
     makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :,),
     cb_epoch = nothing,
     device = Lux.cpu_device(),
@@ -155,8 +156,7 @@ function train_autodecoder(
     init_bias = rand32 # zeros32
     use_bias_fn = false
 
-    # lossfun = mse
-    lossfun = iszero(λ) ? mse : l2reg(mse, λ; property = :decoder)
+    lossfun = elasticreg(mse, λ1, λ2; property = :decoder)
 
     _batchsize = isnothing(_batchsize) ? Nx * 10       : _batchsize
     batchsize_ = isnothing(batchsize_) ? numobs(_data) : batchsize_
@@ -183,7 +183,7 @@ function train_autodecoder(
     #     schedules = (schedules..., Step(1f0, 1f0, Inf32))
     # end
 
-    train_args = (; l, h, w, E, _batchsize, batchsize_, λ)
+    train_args = (; l, h, w, E, _batchsize, batchsize_, λ1, λ2)
     metadata = (; metadata..., train_args)
     #----------------------#----------------------#
 
@@ -279,7 +279,10 @@ function evolve_autodecoder(
     decoder::NTuple{3, Any},
     metadata::NamedTuple,
     data::NTuple{3, AbstractVecOrMat},
-    p0::AbstractVector;
+    p0::AbstractVector,
+    timealg::AbstractTimeAlg,
+    Δt::Real,
+    adaptive::Bool;
     rng::Random.AbstractRNG = Random.default_rng(),
     device = Lux.cpu_device(),
     verbose::Bool = true,
@@ -308,14 +311,7 @@ function evolve_autodecoder(
     # autodiff_space = AutoFiniteDiff()
     # ϵ_space = 0.005f0
 
-    Δt = 1f-3
-    adaptive = true
-
-    timealg = EulerForward() # RK2() , RK4()
-    Δt = 1f-1
-    adaptive = false
-
-    ## Galerkin
+    # Galerkin
     scheme = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
 
     ## LSPG

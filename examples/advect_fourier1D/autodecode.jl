@@ -66,7 +66,13 @@ function test_autodecoder(
     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     p0 = _code[2].weight[:, 1]
 
-    @time _, _, Up = evolve_autodecoder(prob, decoder, md, data, p0;
+    # time evolution prams
+    timealg = EulerForward() # EulerForward(), RK2(), RK4()
+    Δt = 1f-1
+    adaptive = false
+
+    @time _, _, Up = evolve_autodecoder(
+        prob, decoder, md, data, p0, timealg, Δt, adaptive;
         rng, device, verbose)
 
     Ix_plt = 1:4:Nx
@@ -98,23 +104,26 @@ prob = Advection1D(0.25f0)
 device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "data_advect/", "data.jld2")
 
-modeldir = joinpath(@__DIR__, "model1")
+modeldir = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
 cb_epoch = nothing
 
 ## train
-# E = 100
-# l, h, w = 4, 5, 32
-# isdir(modeldir) && rm(modeldir, recursive = true)
-# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 1f-1,
-#     _batchsize = nothing, batchsize_ = nothing, cb_epoch, device)
+E = 5000
+_It = 1:1:500
+l, h, w = 4, 5, 32
+isdir(modeldir) && rm(modeldir, recursive = true)
+makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
+model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
+    λ1 = 1f-1, λ2 = 0f0, cb_epoch, device, # makedata_kws,
+)
 
 ## process
-outdir = joinpath(modeldir, "results")
-# postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+# outdir = joinpath(modeldir, "results")
+# # postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+# #     makeplot = true, verbose = true)
+# test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
 #     makeplot = true, verbose = true)
-test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-    makeplot = true, verbose = true)
 #======================================================#
 nothing
 #
