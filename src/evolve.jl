@@ -230,11 +230,11 @@ function solve_timestep(
             compute_f̃(p, x, t, prob, model, scheme; autodiff, ϵ)
         end
 
-        # f̃1 = nothing
-        # apply_timestep(timealg, Δt, f̃prevs, pprevs, tprevs, f̃1, dpdt_rhs)
+        f̃1 = nothing
+        apply_timestep(timealg, Δt, f̃prevs, pprevs, tprevs, f̃1, dpdt_rhs)
 
         ############
-        # TODO look at janky EulerFWD
+        # old janky EulerFWD
         ############
         # ΔuΔt_rhs = Δt * fprevs[1]            # du/dt (N,)
         # J0 = dudp(model, x, p0; autodiff, ϵ) # du/dp (N, n)
