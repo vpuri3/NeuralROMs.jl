@@ -115,34 +115,16 @@ function train_autodecoder(
     batchsize_ = nothing,
     λ1::Real = 0f0,
     λ2::Real = 0f0,
+    σ2inv::Real = 0f0,
+    weight_decays::Union{Real, NTuple{M, <:Real}} = 0f0,
     makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :,),
     cb_epoch = nothing,
     device = Lux.cpu_device(),
-)
+) where{M}
     _data, _, metadata = makedata_autodecoder(datafile; makedata_kws...)
     dir = modeldir
 
     Nx = isa(makedata_kws.Ix, Colon) ? metadata.Nx : length(makedata_kws.Ix)
-
-    #--------------------------------------------#
-    # training hyper-params
-    #--------------------------------------------#
-    lrs = (1f-2, 1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
-    opts = Optimisers.Adam.(lrs)
-    nepochs = (20, round.(Int, E / 7 * ones(7))...,)
-    schedules = Step.(lrs, 1f0, Inf32)
-
-    ################
-    # nepochs = (50, E,)
-    # schedules = (
-    #     Step(1f-2, 1f0, Inf32),                        # constant warmup
-    #     # Triangle(λ0 = 1f-5, λ1 = 1f-3, period = 20), # gradual warmup
-    #     # Exp(1f-3, 0.996f0),
-    #     SinExp(λ0 = 1f-5, λ1 = 1f-3, period = 50, γ = 0.995f0),
-    #     # CosAnneal(λ0 = 1f-5, λ1 = 1f-3, period = 50),
-    # )
-    # opts = fill(Optimisers.Adam(), length(nepochs)) |> Tuple
-    ################
 
     #--------------------------------------------#
     # architecture hyper-params
@@ -156,42 +138,66 @@ function train_autodecoder(
     init_bias = rand32 # zeros32
     use_bias_fn = false
 
-    lossfun = elasticreg(mse, λ1, λ2; property = :decoder)
-
     _batchsize = isnothing(_batchsize) ? Nx * 10       : _batchsize
     batchsize_ = isnothing(batchsize_) ? numobs(_data) : batchsize_
 
+    lossfun = elastic_and_code_reg(mse; σ2inv, λ1, λ2, property = :decoder)
+
+    #----------------------#----------------------#
+    decoder = begin
+        d, o = size(_data[1][1], 1), size(_data[2], 1)
+
+        in_layer = Dense(l+d, w, act; init_weight = init_wt_in, init_bias)
+        hd_layer = Dense(w  , w, act; init_weight = init_wt_hd, init_bias)
+        fn_layer = Dense(w  , o; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
+        
+        Chain(in_layer, fill(hd_layer, h)..., fn_layer)
+    end
+
+    # init_weight = scale_init(randn32, 1f-1, 0f0) # N(μ = 0, σ2 = 0.1^2)
+    init_weight = scale_init(randn32, 1f-0, 0f0) # N(μ = 0, σ2 = 1.0^2)
+
+    NN = AutoDecoder(decoder, metadata._Ns, l; init_weight)
+
+    #--------------------------------------------#
+    # training hyper-params
+    #--------------------------------------------#
+    lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
+    Nlrs = length(lrs)
+
+    opts = begin # Grokking (https://arxiv.org/abs/2201.02177)
+        # Optimisers.AdamW.(lrs)
+
+        ca_axes = Lux.setup(copy(rng), NN)[1] |> ComponentArray |> getaxes
+        Tuple(
+            OptimiserChain(
+                Adam(lr),
+                DecoderWeightDecay(0f0, ca_axes),
+                # WeightDecay(0f0),
+            ) for lr in lrs
+        )
+    end
+
+    nepochs = (round.(Int, E / (Nlrs) * ones(Nlrs))...,)
+    schedules = Step.(lrs, 1f0, Inf32)
+    early_stoppings = (fill(true, Nlrs)...,)
+
+    # warm up
+    opts = (Optimisers.AdamW(1f-2), opts...)
+    nepochs = (10, nepochs...,)
+    schedules = (Step(1f-2, 1f0, Inf32), schedules...,)
+    early_stoppings = (false, early_stoppings...,)
+
     #----------------------#----------------------#
 
-    in_layer = Dense(l+1, w, act; init_weight = init_wt_in, init_bias)
-    hd_layer = Dense(w  , w, act; init_weight = init_wt_hd, init_bias)
-    fn_layer = Dense(w  , 1; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
+    train_args = (; l, h, w, E, _batchsize, λ1, λ2, σ2inv, weight_decays)
+    metadata   = (; metadata..., train_args)
 
-    decoder = Chain(
-        in_layer,
-        fill(hd_layer, h)...,
-        fn_layer,
-    )
-
-    NN = AutoDecoder(decoder, metadata._Ns, l)
-
-    # # second order optimizer
-    # # if it can fit on 11 gb vRAM on 2080Ti
-    # if Lux.parameterlength(decoder) < 35_000
-    #     opts = (opts..., LBFGS(),)
-    #     nepochs = (nepochs..., round(Int, E / 10))
-    #     schedules = (schedules..., Step(1f0, 1f0, Inf32))
-    # end
-
-    train_args = (; l, h, w, E, _batchsize, batchsize_, λ1, λ2)
-    metadata = (; metadata..., train_args)
-    #----------------------#----------------------#
-
-    @show train_args
+    @show metadata
 
     @time model, ST = train_model(NN, _data; rng,
-        _batchsize, batchsize_,
-        opts, nepochs, schedules,
+        _batchsize, batchsize_, weight_decays,
+        opts, nepochs, schedules, early_stoppings,
         device, dir, metadata, lossfun,
         cb_epoch,
     )
