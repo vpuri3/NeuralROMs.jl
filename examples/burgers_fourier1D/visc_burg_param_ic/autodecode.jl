@@ -56,7 +56,7 @@ function test_autodecoder(
     mkpath(outdir)
     #==============#
 
-    k = 7 # 1, 7
+    k = 1 # 1, 7
     It = LinRange(1,length(Tdata), 10) .|> Base.Fix1(round, Int)
 
     Ud = Udata[:, k, It]
@@ -109,18 +109,17 @@ datafile = joinpath(@__DIR__, "burg_visc_re10k", "data.jld2")
 
 Ix = 1:8:8192
 _Ib, Ib_ = [1, 4, 7], [2, 3, 5, 6]
-_batchsize, batchsize_  = 1024 .* (10, 3000)
+_It = 1:5:1000
 
-makedata_kws = (; Ix, _Ib, Ib_, _It = :, It_ = :)
+makedata_kws = (; Ix, _Ib, Ib_, _It = _It, It_ = :)
 
 prob = BurgersInviscid1D()
 prob = BurgersViscous1D(1f-4)
 
 E = 1400
-λ = 1f-0
+
 for (l, h, w) in (
-    (8, 10, 64),
-    # (8, 5, 128),
+    (8, 5, 64),
 )
     ll = lpad(l, 2, "0")
     hh = lpad(h, 2, "0")
@@ -128,10 +127,15 @@ for (l, h, w) in (
     modeldir = joinpath(@__DIR__, "model_dec_sin_$(ll)_$(hh)_$(ww)_reg")
     modelfile = joinpath(modeldir, "model_08.jld2")
 
+    # train
+    λ1, λ2, σ2inv = 0.f0, 0.0f0, 1f-3 # 0.0, 0.01, 1f-2
+    weight_decays = 5f-3              # 0 (0.005)
+
     ## train
-    # isdir(modeldir) && rm(modeldir, recursive = true)
-    # model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 1f-1,
-    #     _batchsize, batchsize_, makedata_kws, device)
+    isdir(modeldir) && rm(modeldir, recursive = true)
+    model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
+        λ1, λ2, σ2inv, weight_decays, makedata_kws, device,
+    )
 
     ## process
     outdir = joinpath(modeldir, "results")
