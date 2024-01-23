@@ -61,15 +61,12 @@ Lux.glorot_uniform(rng::AbstractRNG, ::Type{<:Complex}, dims...) = c_glorot_unif
 
 #===========================================================#
 
-function fix_kw(f, sym::Symbol, val)
-    function (args...; kwargs...)
-        @eval nt = (; $sym = $val)
-        f(args...; kwargs..., nt...)
-    end
-end
-
-function init_siren(rng::AbstractRNG, ::Type{T}, dims::Integer...;
-    scale::Real = 1) where{T <: Real}
+function init_siren(
+    rng::AbstractRNG,
+    ::Type{T},
+    dims::Integer...;
+    scale::Real = 1
+) where{T <: Real}
 
     scale = T(scale) * sqrt(T(24) / T(_nfan(dims...)[1]))
     return (rand(rng, T, dims...) .- T(1//2)) * scale
@@ -79,9 +76,16 @@ init_siren(dims::Integer...; kw...) = init_siren(Random.default_rng(), Float32, 
 init_siren(rng::AbstractRNG, dims::Integer...; kw...) = init_siren(rng, Float32, dims...; kw...)
 init_siren(::Type{T}, dims::Integer...; kw...) where{T<:Real} = init_siren(Random.default_rng(), T, dims...; kw...)
 
-# scaled_siren_init(s::Real) = fix_kw(init_siren, :scale, s)
 function scaled_siren_init(scale::Real)
     (args...; kwargs...) -> init_siren(args...; kwargs..., scale)
+end
+
+function scale_init(init, scale::Real, shift::Real)
+    function scale_init_internal(args...; kwargs...)
+        x = init(args...; kwargs...)
+        T = eltype(x)
+        (init(args...; kwargs...) .* T(scale)) .+ T(shift)
+    end
 end
 #===========================================================#
 function remake_ca(

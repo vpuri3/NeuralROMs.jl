@@ -2,7 +2,11 @@
 const ADInputTypes{T} = Union{T, AbstractArray{T}} where{T <: Number}
 
 #======================================================#
+#======================================================#
+#======================================================#
 # ForwardDiff
+#======================================================#
+#======================================================#
 #======================================================#
 """
 Based on SparseDiffTools.auto_jacvec
@@ -38,6 +42,7 @@ function forwarddiff_deriv1(f,
 ) where{T}
     error("TODO. What should signature of f be? f(x, y) ?")
 end
+#======================================================#
 
 function forwarddiff_deriv2(f,
     x::ADInputTypes{T},
@@ -55,6 +60,7 @@ function forwarddiff_deriv2(f,
 
     fx, df, d2f
 end
+#======================================================#
 
 function forwarddiff_deriv4(f,
     x::ADInputTypes{T},
@@ -78,6 +84,7 @@ function forwarddiff_deriv4(f,
     fx, d1f, d2f, d3f, d4f
 end
 
+#======================================================#
 function forwarddiff_jacobian(f,
     x::ADInputTypes{T},
 ) where{T}
@@ -99,8 +106,13 @@ end
 # end
 
 #======================================================#
+#======================================================#
+#======================================================#
 # FiniteDiff
 #======================================================#
+#======================================================#
+#======================================================#
+
 function finitediff_deriv1(f,
     x::ADInputTypes{T};
     ϵ = nothing,
@@ -117,6 +129,7 @@ function finitediff_deriv1(f,
 
     fx, fdx
 end
+#======================================================#
 
 function finitediff_deriv2(f,
     x::ADInputTypes{T};
@@ -135,6 +148,7 @@ function finitediff_deriv2(f,
 
     fx, fdx, fdxx
 end
+#======================================================#
 
 function finitediff_deriv4(f,
     x::ADInputTypes{T};
@@ -161,6 +175,7 @@ function finitediff_deriv4(f,
     fx, d1f, d2f, d3f, d4f
 end
 
+#======================================================#
 function finitediff_jacobian(f,
     x::ADInputTypes{T};
     ϵ = nothing,

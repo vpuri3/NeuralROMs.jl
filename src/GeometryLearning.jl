@@ -66,10 +66,10 @@ export AbstractNeuralModel, AbstractPDEProblem, AbstractTimeAlg,
     AbstractTimeIntegrator, AbstractSolveScheme
 
 include("utils.jl")
-export fix_kw, init_siren, scaled_siren_init, remake_ca #, _ntimes
+export init_siren, scale_init, scaled_siren_init, remake_ca
 
 include("metrics.jl")
-export mae, mse, rsquare, pnorm, l1reg, l2reg, elasticreg
+export mae, mse, rsquare, pnorm, elasticreg, codereg, elastic_and_code_reg
 
 include("autodiff.jl")
 export
@@ -80,6 +80,9 @@ include("layers.jl")
 export Atten, Diag, PermutedBatchNorm, SplitRows, ImplicitEncoderDecoder,
     AutoDecoder, get_autodecoder, freeze_autodecoder,
     HyperNet, get_hyperdecoder
+
+include("optimisers.jl")
+export DecoderWeightDecay
 
 include("transform.jl")
 export FourierTransform, CosineTransform

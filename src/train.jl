@@ -119,13 +119,14 @@ function train_model(
         weight_decay = weight_decays[iopt]
 
         if !iszero(weight_decay) & (opt isa OptimiserChain)
-            isWD = Base.Fix2(isa, WeightDecay)
+            isWD = Base.Fix2(isa, Union{WeightDecay, DecoderWeightDecay})
             iWD = findall(isWD, opt.opts)
 
             if !isempty(iWD)
                 @assert length(iWD) == 1 """More than one WeightDecay() found
                     in optimiser chain $opt."""
                 iWD = iWD[1]
+
                 @set! opt.opts[iWD].gamma = weight_decay
             end
         end
@@ -191,6 +192,7 @@ function savemodel(
     # training plot
     plt = plot_training(STATS...)
     png(plt, joinpath(dir, "plt_training_$(count)"))
+    display(plt)
 
     # save model
     if length(name) > 5
@@ -539,9 +541,15 @@ function optimize(
             l, st, stats, g = grad(loss, p)
             opt_st, p = Optimisers.update!(opt_st, p, g)
 
+            if isnan(l)
+                e = ErrorException("Loss in NaN")
+                throw(e)
+            end
+
             # progress bar
-            ProgressMeter.next!(prog;
-                showvalues = [(:LOSS, round(l; sigdigits = 8)), (:STATS, stats)],
+            ProgressMeter.next!(
+                prog;
+                showvalues = [(:LOSS, round(l; sigdigits = 8)), (:INFO, stats)],
                 valuecolor = :magenta,
             )
         end

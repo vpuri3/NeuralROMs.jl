@@ -1,5 +1,6 @@
 #===============================================================#
-function animate1D(u::AbstractMatrix,
+function animate1D(
+    u::AbstractMatrix,
     x::AbstractVector,
     t::AbstractVector = [];
     title = "",
@@ -23,7 +24,8 @@ function animate1D(u::AbstractMatrix,
     end
 end
 
-function animate1D(u::AbstractMatrix,
+function animate1D(
+    u::AbstractMatrix,
     v::AbstractMatrix,
     x::AbstractVector,
     t::AbstractVector = [];
