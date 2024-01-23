@@ -62,12 +62,16 @@ end
 function train_reg(
     datafile::String,
     dir::String,
-    E, l, h, w, λ1, λ2, weight_decays;
+    E, l, h, w;
+    λ1::Real = 0f0,
+    λ2::Real = 0f0,
+    α::Real = 0f0,
+    weight_decays::Union{Real,NTuple{M,<:Real}} = 0f0,
     rng::Random.AbstractRNG = Random.default_rng(),
     _batchsize = nothing,
     cb_epoch = nothing,
     device = Lux.cpu_device(),
-)
+) where{M}
     metadata = (;)
 
     #--------------------------------------------#
@@ -134,8 +138,6 @@ function train_reg(
     init_bias = rand32 # zeros32
     use_bias_fn = false
 
-    lossfun = elasticreg(mse, λ1, λ2; property = :decoder)
-
     #--------------------------------------------#
     # AutoDecoder
     #--------------------------------------------#
@@ -143,6 +145,14 @@ function train_reg(
         in_layer = Dense(l+1, w, act; init_weight = init_wt_in, init_bias)
         hd_layer = Dense(w  , w, act; init_weight = init_wt_hd, init_bias)
         fn_layer = Dense(w  , 1; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
+
+        # weight norm
+        dims = (2,) # (1 (2) => row (col) sums => inf (one) norm)
+        in_layer = WeightNorm(in_layer, (:weight,), dims)
+        hd_layer = WeightNorm(hd_layer, (:weight,), dims)
+        fn_layer = WeightNorm(fn_layer, (:weight,), dims)
+
+        # TODO - use LDense in src/layers.jl
 
         Chain(
             in_layer,
@@ -152,6 +162,42 @@ function train_reg(
     end
 
     NN = AutoDecoder(decoder, 1, l)
+
+    lossfun = elasticreg(mse, λ1, λ2; property = :decoder)
+    # _lossfun, property = mse, :decoder
+    # lossfun = function(NN, p, st::NamedTuple, batch::Tuple)
+    #     T = eltype(p)
+    #     N = numobs(batch)
+    #     l, st_new, stats = _lossfun(NN, p, st, batch)
+    #
+    #     _p = isnothing(property) ? p : getproperty(p, property)
+    #     _N = length(_p)
+    #
+    #     lcond = if iszero(α)
+    #          zero(T)
+    #     else
+    #         # lcond = one(T)
+    #         # for layername in propertynames(_p)
+    #         #     layer = getproperty(_p, layername)
+    #         #     cond = layer.normalized.weight_g
+    #         #     lcond *= prod(abs, cond)
+    #         #     # lcond *= prod(abs, maximum(cond)) # doesn't work
+    #         # end
+    #
+    #         lcond = zero(T)
+    #         for layername in propertynames(_p)
+    #             layer = getproperty(_p, layername)
+    #             cond = layer.normalized.weight_g
+    #             lcond += sum(abs ∘ log ∘ softplus, cond)
+    #         end
+    #
+    #         lcond * α # / _N
+    #     end
+    #
+    #     loss = l + lcond
+    #
+    #     loss, st_new, (; l, lcond, stats)
+    # end
 
     #--------------------------------------------#
     # Split Decoder
@@ -341,15 +387,23 @@ Random.seed!(rng, 460)
 datafile = joinpath(@__DIR__, "data_reg.jld2")
 device = Lux.gpu_device()
 
-E = 2000
+E = 1000
 _N, N_ = 512, 8192 # 512, 32768
 _batchsize = 32
 fps = Int(E / 5)
 
+# l, h, w = 1, 5, 32
+# λ1s = (0.00f0,) # 0.00f0
+# λ2s = (0.00f0,) # 0.00f0
+# αs  = (0.00f0,)
+# weight_decays = 0.05f0 # 1f-2
+
+## weight norm experiment
 l, h, w = 1, 5, 32
-λ1s = (0.00f0,) # 0.00f0
-λ2s = (0.00f0,) # 0.00f0
-weight_decays = 0.01f0 # 1f-2
+λ1s = (0.00f-0,)
+λ2s = (0.00f-0,)
+αs  = (1.00f-2,)
+weight_decays = 0.00f0
 
 # # uData(x) = sin(πx)
 # l, h, w = 1, 5, 32
@@ -368,7 +422,7 @@ weight_decays = 0.01f0 # 1f-2
 #
 # https://arxiv.org/pdf/2207.06283.pdf
 # - (Test with advection case)
-#   Add a variational loss term `(1/σ²)||ũ||₂`
+#   Add code regularization term `(1/σ²)||ũ||₂` to loss
 #   This ensures that a compact latent space is learned and improves
 #   the speed of convergence [DeepSDF ss 4.2]. Initialize `ũ ~ N(0,0.1²)`.
 #   This should reduce number of temporal samples needed. Do study on advection eqn?
@@ -385,7 +439,7 @@ weight_decays = 0.01f0 # 1f-2
 
 datagen_reg(_N, datafile; N_) |> display
 
-for (i, (λ1, λ2)) in enumerate(zip(λ1s, λ2s))
+for (i, (λ1, λ2, α)) in enumerate(zip(λ1s, λ2s, αs))
     _ps = []
     cb_epoch = function(NN, p, st)
         push!(_ps, p)
@@ -397,9 +451,10 @@ for (i, (λ1, λ2)) in enumerate(zip(λ1s, λ2s))
     outdir    = joinpath(modeldir, "results")
 
     isdir(modeldir) && rm(modeldir, recursive = true)
-    model, STATS = train_reg(datafile, modeldir,
-        E, l, h, w, λ1, λ2, weight_decays; _batchsize,
-        cb_epoch, device,
+    model, STATS = train_reg(
+        datafile, modeldir,
+        E, l, h, w; λ1, λ2, α, weight_decays,
+        _batchsize, cb_epoch, device,
     )
 
     # global ps = (ps..., _ps)
