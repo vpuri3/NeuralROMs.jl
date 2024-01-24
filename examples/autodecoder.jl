@@ -166,14 +166,12 @@ function train_autodecoder(
     Nlrs = length(lrs)
 
     opts = begin # Grokking (https://arxiv.org/abs/2201.02177)
-        # Optimisers.AdamW.(lrs)
-
         ca_axes = Lux.setup(copy(rng), NN)[1] |> ComponentArray |> getaxes
         Tuple(
             OptimiserChain(
                 Adam(lr),
                 DecoderWeightDecay(0f0, ca_axes),
-                # WeightDecay(0f0),
+                ### WeightDecay(0f0),
             ) for lr in lrs
         )
     end
@@ -183,10 +181,12 @@ function train_autodecoder(
     early_stoppings = (fill(true, Nlrs)...,)
 
     # warm up
-    opts = (Optimisers.AdamW(1f-2), opts...)
+    opts = (Optimisers.AdamW(1f-2), opts...,)
+
     nepochs = (10, nepochs...,)
     schedules = (Step(1f-2, 1f0, Inf32), schedules...,)
-    early_stoppings = (false, early_stoppings...,)
+    # early_stoppings = (false, early_stoppings...,)
+    early_stoppings = (true, early_stoppings...,)
 
     #----------------------#----------------------#
 
@@ -203,6 +203,8 @@ function train_autodecoder(
     )
 
     plot_training(ST...) |> display
+
+    @show metadata
 
     model
 end

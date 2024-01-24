@@ -97,7 +97,7 @@ end
 #======================================================#
 
 rng = Random.default_rng()
-Random.seed!(rng, 205)
+Random.seed!(rng, 220)
 
 prob = Advection1D(0.25f0)
 
@@ -109,23 +109,26 @@ modelfile = joinpath(modeldir, "model_08.jld2")
 cb_epoch = nothing
 
 ## train
-# E = 2000
-# _It = 1:5:500
-# l, h, w = 2, 5, 32 # (2, 4), 5, 32
-# λ1, λ2, σ2inv = 0.f0, 0.00f0, 1f-2 # 0.0, 0.05, 1f-2
-# weight_decays = 0.005f0            # 0 (0.005)
+# E = 1400
+# _It = 1:1:500
+# _batchsize = 1280
+# l, h, w = 4, 5, 32 # (2, 4), 5, 32
+# λ1, λ2, σ2inv = 0f-0, 0f-0, 0f-2 # 0.0, 0.05, 1f-2
+# weight_decays = 1f-3             # 0 (0.005)
 
-## original
-E = 2000
+## train
+E = 1400
 _It = 1:1:500
-l, h, w = 4, 5, 32
-λ1, λ2, σ2inv = 0.0f0, 0.1f0, 0f0
-weight_decays = 0.000f0
+_batchsize = 1280
+l, h, w = 4, 5, 32 # (2, 4), 5, 32
+λ1, λ2, σ2inv = 0f-0, 0f-0, 0f-2 # 0.0, 0.05, 1f-2
+weight_decays = 1f-3             # 0 (0.005)
 
 isdir(modeldir) && rm(modeldir, recursive = true)
 makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
 model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
     λ1, λ2, σ2inv, weight_decays, cb_epoch, device, makedata_kws,
+    _batchsize,
 )
 
 ## process
