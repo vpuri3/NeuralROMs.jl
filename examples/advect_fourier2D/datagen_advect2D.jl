@@ -15,14 +15,27 @@ using Plots, JLD2
 
 CUDA.allowscalar(false)
 
-function uIC(x; μ = -0.5f0, σ = 0.1f0)
-    u = @. exp(-1f0/2f0 * ((x-μ)/σ)^2)
-    reshape(u, :, 1)
+function uIC(x, y; μ = (0.5f0, 0.5f0), σ = 0.1f0) # μ = (-0.5, -0.5)
+    r2 = @. (x - μ[1])^2 + (y - μ[2])^2
+    u  = @. exp(-1f0/2f0 * r2/(σ^2))
 end
 
-function advect1D(N, ν, c, mu = nothing, p = nothing;
-    tspan=(0.f0, 4.0f0),
-    ntsave=500,
+function meshplt(
+    x::AbstractArray,
+    y::AbstractArray,
+    u::AbstractArray;
+    a::Real = 45, b::Real = 30, c = :grays, legend = false,
+    kwargs...,
+)
+
+    plt = plot(x, y, u; c, camera = (a,b), legend, kwargs...)
+    plt = plot!(plt, x', y', u'; c, camera = (a,b), legend, kwargs...)
+end
+
+function advect1D(Nx, Ny, ν, cx, cy, mu = nothing, p = nothing;
+    domain = FourierDomain(2),
+    tspan=(0.f0, 2.0f0), # (0, 4)
+    ntsave=125,          # 500
     odealg=Tsit5(),
     odekw = (;),
     device = cpu_device(),
@@ -30,25 +43,30 @@ function advect1D(N, ν, c, mu = nothing, p = nothing;
 )
 
     # space discr
-    domain = IntervalDomain(-1f0, 1f0; periodic = true)
-    V = FourierSpace(N; domain) |> Float32
+    V = FourierSpace(Nx, Ny; domain) |> Float32
     discr = Collocation()
 
-    (x,) = points(V)
-    (k,) = modes(V)
-    ftr = transformOp(V)
+    (x, y) = points(V)
 
     # get initial condition
-    u0 = uIC(x) # mu parameter dependence
+    u0 = uIC(x, y) # mu parameter dependence
+    u0 = reshape(u0, :, 1)
+
     V  = make_transform(V, u0; p)
 
     # move to device
     V  = V  |> device
     u0 = u0 |> device
 
+    vel = begin
+        o = fill!(similar(u0), 1)
+
+        (cx * o, cy * o)
+    end
+
     # operators
     A = -diffusionOp(ν, V, discr)
-    C = advectionOp((fill!(similar(u0), c),), V, discr)
+    C = advectionOp(vel, V, discr)
     odefunc = cache_operator(A - C, u0)
 
     # time discr
@@ -65,53 +83,75 @@ function advect1D(N, ν, c, mu = nothing, p = nothing;
     t = sol.t |> cpu_device()
     V = V     |> cpu_device()
 
+    Nxy, Nb, Nt = size(u)
+
     # compute derivatives
-    udx, ud2x = begin
-        Nx, Nb, Nt = size(u)
-        u_re = reshape(u, Nx, Nb * Nt)
+    udx, udy = begin
+        u_re = reshape(u, Nxy, Nb * Nt)
 
         V  = make_transform(V, u_re; p=p)
-        Dx = gradientOp(V)[1]
+        Dx, Dy = gradientOp(V)
 
-        du_re  = Dx * u_re
-        d2u_re = Dx * du_re
+        udx_re = Dx * u_re
+        udy_re = Dy * u_re
 
-        reshape(du_re, Nx, Nb, Nt), reshape(d2u_re, Nx, Nb, Nt)
+        sz = (Nxy, Nb, Nt)
+
+        reshape(udx_re, sz), reshape(udy_re, sz)
     end
 
-    mu = isnothing(mu) ? fill(nothing, size(u, 2)) |> Tuple : mu
-
     if !isnothing(dir)
+
         mkpath(dir)
-        metadata = (; c, ν, readme = "u [Nx, Nbatch, Nt]")
+
+        # saving
+        mu = isnothing(mu) ? fill(nothing, size(u, 2)) |> Tuple : mu
+        x_save = reshape(vcat(x', y'), 2, Nxy)
+        metadata = (; cx, cy, ν, readme = "u [Nx, Nbatch, Nt]")
 
         filename = joinpath(dir, "data.jld2")
-        jldsave(filename; x, u, udx, ud2x, t, mu, metadata)
+        jldsave(filename; x = x_save, u, udx, udy, t, mu, metadata)
+
+        # visualization
+        x_re = reshape(x, Nx, Ny)
+        y_re = reshape(y, Nx, Ny)
+
+        _x = x_re[:, 1]
+        _y = y_re[1, :]
 
         for k in 1:size(u, 2)
             _u = @view u[:, k, :]
             _udx = @view udx[:, k, :]
-            _ud2x = @view ud2x[:, k, :]
-
+            _udy = @view udy[:, k, :]
+        
             xlabel = "x"
             ylabel = "u(x, t)"
             title = isnothing(mu[k]) ? "" : "μ = $(round(mu[k]; digits = 2)), "
+        
+            # anim = animate2D(_u, x, t; linewidth=2, xlabel, ylabel, title)
+            # gif(anim, joinpath(dir, "traj_$(k).gif"), fps=30)
+            #        
+            # anim = animate2D(_udx, x, t; linewidth=2, xlabel, ylabel, title)
+            # gif(anim, joinpath(dir, "traj_dx_$(k).gif"), fps=30)
+            #        
+            # anim = animate2D(_udy, x, t; linewidth=2, xlabel, ylabel, title)
+            # gif(anim, joinpath(dir, "traj_dy_$(k).gif"), fps=30)
 
-            anim = animate1D(_u, x, t; linewidth=2, xlabel, ylabel, title)
-            gif(anim, joinpath(dir, "traj_$(k).gif"), fps=30)
+            anim = animate(_u, V)
+            gif(anim, joinpath(dir, "traj_$k.gif"), fps = 10)
 
-            anim = animate1D(_udx, x, t; linewidth=2, xlabel, ylabel, title)
-            gif(anim, joinpath(dir, "traj_dx_$(k).gif"), fps=30)
+            idx = LinRange(1, ntsave, 6) .|> Base.Fix1(round, Int)
+            
+            for (i, id) in enumerate(idx)
+                _u_re = reshape(_u, Nx, Ny, :)
 
-            anim = animate1D(_ud2x, x, t; linewidth=2, xlabel, ylabel, title)
-            gif(anim, joinpath(dir, "traj_d2x_$(k).gif"), fps=30)
+                p1 = heatmap(_x, _y, _u_re[:, :, id]';
+                    title = "Advection 2D Data", xlabel, ylabel)
 
-            begin
-                idx = LinRange(1f0, ntsave, 11) .|> Base.Fix1(round, Int)
-                plt = plot(;title = "Data", xlabel, ylabel, legend = false)
-                plot!(plt, x, _u[:, idx])
-                png(plt, joinpath(dir, "traj_$(k)"))
-                display(plt)
+                p2 = meshplt(x_re, y_re, _u_re[:, :, id])
+
+                png(p1, joinpath(dir, "heatmap_$i"))
+                png(p2, joinpath(dir, "meshplt_$i"))
             end
         end
     end
@@ -119,14 +159,23 @@ function advect1D(N, ν, c, mu = nothing, p = nothing;
     (sol, V), (x, u, t, mu)
 end
 
-N = 128
+Nx, Ny = 96, 64
+
+intx = IntervalDomain(0.0f0, 1.5f0; periodic = true)
+inty = IntervalDomain(0.0f0, 1.0f0; periodic = true)
+domain = intx × inty
+
 ν = 0f0
-c = 0.25f0
+cx, cy = 0.25f0, 0.00f0
+# cx, cy = 0.25f0, 0.25f0
+tspan = (0f0, 2.0f0)
+ntsave = 250
 mu = nothing # parameters
 
 device = cpu_device()
 dir = joinpath(@__DIR__, "data_advect")
-(sol, V), (x, u, t, mu) = advect1D(N, ν, c, mu; device, dir)
+(sol, V), (x, u, t, mu) = advect1D(Nx, Ny, ν, cx, cy, mu;
+    domain, tspan, ntsave, device, dir,)
 
 nothing
 #

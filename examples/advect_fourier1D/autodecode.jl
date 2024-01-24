@@ -108,28 +108,28 @@ modeldir = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
 cb_epoch = nothing
 
-## train
+## train (original)
 # E = 1400
 # _It = 1:1:500
 # _batchsize = 1280
 # l, h, w = 4, 5, 32 # (2, 4), 5, 32
-# λ1, λ2, σ2inv = 0f-0, 0f-0, 0f-2 # 0.0, 0.05, 1f-2
+# λ1, λ2, σ2inv = 0f-0, 0f-0, 0f-0 # 0.0, 0.05, 1f-2
 # weight_decays = 1f-3             # 0 (0.005)
 
 ## train
 E = 1400
-_It = 1:1:500
-_batchsize = 1280
-l, h, w = 4, 5, 32 # (2, 4), 5, 32
+_It = 1:10:500
+_batchsize = 128 * 1
+l, h, w = 2, 5, 32 # (2, 4), 5, 32
 λ1, λ2, σ2inv = 0f-0, 0f-0, 0f-2 # 0.0, 0.05, 1f-2
-weight_decays = 1f-3             # 0 (0.005)
+weight_decays = 0f-3             # 0 (0.005)
 
-isdir(modeldir) && rm(modeldir, recursive = true)
-makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
-model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
-    λ1, λ2, σ2inv, weight_decays, cb_epoch, device, makedata_kws,
-    _batchsize,
-)
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
+# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
+#     λ1, λ2, σ2inv, weight_decays, cb_epoch, device, makedata_kws,
+#     _batchsize,
+# )
 
 ## process
 outdir = joinpath(modeldir, "results")

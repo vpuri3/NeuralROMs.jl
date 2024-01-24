@@ -27,6 +27,8 @@ function makedata_autodecoder(datafile::String;
     It_ = Colon(),
 )
 
+    # TODO makedata_autodecoder: allow for _Ix, Ix_ for testing
+
     #==============#
     # load data
     #==============#
@@ -39,9 +41,14 @@ function makedata_autodecoder(datafile::String;
     @assert x isa AbstractVecOrMat
     x = x isa AbstractVector ? reshape(x, 1, :) : x # (Dim, Npoints)
 
+    in_dim = size(x, 1) # input size
+    println("input size $in_dim with $(size(x, 2)) points per trajectory")
+
     #==============#
     # normalize
     #==============#
+
+    # TODO: adjust u normalization for multiple outputs
 
     # single field prediction
     ū  = sum(u) / length(u)
@@ -62,11 +69,15 @@ function makedata_autodecoder(datafile::String;
 
     Nx = size(x, 2)
 
+    println("Using $Nx sample points per trajectory.")
+
     _u = reshape(_u, Nx, :)
     u_ = reshape(u_, Nx, :)
 
     _Ns = size(_u, 2) # number of codes i.e. # trajectories
     Ns_ = size(u_, 2)
+
+    println("$_Ns / $Ns_ trajectories in train/test sets.")
 
     # indices
     _idx = zeros(Int32, Nx, _Ns)
@@ -76,18 +87,18 @@ function makedata_autodecoder(datafile::String;
     idx_[:, :] .= 1:Ns_ |> adjoint
 
     # space
-    _xyz = zeros(Float32, Nx, _Ns)
-    xyz_ = zeros(Float32, Nx, Ns_)
+    _xyz = zeros(Float32, in_dim, Nx, _Ns)
+    xyz_ = zeros(Float32, in_dim, Nx, Ns_)
 
-    _xyz[:, :] .= x'
-    xyz_[:, :] .= x'
+    _xyz[:, :, :] .= x # VP: rm'd adjoint here
+    xyz_[:, :, :] .= x
 
     # solution
     _y = reshape(_u, 1, :)
     y_ = reshape(u_, 1, :)
 
-    _x = (reshape(_xyz, 1, :), reshape(_idx, 1, :))
-    x_ = (reshape(xyz_, 1, :), reshape(idx_, 1, :))
+    _x = (reshape(_xyz, in_dim, :), reshape(_idx, 1, :))
+    x_ = (reshape(xyz_, in_dim, :), reshape(idx_, 1, :))
 
     readme = "Train/test on the same trajectory."
 
@@ -118,6 +129,7 @@ function train_autodecoder(
     σ2inv::Real = 0f0,
     weight_decays::Union{Real, NTuple{M, <:Real}} = 0f0,
     makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :,),
+    init_code = nothing,
     cb_epoch = nothing,
     device = Lux.cpu_device(),
 ) where{M}
@@ -141,23 +153,34 @@ function train_autodecoder(
     _batchsize = isnothing(_batchsize) ? Nx * 10       : _batchsize
     batchsize_ = isnothing(batchsize_) ? numobs(_data) : batchsize_
 
-    lossfun = elastic_and_code_reg(mse; σ2inv, λ1, λ2, property = :decoder)
+    lossfun = regularize_autodecoder(mse; σ2inv, λ1, λ2)
 
     #----------------------#----------------------#
-    decoder = begin
-        d, o = size(_data[1][1], 1), size(_data[2], 1)
+    in_dim, out_dim = size(_data[1][1], 1), size(_data[2], 1) # in/out dim
 
-        in_layer = Dense(l+d, w, act; init_weight = init_wt_in, init_bias)
-        hd_layer = Dense(w  , w, act; init_weight = init_wt_hd, init_bias)
-        fn_layer = Dense(w  , o; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
+    println("input size, output size, $in_dim, $out_dim")
+
+    decoder = begin
+        in_layer = Dense(l + in_dim, w, act; init_weight = init_wt_in, init_bias)
+        hd_layer = Dense(w, w, act         ; init_weight = init_wt_hd, init_bias)
+        fn_layer = Dense(w, out_dim        ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
         
         Chain(in_layer, fill(hd_layer, h)..., fn_layer)
     end
 
-    # init_weight = scale_init(randn32, 1f-1, 0f0) # N(μ = 0, σ2 = 0.1^2)
-    init_weight = scale_init(randn32, 1f-0, 0f0) # N(μ = 0, σ2 = 1.0^2)
+    init_code = if isnothing(init_code)
+        if l < 8
+            randn32 # N(μ = 0, σ2 = 1.0^2)
+        else
+            scale_init(randn32, 1f-1, 0f0) # N(μ = 0, σ2 = 0.1^2)
+        end
+    else
+        init_code
+    end
 
-    NN = AutoDecoder(decoder, metadata._Ns, l; init_weight)
+    NN = AutoDecoder(decoder, metadata._Ns, l;
+        init_weight = init_code,
+    )
 
     #--------------------------------------------#
     # training hyper-params
@@ -165,28 +188,34 @@ function train_autodecoder(
     lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
     Nlrs = length(lrs)
 
-    opts = begin # Grokking (https://arxiv.org/abs/2201.02177)
-        ca_axes = Lux.setup(copy(rng), NN)[1] |> ComponentArray |> getaxes
-        Tuple(
-            OptimiserChain(
-                Adam(lr),
-                DecoderWeightDecay(0f0, ca_axes),
-                ### WeightDecay(0f0),
-            ) for lr in lrs
-        )
-    end
+    #idx = only(getaxes(p))[:decoder].idx
+    decoder_axes = Lux.setup(copy(rng), NN)[1] |> ComponentArray |> getaxes
+
+    # Grokking (https://arxiv.org/abs/2201.02177)
+    opts = Tuple(OptimiserChain(
+        Adam(lr),
+        # Adam(lr, (0.9f0, 0.95f0)), # 0.999 (default), 0.98, 0.95  # https://www.youtube.com/watch?v=IHikLL8ULa4&ab_channel=NeelNanda
+
+        PartWeightDecay(0f0, decoder_axes),
+        ### WeightDecay(0f0),
+    ) for lr in lrs)
 
     nepochs = (round.(Int, E / (Nlrs) * ones(Nlrs))...,)
     schedules = Step.(lrs, 1f0, Inf32)
     early_stoppings = (fill(true, Nlrs)...,)
 
     # warm up
-    opts = (Optimisers.AdamW(1f-2), opts...,)
+    # opt_warmup = OptimiserChain(Adam(1f-2), PartWeightDecay(0f0, decoder_axes),)
+    opt_warmup = OptimiserChain(Adam(1f-2), WeightDecay(0f0),)
+    nepochs_warmup = 10
+    schedule_warmup = Step(1f-2, 1f0, Inf32)
+    early_stopping_warmup = true
 
-    nepochs = (10, nepochs...,)
-    schedules = (Step(1f-2, 1f0, Inf32), schedules...,)
-    # early_stoppings = (false, early_stoppings...,)
-    early_stoppings = (true, early_stoppings...,)
+    ######################
+    opts = (opt_warmup, opts...,)
+    nepochs = (nepochs_warmup, nepochs...,)
+    schedules = (schedule_warmup, schedules...,)
+    early_stoppings = (early_stopping_warmup, early_stoppings...,)
 
     #----------------------#----------------------#
 
@@ -391,47 +420,48 @@ function postprocess_autodecoder(
     _Ib = isa(md.makedata_kws._Ib, Colon) ? (1:size(Udata, 2)) : md.makedata_kws._Ib
     Ib_ = isa(md.makedata_kws.Ib_, Colon) ? (1:size(Udata, 2)) : md.makedata_kws.Ib_
 
+    @show md
+
     _data, _, _ = makedata_autodecoder(datafile; md.makedata_kws...)
     _xdata, _Icode = _data[1]
     _xdata = unnormalizedata(_xdata, md.x̄, md.σx)
 
-    @show md
+    model = NeuralEmbeddingModel(NN, st, md, _Icode)
+
+    if makeplot
+        for k in _Ib
+            _Upred = model(_xdata |> device, p |> device) |> Lux.cpu_device()
+            _Upred = reshape(_Upred, Nx, _Ib, Nt)
+
+            Ud = @view _Udata[:, k, :]
+            Up = @view _Upred[:, k, :]
+
+            xlabel = "x"
+            ylabel = "u(x, t)"
     
-    # model = NeuralEmbeddingModel(NN, st, _Icode, md.x̄, md.σx, md.ū, md.σu) |> device
-    # _Upred = model(_xdata |> device, p |> device) |> Lux.cpu_device()
-    # _Upred = reshape(_Upred, Nx, _Ib, Nt)
-    #
-    # for k in _Ib
-    #     Ud = @view _Udata[:, k, :]
-    #     Up = @view _Upred[:, k, :]
-    #
-    #     if makeplot
-    #         xlabel = "x"
-    #         ylabel = "u(x, t)"
-    # 
-    #         _mu = mu[_Ib[k]]
-    #         title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
-    #
-    #         idx_pred = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
-    #         idx_data = idx_pred
-    #
-    #         upred = Up[:, idx_pred]
-    #         udata = Ud[:, idx_data]
-    #
-    #         Iplot = 1:8:Nx
-    #
-    #         plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
-    #         plot!(plt, Xdata, upred, w = 2, palette = :tab10)
-    #         scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
-    #         png(plt, joinpath(outdir, "train$(k)"))
-    #
-    #         Itplt = LinRange(1, size(Ud, 2), 100) .|> Base.Fix1(round, Int)
-    #
-    #         anim = animate1D(Ud[:, Itplt], Up[:, Itplt], Xdata, Tdata[Itplt];
-    #             w = 2, xlabel, ylabel, title)
-    #         gif(anim, joinpath(outdir, "train$(k).gif"); fps)
-    #     end
-    # end
+            _mu = mu[_Ib[k]]
+            title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+    
+            idx_pred = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
+            idx_data = idx_pred
+    
+            upred = Up[:, idx_pred]
+            udata = Ud[:, idx_data]
+    
+            Iplot = 1:8:Nx
+    
+            plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
+            plot!(plt, Xdata, upred, w = 2, palette = :tab10)
+            scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
+            png(plt, joinpath(outdir, "train$(k)"))
+    
+            Itplt = LinRange(1, size(Ud, 2), 100) .|> Base.Fix1(round, Int)
+    
+            anim = animate1D(Ud[:, Itplt], Up[:, Itplt], Xdata, Tdata[Itplt];
+                w = 2, xlabel, ylabel, title)
+            gif(anim, joinpath(outdir, "train$(k).gif"); fps)
+        end
+    end
 
     #==============#
     # inference (via data regression)

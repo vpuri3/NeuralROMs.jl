@@ -65,6 +65,7 @@ function train_reg(
     E, l, h, w;
     λ1::Real = 0f0,
     λ2::Real = 0f0,
+    σ2inv::Real = 0f0,
     α::Real = 0f0,
     weight_decays::Union{Real,NTuple{M,<:Real}} = 0f0,
     rng::Random.AbstractRNG = Random.default_rng(),
@@ -124,7 +125,7 @@ function train_reg(
     opts = (Optimisers.AdamW(1f-1), opts...)
     nepochs = (10, nepochs...,)
     schedules = (Step(1f-2, 1f0, Inf32), schedules...,)
-    early_stoppings = (false, early_stoppings...,)
+    early_stoppings = (true, early_stoppings...,) # TODO: true
 
     #--------------------------------------------#
     # architecture hyper-params
@@ -163,8 +164,8 @@ function train_reg(
 
     NN = AutoDecoder(decoder, 1, l)
 
-    lossfun = elasticreg(mse, λ1, λ2; property = :decoder)
-    # _lossfun, property = mse, :decoder
+    lossfun = regularize_autodecoder(mse; σ2inv, λ1, λ2)
+
     # lossfun = function(NN, p, st::NamedTuple, batch::Tuple)
     #     T = eltype(p)
     #     N = numobs(batch)
@@ -291,7 +292,7 @@ function post_reg(
     autodiff = AutoForwardDiff()
     ϵ = nothing
 
-    u, ud1x, ud2x, ud3x, ud4x = dudx4(model, xbatch, p; autodiff, ϵ) .|> vec
+    u, ud1x, ud2x, ud3x, ud4x = dudx4_1D(model, xbatch, p; autodiff, ϵ) .|> vec
     ũ, ũd1x, ũd2x, ũd3x, ũd4x = forwarddiff_deriv4(uData, x)
 
     # print errors
@@ -327,7 +328,7 @@ function post_reg(
     #     _ud2x = ()
     #
     #     for p in params
-    #         __u, __ud1x, __ud2x = dudx2(model, xbatch, p; autodiff, ϵ) .|> vec
+    #         __u, __ud1x, __ud2x = dudx2_1D(model, xbatch, p; autodiff, ϵ) .|> vec
     #         _u = (_u..., __u)
     #         _ud1x = (_ud1x..., __ud1x)
     #         _ud2x = (_ud2x..., __ud2x)
@@ -402,8 +403,9 @@ fps = Int(E / 5)
 l, h, w = 1, 5, 32
 λ1s = (0.00f-0,)
 λ2s = (0.00f-0,)
+σ2invs = (0.00f0,)
 αs  = (1.00f-2,)
-weight_decays = 0.00f0
+weight_decays = 0.05f0
 
 # # uData(x) = sin(πx)
 # l, h, w = 1, 5, 32
@@ -439,7 +441,7 @@ weight_decays = 0.00f0
 
 datagen_reg(_N, datafile; N_) |> display
 
-for (i, (λ1, λ2, α)) in enumerate(zip(λ1s, λ2s, αs))
+for (i, (λ1, λ2, α, σ2inv)) in enumerate(zip(λ1s, λ2s, αs, σ2invs,))
     _ps = []
     cb_epoch = function(NN, p, st)
         push!(_ps, p)
@@ -453,7 +455,7 @@ for (i, (λ1, λ2, α)) in enumerate(zip(λ1s, λ2s, αs))
     isdir(modeldir) && rm(modeldir, recursive = true)
     model, STATS = train_reg(
         datafile, modeldir,
-        E, l, h, w; λ1, λ2, α, weight_decays,
+        E, l, h, w; λ1, λ2, σ2inv, α, weight_decays,
         _batchsize, cb_epoch, device,
     )
 
