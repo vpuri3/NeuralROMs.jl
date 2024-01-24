@@ -40,7 +40,7 @@ end
 function forwarddiff_deriv1(f,
     (x, y)::NTuple{2, ADInputTypes{T}},
 ) where{T}
-    error("TODO. What should signature of f be? f(x, y) ?")
+    error("TODO. What should signature of f be? f(x) ?")
 end
 #======================================================#
 

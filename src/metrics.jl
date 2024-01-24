@@ -134,22 +134,24 @@ end
 #=====================================================================#
 
 """
-    elastic_and_code_reg(lossfun, σ, λ1, λ2, property)(NN, p, st, batch) -> l, st, stats
+    regularize_autodecoder(lossfun, σ, λ1, λ2, property)(NN, p, st, batch) -> l, st, stats
 
-code regularized loss: `lossfun(..) + 1/σ² ||ũ||₂² +` L1/L2 on property
+code reg loss, L1/L2 on decoder
+`lossfun(..) + 1/σ² ||ũ||₂² + L1/L2 on decoder`
 """
-function elastic_and_code_reg(
+function regularize_autodecoder(
     lossfun;
     σ2inv::T = Inf32,
     λ1::T = 0f0,
     λ2::T = 0f0,
-    property::Union{Symbol,Nothing} = nothing,
 ) where{T<:Real}
 
-    function elastic_and_code_reg(NN, p, st::NamedTuple, batch::Tuple)
+    function regularize_autodecoder_internal(NN, p, st::NamedTuple, batch::Tuple)
         @assert eltype(p) == T
         N = numobs(batch)
         l, st_new, stats = lossfun(NN, p, st, batch)
+
+        decoder, code = get_autodecoder(NN, p, st)
 
         ###
         # code regularization
@@ -158,7 +160,6 @@ function elastic_and_code_reg(
         lcode = if iszero(σ2inv)
              zero(T)
         else
-            _, code = get_autodecoder(NN, p, st)
             pcode, _ = code[1](batch[1][2], code[2], code[3])
             lcode = sum(abs2, pcode)
 
@@ -166,10 +167,10 @@ function elastic_and_code_reg(
         end
 
         ###
-        # elastic reg on property
+        # elastic reg on decoder
         ###
 
-        _p = isnothing(property) ? p : getproperty(p, property)
+        _p = decoder[2]
         _N = length(_p)
 
         l1 = if iszero(λ1)

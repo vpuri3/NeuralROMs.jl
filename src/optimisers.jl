@@ -1,14 +1,14 @@
 #
 #======================================================#
-struct DecoderWeightDecay{Tg, Ta} <: Optimisers.AbstractRule
+struct PartWeightDecay{Tg, Ta} <: Optimisers.AbstractRule
     gamma::Tg
     ca_axes::Ta
 end
 
-Optimisers.init(o::DecoderWeightDecay, x::AbstractArray) = nothing
+Optimisers.init(o::PartWeightDecay, x::AbstractArray) = nothing
 
 function Optimisers.apply!(
-    o::DecoderWeightDecay,
+    o::PartWeightDecay,
     state,
     x::AbstractArray{T},
     dx,

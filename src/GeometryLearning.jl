@@ -69,7 +69,8 @@ include("utils.jl")
 export init_siren, scale_init, scaled_siren_init, remake_ca
 
 include("metrics.jl")
-export mae, mse, rsquare, pnorm, elasticreg, codereg, elastic_and_code_reg
+export mae, mse, rsquare, pnorm, elasticreg, codereg,
+    regularize_autodecoder
 
 include("autodiff.jl")
 export
@@ -82,7 +83,7 @@ export Atten, Diag, PermutedBatchNorm, SplitRows, ImplicitEncoderDecoder,
     HyperNet, get_hyperdecoder
 
 include("optimisers.jl")
-export DecoderWeightDecay
+export PartWeightDecay
 
 include("transform.jl")
 export FourierTransform, CosineTransform
@@ -94,7 +95,9 @@ include("neuralmodel.jl")
 export
     normalizedata, unnormalizedata,
     NeuralModel, NeuralEmbeddingModel,
-    dudx1, dudx2, dudx4, dudp
+    dudx1_1D, dudx2_1D, dudx4_1D,
+    dudx1_2D, #dudx2_2D, dudx4_2D,
+    dudp
 
 include("problems.jl")
 export dudtRHS

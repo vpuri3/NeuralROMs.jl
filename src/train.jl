@@ -119,7 +119,7 @@ function train_model(
         weight_decay = weight_decays[iopt]
 
         if !iszero(weight_decay) & (opt isa OptimiserChain)
-            isWD = Base.Fix2(isa, Union{WeightDecay, DecoderWeightDecay})
+            isWD = Base.Fix2(isa, Union{WeightDecay, PartWeightDecay})
             iWD = findall(isWD, opt.opts)
 
             if !isempty(iWD)
@@ -509,7 +509,7 @@ function optimize(
     # warm up run
     begin
         loss = Loss(NN, st, first(_loader), lossfun)
-        grad(loss, p)
+        grad(loss, p)[3] |> display
     end
 
     # set up early_stopping
@@ -549,7 +549,10 @@ function optimize(
             # progress bar
             ProgressMeter.next!(
                 prog;
-                showvalues = [(:LOSS, round(l; sigdigits = 8)), (:INFO, stats)],
+                showvalues = [
+                    (:LOSS, round(l; sigdigits = 8)),
+                    (:INFO, stats),
+                ],
                 valuecolor = :magenta,
             )
         end

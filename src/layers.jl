@@ -86,7 +86,7 @@ function AutoDecoder(
     decoder::Lux.AbstractExplicitLayer,
     num_batches::Int,
     code_len::Int;
-    init_weight = randn32,
+    init_weight = randn32, # scale_init(randn32, 1f-1, 0f0) # N(μ = 0, σ2 = 0.1^2)
     code = nothing,
     EmbeddingType::Type{<:Lux.AbstractExplicitLayer} = Lux.Embedding
 )
@@ -243,6 +243,78 @@ function (hn::HyperNet)((x, y)::T, ps, st::NamedTuple) where {T <: Tuple}
     pred, st_ = hn.evaluator(y, ps_ca, st.evaluator)
     @set! st.evaluator = st_
     return pred, st
+end
+
+#======================================================#
+# Lipschitz Layer
+#======================================================#
+@concrete struct LDense{use_bias} <: Lux.AbstractExplicitLayer
+    activation
+    in_dims::Int
+    out_dims::Int
+    init_weight
+    init_bias
+end
+
+function LDense(
+    mapping::Pair{<:Int, <:Int},
+    activation=identity;
+    kwargs...
+)
+    return LDense(first(mapping), last(mapping), activation; kwargs...)
+end
+
+function LDense(
+    in_dims::Int,
+    out_dims::Int,
+    activation=identity;
+    init_weight=glorot_uniform,
+    init_bias=zeros32,
+    use_bias::Bool=true,
+    allow_fast_activation::Bool=true
+)
+    activation = allow_fast_activation ? NNlib.fast_act(activation) : activation
+    return LDense{use_bias}(activation, in_dims, out_dims, init_weight, init_bias)
+end
+
+function initialparameters(
+    rng::AbstractRNG,
+    d::LDense{use_bias}
+) where {use_bias}
+    if use_bias
+        return (weight=d.init_weight(rng, d.out_dims, d.in_dims),
+            bias=d.init_bias(rng, d.out_dims, 1))
+    else
+        return (weight=d.init_weight(rng, d.out_dims, d.in_dims),)
+    end
+end
+
+function parameterlength(d::LDense{use_bias}) where {use_bias}
+    return use_bias ? d.out_dims * (d.in_dims + 1) : d.out_dims * d.in_dims
+end
+
+statelength(d::LDense) = 0
+
+# application LDense{false}
+
+@inline function (d::LDense{false})(
+    x::AbstractVecOrMat,
+    ps,
+    st::NamedTuple,
+)
+    return __apply_activation(d.activation, ps.weight * x), st
+end
+
+# application LDense{true}
+
+@inline function (d::LDense{true})(x::AbstractVector, ps, st::NamedTuple)
+    y = Lux.__apply_activation(d.activation, ps.weight * x .+ vec(ps.bias))
+    return y, st
+end
+
+@inline function (d::LDense{true})(x::AbstractMatrix, ps, st::NamedTuple)
+    y = Lux.__apply_activation(d.activation, ps.weight * x .+ ps.bias)
+    return y, st
 end
 
 #======================================================#

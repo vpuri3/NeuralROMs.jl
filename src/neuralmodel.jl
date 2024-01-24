@@ -16,11 +16,6 @@ function unnormalizedata(
     (u .* σ) .+ μ
 end
 #===========================================================#
-
-# For 2D, make X a tuple (X, Y). should work fine with dUdX, etc
-# otherwise need `makeUfromXY`, `makeUfromX_newmodel` type functions
-
-#===========================================================#
 @concrete mutable struct NeuralModel{Tx, Tu} <: AbstractNeuralModel
     NN
     st
@@ -87,17 +82,28 @@ function NeuralEmbeddingModel(
     metadata::NamedTuple,
     Icode::Union{Nothing,AbstractArray{<:Integer}} = nothing,
 ) where{T<:Number}
-    x̄ = metadata.x̄
-    ū = metadata.ū
-
-    σx = metadata.σx
-    σu = metadata.σu
 
     Icode = if isnothing(Icode)
         IT = T isa Type{Float64} ? Int64 : Int32
         Icode = similar(x, IT)
         fill!(Icode, true)
     end
+
+    NeuralEmbeddingModel(NN, st, metadata, Icode,)
+end
+
+function NeuralEmbeddingModel(
+    NN::Lux.AbstractExplicitLayer,
+    st::NamedTuple,
+    metadata::NamedTuple,
+    Icode::AbstractArray{<:Integer},
+)
+    x̄ = metadata.x̄
+    ū = metadata.ū
+
+    σx = metadata.σx
+    σu = metadata.σu
+
     NeuralEmbeddingModel(NN, st, Icode, x̄, σx, ū, σu,)
 end
 
@@ -120,8 +126,7 @@ function (model::NeuralEmbeddingModel)(
 )
 
     Zygote.@ignore Icode = if isnothing(model.Icode)
-        IT = T isa Type{Float64} ? Int64 : Int32
-        Icode = similar(x, IT)
+        Icode = similar(x, Int32)
         fill!(Icode, true)
     end
 
@@ -134,61 +139,91 @@ end
 
 #===========================================================#
 
-function dudx1(
+function dudx1_1D(
     model::AbstractNeuralModel,
     x::AbstractArray,
     p::AbstractVector;
     autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ = nothing,
 )
-    function dudx1_internal(x)
+    function dudx1_1D_internal(x)
         model(x, p)
     end
 
     if isa(autodiff, AutoFiniteDiff)
-        finitediff_deriv1(dudx1_internal, x; ϵ)
+        finitediff_deriv1(dudx1_1D_internal, x; ϵ)
     elseif isa(autodiff, AutoForwardDiff)
-        forwarddiff_deriv1(dudx1_internal, x)
+        forwarddiff_deriv1(dudx1_1D_internal, x)
     end
 end
 
-function dudx2(
+function dudx2_1D(
     model::AbstractNeuralModel,
     x::AbstractArray,
     p::AbstractVector;
     autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ = nothing,
 )
-    function dudx2_internal(x)
+    function dudx2_1D_internal(x)
         model(x, p)
     end
 
     if isa(autodiff, AutoFiniteDiff)
-        finitediff_deriv2(dudx2_internal, x; ϵ)
+        finitediff_deriv2(dudx2_1D_internal, x; ϵ)
     elseif isa(autodiff, AutoForwardDiff)
-        forwarddiff_deriv2(dudx2_internal, x)
+        forwarddiff_deriv2(dudx2_1D_internal, x)
     end
 end
 
-function dudx4(
+function dudx4_1D(
     model::AbstractNeuralModel,
     x::AbstractArray,
     p::AbstractVector;
     autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ = nothing,
 )
-    function dudx4_internal(x)
+    function dudx4_1D_internal(x)
         model(x, p)
     end
 
     if isa(autodiff, AutoFiniteDiff)
-        finitediff_deriv4(dudx4_internal, x; ϵ)
+        finitediff_deriv4(dudx4_1D_internal, x; ϵ)
     elseif isa(autodiff, AutoForwardDiff)
-        forwarddiff_deriv4(dudx4_internal, x)
+        forwarddiff_deriv4(dudx4_1D_internal, x)
     else
         error("Got unsupported `autodiff = `$autodiff")
     end
 end
+
+#===========================================================#
+# For 2D, make X a tuple (X, Y). should work fine with dUdX, etc
+# otherwise need `makeUfromXY`, `makeUfromX_newmodel` type functions
+#===========================================================#
+
+function dudx1_2D(
+    model::AbstractNeuralModel,
+    xy::AbstractMatrix,
+    p::AbstractVector;
+    autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
+    ϵ = nothing,
+)
+    @assert size(xy, 1) == true
+
+    x = @view xy[1, :] # use getindex if this errors
+    y = @view xy[2, :]
+
+    function dudx1_2D_internal(x)
+        model(x, p)
+    end
+
+    if isa(autodiff, AutoFiniteDiff)
+        finitediff_deriv1(dudx1_2D_internal, x; ϵ)
+    elseif isa(autodiff, AutoForwardDiff)
+        forwarddiff_deriv1(dudx1_2D_internal, x)
+    end
+end
+
+#===========================================================#
 
 function dudp(
     model::AbstractNeuralModel,

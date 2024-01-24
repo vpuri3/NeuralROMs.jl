@@ -7,7 +7,7 @@ function animate1D(
     kwargs...
 )
     if isempty(t)
-        t = 1:size(v, 2)
+        t = 1:size(u, 2)
     end
 
     ylims = begin
@@ -33,7 +33,7 @@ function animate1D(
     kwargs...
 )
     if isempty(t)
-        t = 1:size(v, 2)
+        t = 1:size(u, 2)
     end
 
     ylims = begin
@@ -48,6 +48,30 @@ function animate1D(
         plt = plot(title = titlestr)
         plot!(plt, x, u[:, i]; kw..., label = "Ground Truth", c = :black)
         plot!(plt, x, v[:, i]; kw..., label = "Prediction"  , c = :red  )
+    end
+end
+
+#===============================================================#
+
+function animate2D(
+    u::AbstractMatrix,
+    x::AbstractVector,
+    t::AbstractVector = [];
+    title = "",
+    kwargs...
+)
+    if isempty(t)
+        t = 1:size(u, 2)
+    end
+
+    clim = begin
+        mi = minimum(u)
+        ma = maximum(u)
+        (mi, ma)
+    end
+    anim = @animate for i in 1:size(u, 2)
+        titlestr = "time = $(round(t[i], digits=8))"
+        plt = plot(u[:, i], space; clim = clim, title = titlestr, kwargs...)
     end
 end
 

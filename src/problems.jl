@@ -1,7 +1,7 @@
 #
 #===================================================#
 struct Advection1D{T} <: AbstractPDEProblem
-    c::T # make it function of time c(x, t)
+    c::T
 end
 
 function dudtRHS(
@@ -14,9 +14,31 @@ function dudtRHS(
     ϵ = nothing,
 )
     c = prob.c
-    _, udx = dudx1(model, x, p; autodiff, ϵ)
+    _, udx = dudx1_1D(model, x, p; autodiff, ϵ)
 
     @. -c * udx
+end
+
+#===================================================#
+struct Advection2D{T} <: AbstractPDEProblem
+    cx::T
+    cy::T
+end
+
+function dudtRHS(
+    prob::Advection2D,
+    model::AbstractNeuralModel,
+    x::AbstractArray,
+    p::AbstractVector,
+    t::Real;
+    autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
+    ϵ = nothing,
+)
+    cx, cy = prob.cx, prob.cy
+
+    _, udx, udy = dudx1_2D(model, x, p; autodiff, ϵ)
+
+    @. -(cx * udx + cy * udy)
 end
 
 #===================================================#
@@ -37,7 +59,7 @@ function dudtRHS(
     c = prob.c
     ν = prob.ν
 
-    _, udx, udxx = dudx2(model, x, p; autodiff, ϵ)
+    _, udx, udxx = dudx2_1D(model, x, p; autodiff, ϵ)
 
     @. -c * udx + ν * udxx
 end
@@ -55,7 +77,7 @@ function dudtRHS(
     autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ = nothing,
 )
-    u, udx = dudx1(model, x, p; autodiff, ϵ)
+    u, udx = dudx1_1D(model, x, p; autodiff, ϵ)
 
     @. -u * udx
 end
@@ -76,7 +98,7 @@ function dudtRHS(
 )
     ν = prob.ν
 
-    u, udx, udxx = dudx2(model, x, p; autodiff, ϵ)
+    u, udx, udxx = dudx2_1D(model, x, p; autodiff, ϵ)
 
     @. -u * udx + ν * udxx
 end
@@ -94,7 +116,7 @@ function dudtRHS(
     autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ = nothing,
 )
-    u, ud1x, ud2x, _, ud4x = dudx4(model, x, p; autodiff, ϵ)
+    u, ud1x, ud2x, _, ud4x = dudx4_1D(model, x, p; autodiff, ϵ)
 
     @. -ud2x - ud4x - (u * ud1x) # -lapl (anti-diffusion), biharmonic, convection
 end
