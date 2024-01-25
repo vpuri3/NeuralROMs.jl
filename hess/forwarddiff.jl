@@ -1,32 +1,36 @@
 #
 #======================================================#
-using ForwardDiff
+using ForwardDiff, GeometryLearning
 using ForwardDiff: Dual, value, partials
 
-# f = x -> exp.(2x)
-f = x -> x .^ 5
-x = [1.0, 10.0]
-
-# using GeometryLearning
+# # f = x -> exp.(2x)
+# f = x -> x .^ 5
+# x = [1.0, 10.0]
+#
 # fwd = forwarddiff_deriv4(f, x)
 # fd = finitediff_deriv4(f, x)
 # nothing
 
-## 4st order
-T = Float64
-tag = ForwardDiff.Tag(f, T)
 
-z = x
-z = Dual{typeof(tag)}.(z, one(T))
-z = Dual{typeof(tag)}.(z, one(T))
-z = Dual{typeof(tag)}.(z, one(T))
-z = Dual{typeof(tag)}.(z, one(T))
+f = xy -> reshape(xy[1, :] .* xy[2, :], 1, :)
 
-fz  = f(z)
-fx  = value.(value.(value.(value.(fz))))
-d1f = partials.(value.(value.(value.(fz))), 1)
-d2f = partials.(partials.(value.(value.(fz)), 1), 1)
-d3f = partials.(partials.(partials.(value.(fz), 1), 1), 1)
-d4f = partials.(partials.(partials.(partials.(fz, 1), 1), 1), 1)
+# xy = [2.0, 3.0]
+# xy = reshape([2.0, 3.0], (2, 1))
+xy = vcat(fill(2, (1, 2)), fill(3, (1, 2)))
 
-fx, d1f, d2f, d3f, d4f
+x = reshape(xy[1, :], (1, :))
+y = reshape(xy[2, :], (1, :))
+
+f_dx = function(x_internal)
+    xy_internal = vcat(x_internal, y)
+    f(xy_internal)
+end
+f_dy = function(y_internal)
+    xy_internal = vcat(x, y_internal)
+    f(xy_internal)
+end
+
+u, udx = forwarddiff_deriv1(f_dx, x)
+_, udy = forwarddiff_deriv1(f_dy, y)
+
+u, udx, udy

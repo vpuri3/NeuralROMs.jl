@@ -380,6 +380,7 @@ function postprocess_autodecoder(
     Xdata = data["x"]
     Udata = data["u"]
     mu = data["mu"]
+    md_data = data["metadata"]
 
     close(data)
 
@@ -405,8 +406,9 @@ function postprocess_autodecoder(
     # subsample in space
     #==============#
     Udata = @view Udata[md.makedata_kws.Ix, :, :]
-    Xdata = @view Xdata[md.makedata_kws.Ix]
-    Nx = length(Xdata)
+    Xdata = @view Xdata[:, md.makedata_kws.Ix]
+
+    in_dim, Nx = size(Xdata)
 
     #==============#
     # train/test split
@@ -428,17 +430,15 @@ function postprocess_autodecoder(
 
     model = NeuralEmbeddingModel(NN, st, md, _Icode)
 
+    _Upred = (model |> device)(_xdata |> device, p |> device) |> Lux.cpu_device()
+    _Upred = reshape(_Upred, Nx, _Ib, Nt)
+
     if makeplot
         for k in _Ib
-            _Upred = model(_xdata |> device, p |> device) |> Lux.cpu_device()
-            _Upred = reshape(_Upred, Nx, _Ib, Nt)
 
             Ud = @view _Udata[:, k, :]
             Up = @view _Upred[:, k, :]
 
-            xlabel = "x"
-            ylabel = "u(x, t)"
-    
             _mu = mu[_Ib[k]]
             title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
     
@@ -448,18 +448,47 @@ function postprocess_autodecoder(
             upred = Up[:, idx_pred]
             udata = Ud[:, idx_data]
     
-            Iplot = 1:8:Nx
-    
-            plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
-            plot!(plt, Xdata, upred, w = 2, palette = :tab10)
-            scatter!(plt, Xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
-            png(plt, joinpath(outdir, "train$(k)"))
-    
-            Itplt = LinRange(1, size(Ud, 2), 100) .|> Base.Fix1(round, Int)
-    
-            anim = animate1D(Ud[:, Itplt], Up[:, Itplt], Xdata, Tdata[Itplt];
-                w = 2, xlabel, ylabel, title)
-            gif(anim, joinpath(outdir, "train$(k).gif"); fps)
+            if in_dim == 1
+                xlabel = "x"
+                ylabel = "u(x, t)"
+
+                xdata = vec(Xdata)
+                Iplot = 1:8:Nx
+
+                plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
+                plot!(plt, xdata, upred, w = 2, palette = :tab10)
+                scatter!(plt, xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
+                png(plt, joinpath(outdir, "train$(k)"))
+
+                Itplt = LinRange(1, size(Ud, 2), 100) .|> Base.Fix1(round, Int)
+
+                anim = animate1D(Ud[:, Itplt], Up[:, Itplt], Xdata, Tdata[Itplt];
+                                 w = 2, xlabel, ylabel, title)
+                gif(anim, joinpath(outdir, "train$(k).gif"); fps)
+
+            elseif in_dim == 2
+                xlabel = "x"
+                ylabel = "y"
+                zlabel = "u(x, t)"
+
+                kw = (; xlabel, ylabel, zlabel,)
+
+                x_plt = reshape(Xdata[1, :], md_data.Nx, md_data.Ny)
+                y_plt = reshape(Xdata[2, :], md_data.Nx, md_data.Ny)
+
+                for i in eachindex(idx_pred)
+                    upred_re = reshape(upred[:, i], md_data.Nx, md_data.Ny)
+                    udata_re = reshape(udata[:, i], md_data.Nx, md_data.Ny)
+
+                    p1 = meshplt(x_plt, y_plt, upred_re;
+                        title, kw...,)
+                    png(p1, joinpath(outdir, "train_$(k)_time_$(i)"))
+
+                    p2 = meshplt(x_plt, y_plt, upred_re - udata_re;
+                        title = "error", kw...,)
+                    png(p2, joinpath(outdir, "train_$(k)_time_$(i)_error"))
+                end
+            end
         end
     end
 
@@ -506,66 +535,91 @@ function postprocess_autodecoder(
     # evolve
     #==============#
     
-    # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-    # p0 = _code[2].weight[:, 1]
-    #
-    # for k in axes(mu)[1]
-    #     Ud = Udata[:, k, :]
-    #     data = (Xdata, Ud, Tdata)
-    #     @time _, Up, Tpred = evolve_autodecoder(prob, decoder, md, data, p0;
-    #         rng, device, verbose)
-    #
-    #     if makeplot
-    #         xlabel = "x"
-    #         ylabel = "u(x, t)"
-    #
-    #         _mu   = mu[k]
-    #         title = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
-    #         _name = k in _Ib ? "evolve_train$(k)" : "evolve_test$(k)"
-    #
-    #         plt = plot(; title, xlabel, ylabel, legend = false)
-    #         plot!(plt, Xdata, Up[:, idx], w = 2.0,  s = :solid)
-    #         plot!(plt, Xdata, Ud[:, idx], w = 4.0,  s = :dash)
-    #         png(plt, joinpath(outdir, _name))
-    #         display(plt)
-    #
-    #         anim = animate1D(Ud, Up, Xdata, Tdata;
-    #             w = 2, xlabel, ylabel, title)
-    #         gif(anim, joinpath(outdir, "$(_name).gif"); fps)
-    #     end
-    # end
+    decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    p0 = _code[2].weight[:, 1]
+    
+    for k in axes(mu)[1]
+        Ud = Udata[:, k, :]
+        data = (Xdata, Ud, Tdata)
+        @time _, Up, Tpred = evolve_autodecoder(prob, decoder, md, data, p0;
+            rng, device, verbose)
+    
+        if makeplot
+            if in_dim == 1
+                xlabel = "x"
+                ylabel = "u(x, t)"
+
+                _mu   = mu[k]
+                title = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+                _name = k in _Ib ? "evolve_train$(k)" : "evolve_test$(k)"
+
+                plt = plot(; title, xlabel, ylabel, legend = false)
+                plot!(plt, Xdata, Up[:, idx], w = 2.0,  s = :solid)
+                plot!(plt, Xdata, Ud[:, idx], w = 4.0,  s = :dash)
+                png(plt, joinpath(outdir, _name))
+                display(plt)
+
+                anim = animate1D(Ud, Up, Xdata, Tdata;
+                                 w = 2, xlabel, ylabel, title)
+                gif(anim, joinpath(outdir, "$(_name).gif"); fps)
+
+            elseif in_dim == 2
+                xlabel = "x"
+                ylabel = "y"
+                zlabel = "u(x, t)"
+
+                kw = (; xlabel, ylabel, zlabel,)
+
+                x_plt = reshape(Xdata[1, :], md_data.Nx, md_data.Ny)
+                y_plt = reshape(Xdata[2, :], md_data.Nx, md_data.Ny)
+
+                for i in eachindex(idx_pred)
+                    upred_re = reshape(upred[:, i], md_data.Nx, md_data.Ny)
+                    udata_re = reshape(udata[:, i], md_data.Nx, md_data.Ny)
+
+                    p1 = meshplt(x_plt, y_plt, upred_re;
+                        title, kw...,)
+                    png(p1, joinpath(outdir, "train_$(k)_time_$(i)"))
+
+                    p2 = meshplt(x_plt, y_plt, upred_re - udata_re;
+                        title = "error", kw...,)
+                    png(p2, joinpath(outdir, "train_$(k)_time_$(i)_error"))
+                end
+            end
+        end
+    end
 
     #==============#
     # check derivative
     #==============#
-    begin
-        second_derv = false
-        third_derv = false
-        fourth_derv = true
-
-        decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-        ncodes = size(_code[2].weight, 2)
-        idx = LinRange(1, ncodes, 10) .|> Base.Fix1(round, Int)
-
-        for i in idx
-            p0 = _code[2].weight[:, i]
-
-            p1 = plot_derivatives1D_autodecoder(
-                decoder, Xdata, p0, md;
-                second_derv,
-                autodiff = AutoFiniteDiff(), ϵ=1f-2,
-            )
-            png(p1, joinpath(outdir, "derv_$(i)_FD_AD"))
-
-            p2 = plot_derivatives1D_autodecoder(
-                decoder, Xdata, p0, md;
-                second_derv, third_derv, fourth_derv,
-                autodiff = AutoForwardDiff(),
-            )
-            png(p2, joinpath(outdir, "derv_$(i)_FWD_AD"))
-            display(p2)
-        end
-    end
+    # begin
+    #     second_derv = false
+    #     third_derv = false
+    #     fourth_derv = true
+    #
+    #     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    #     ncodes = size(_code[2].weight, 2)
+    #     idx = LinRange(1, ncodes, 10) .|> Base.Fix1(round, Int)
+    #
+    #     for i in idx
+    #         p0 = _code[2].weight[:, i]
+    #
+    #         p1 = plot_derivatives1D_autodecoder(
+    #             decoder, Xdata, p0, md;
+    #             second_derv,
+    #             autodiff = AutoFiniteDiff(), ϵ=1f-2,
+    #         )
+    #         png(p1, joinpath(outdir, "derv_$(i)_FD_AD"))
+    #
+    #         p2 = plot_derivatives1D_autodecoder(
+    #             decoder, Xdata, p0, md;
+    #             second_derv, third_derv, fourth_derv,
+    #             autodiff = AutoForwardDiff(),
+    #         )
+    #         png(p2, joinpath(outdir, "derv_$(i)_FWD_AD"))
+    #         display(p2)
+    #     end
+    # end
 
     #==============#
     # Done

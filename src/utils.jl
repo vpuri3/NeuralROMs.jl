@@ -88,7 +88,8 @@ function scale_init(init, scale::Real, shift::Real)
     end
 end
 #===========================================================#
-function remake_ca(
+
+function remake_ca_in_model(
     NN::Lux.AbstractExplicitLayer,
     p::Union{NamedTuple, AbstractArray},
     st::NamedTuple,
@@ -100,9 +101,24 @@ function remake_ca(
         NN, p, st
     end
 end
+
 #===========================================================#
 
-_getdata(loader::MLUtils.DataLoader) = loader.data
-_getdata(loader::CuIterator) = _getdata(loader.batches)
+function normalizedata(
+    u::AbstractArray,
+    μ::Union{Number, AbstractVecOrMat},
+    σ::Union{Number, AbstractVecOrMat},
+)
+    (u .- μ) ./ σ
+end
+
+function unnormalizedata(
+    u::AbstractArray,
+    μ::Union{Number, AbstractVecOrMat},
+    σ::Union{Number, AbstractVecOrMat},
+)
+    (u .* σ) .+ μ
+end
+
 #===========================================================#
 #

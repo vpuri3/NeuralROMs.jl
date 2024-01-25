@@ -20,18 +20,6 @@ function uIC(x, y; μ = (0.5f0, 0.5f0), σ = 0.1f0) # μ = (-0.5, -0.5)
     u  = @. exp(-1f0/2f0 * r2/(σ^2))
 end
 
-function meshplt(
-    x::AbstractArray,
-    y::AbstractArray,
-    u::AbstractArray;
-    a::Real = 45, b::Real = 30, c = :grays, legend = false,
-    kwargs...,
-)
-
-    plt = plot(x, y, u; c, camera = (a,b), legend, kwargs...)
-    plt = plot!(plt, x', y', u'; c, camera = (a,b), legend, kwargs...)
-end
-
 function advect1D(Nx, Ny, ν, cx, cy, mu = nothing, p = nothing;
     domain = FourierDomain(2),
     tspan=(0.f0, 2.0f0), # (0, 4)
@@ -107,7 +95,7 @@ function advect1D(Nx, Ny, ν, cx, cy, mu = nothing, p = nothing;
         # saving
         mu = isnothing(mu) ? fill(nothing, size(u, 2)) |> Tuple : mu
         x_save = reshape(vcat(x', y'), 2, Nxy)
-        metadata = (; cx, cy, ν, readme = "u [Nx, Nbatch, Nt]")
+        metadata = (; Nx, Ny, cx, cy, ν, readme = "u [Nx, Nbatch, Nt]")
 
         filename = joinpath(dir, "data.jld2")
         jldsave(filename; x = x_save, u, udx, udy, t, mu, metadata)

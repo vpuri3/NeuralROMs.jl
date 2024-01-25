@@ -71,7 +71,7 @@ function get_INR_encoder_decoder(NN::Lux.AbstractExplicitLayer, p, st)
     encoder = (NN.layers.encode.layers.encoder, p.encode.encoder, st.encode.encoder)
     decoder = (NN.layers.decoder, p.decoder, st.decoder)
     
-    remake_ca(encoder...), remake_ca(decoder...)
+    remake_ca_in_model(encoder...), remake_ca_in_model(decoder...)
 end
 
 #======================================================#
@@ -124,7 +124,7 @@ function get_autodecoder(
     decoder = (NN.layers.decoder, p.decoder, st.decoder)
     code    = (NN.layers.assem.layers.codex.layers.code, p.assem.codex.code, st.assem.codex.code)
 
-    remake_ca(decoder...), remake_ca(code...)
+    remake_ca_in_model(decoder...), remake_ca_in_model(code...)
 end
 
 function freeze_autodecoder(

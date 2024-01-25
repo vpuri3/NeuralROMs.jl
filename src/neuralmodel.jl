@@ -1,21 +1,5 @@
 
 #===========================================================#
-function normalizedata(
-    u::AbstractArray,
-    μ::Union{Number, AbstractVecOrMat},
-    σ::Union{Number, AbstractVecOrMat},
-)
-    (u .- μ) ./ σ
-end
-
-function unnormalizedata(
-    u::AbstractArray,
-    μ::Union{Number, AbstractVecOrMat},
-    σ::Union{Number, AbstractVecOrMat},
-)
-    (u .* σ) .+ μ
-end
-#===========================================================#
 @concrete mutable struct NeuralModel{Tx, Tu} <: AbstractNeuralModel
     NN
     st
@@ -84,8 +68,8 @@ function NeuralEmbeddingModel(
 ) where{T<:Number}
 
     Icode = if isnothing(Icode)
-        IT = T isa Type{Float64} ? Int64 : Int32
-        Icode = similar(x, IT)
+        sz = (1, size(x)[2:end]...,)
+        Icode = similar(x, Int32, sz)
         fill!(Icode, true)
     end
 
@@ -126,7 +110,8 @@ function (model::NeuralEmbeddingModel)(
 )
 
     Zygote.@ignore Icode = if isnothing(model.Icode)
-        Icode = similar(x, Int32)
+        sz = (1, size(x)[2:end]...,)
+        Icode = similar(x, Int32, sz)
         fill!(Icode, true)
     end
 
@@ -150,11 +135,7 @@ function dudx1_1D(
         model(x, p)
     end
 
-    if isa(autodiff, AutoFiniteDiff)
-        finitediff_deriv1(dudx1_1D_internal, x; ϵ)
-    elseif isa(autodiff, AutoForwardDiff)
-        forwarddiff_deriv1(dudx1_1D_internal, x)
-    end
+    doautodiff1(dudx1_1D_internal, x, autodiff, ϵ)
 end
 
 function dudx2_1D(
@@ -168,11 +149,7 @@ function dudx2_1D(
         model(x, p)
     end
 
-    if isa(autodiff, AutoFiniteDiff)
-        finitediff_deriv2(dudx2_1D_internal, x; ϵ)
-    elseif isa(autodiff, AutoForwardDiff)
-        forwarddiff_deriv2(dudx2_1D_internal, x)
-    end
+    doautodiff2(dudx2_1D_internal, x, autodiff, ϵ)
 end
 
 function dudx4_1D(
@@ -186,41 +163,38 @@ function dudx4_1D(
         model(x, p)
     end
 
-    if isa(autodiff, AutoFiniteDiff)
-        finitediff_deriv4(dudx4_1D_internal, x; ϵ)
-    elseif isa(autodiff, AutoForwardDiff)
-        forwarddiff_deriv4(dudx4_1D_internal, x)
-    else
-        error("Got unsupported `autodiff = `$autodiff")
-    end
+    doautodiff4(dudx4_1D_internal, x, autodiff, ϵ)
 end
 
-#===========================================================#
-# For 2D, make X a tuple (X, Y). should work fine with dUdX, etc
-# otherwise need `makeUfromXY`, `makeUfromX_newmodel` type functions
 #===========================================================#
 
 function dudx1_2D(
     model::AbstractNeuralModel,
-    xy::AbstractMatrix,
+    xy::AbstractArray,
     p::AbstractVector;
     autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ = nothing,
 )
-    @assert size(xy, 1) == true
+    @assert size(xy, 1) == 2
+    @assert ndims(xy) == 2 "TODO: implement reshapes to handle ND arrays"
 
-    x = @view xy[1, :] # use getindex if this errors
-    y = @view xy[2, :]
+    x = getindex(xy, 1:1, :)
+    y = getindex(xy, 2:2, :)
 
-    function dudx1_2D_internal(x)
-        model(x, p)
+    function dudx1_2D_internal_dx(x_internal)
+        xy_internal = vcat(x_internal, y)
+        model(xy_internal, p)
     end
 
-    if isa(autodiff, AutoFiniteDiff)
-        finitediff_deriv1(dudx1_2D_internal, x; ϵ)
-    elseif isa(autodiff, AutoForwardDiff)
-        forwarddiff_deriv1(dudx1_2D_internal, x)
+    function dudx1_2D_internal_dy(y_internal)
+        xy_internal = vcat(x, y_internal)
+        model(xy_internal, p)
     end
+
+    u, udx = doautodiff1(dudx1_2D_internal_dx, x, autodiff, ϵ)
+    _, udy = doautodiff1(dudx1_2D_internal_dy, y, autodiff, ϵ)
+
+    u, (udx, udy,)
 end
 
 #===========================================================#
@@ -236,11 +210,7 @@ function dudp(
         model(x, p)
     end
 
-    if isa(autodiff, AutoFiniteDiff)
-        finitediff_jacobian(dudp_internal, p; ϵ)
-    elseif isa(autodiff, AutoForwardDiff)
-        forwarddiff_jacobian(dudp_internal, p)
-    end
+    doautodiff_jacobian(dudp_internal, p, autodiff, ϵ)
 end
 #===========================================================#
 

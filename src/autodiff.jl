@@ -37,11 +37,6 @@ function forwarddiff_deriv1(f,
     fx, fdx
 end
 
-function forwarddiff_deriv1(f,
-    (x, y)::NTuple{2, ADInputTypes{T}},
-) where{T}
-    error("TODO. What should signature of f be? f(x) ?")
-end
 #======================================================#
 
 function forwarddiff_deriv2(f,
@@ -185,3 +180,55 @@ function finitediff_jacobian(f,
 end
 
 #======================================================#
+#======================================================#
+#======================================================#
+# helper functions
+#======================================================#
+#======================================================#
+#======================================================#
+
+# first derivative
+function doautodiff1(f, x, autodiff, ϵ)
+    if isa(autodiff, AutoFiniteDiff)
+        finitediff_deriv1(f, x; ϵ)
+    elseif isa(autodiff, AutoForwardDiff)
+        forwarddiff_deriv1(f, x)
+    else
+        error("Got unsupported `autodiff = `$autodiff")
+    end
+end
+
+# second derivative
+function doautodiff2(f, x, autodiff, ϵ)
+    if isa(autodiff, AutoFiniteDiff)
+        finitediff_deriv2(f, x; ϵ)
+    elseif isa(autodiff, AutoForwardDiff)
+        forwarddiff_deriv2(f, x)
+    else
+        error("Got unsupported `autodiff = `$autodiff")
+    end
+end
+
+# fourth derivative
+function doautodiff4(f, x, autodiff, ϵ)
+    if isa(autodiff, AutoFiniteDiff)
+        finitediff_deriv4(f, x; ϵ)
+    elseif isa(autodiff, AutoForwardDiff)
+        forwarddiff_deriv4(f, x)
+    else
+        error("Got unsupported `autodiff = `$autodiff")
+    end
+end
+
+# jacobian
+function doautodiff_jacobian(f, x, autodiff, ϵ)
+    if isa(autodiff, AutoFiniteDiff)
+        finitediff_jacobian(f, x; ϵ)
+    elseif isa(autodiff, AutoForwardDiff)
+        forwarddiff_jacobian(f, x)
+    else
+        error("Got unsupported `autodiff = `$autodiff")
+    end
+end
+#======================================================#
+#

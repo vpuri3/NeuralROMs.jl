@@ -75,6 +75,18 @@ function animate2D(
     end
 end
 
+function meshplt(
+    x::AbstractArray,
+    y::AbstractArray,
+    u::AbstractArray;
+    a::Real = 45, b::Real = 30, c = :grays, legend = false,
+    kwargs...,
+)
+
+    plt = plot(x, y, u; c, camera = (a,b), legend, kwargs...)
+    plt = plot!(plt, x', y', u'; c, camera = (a,b), legend, kwargs...)
+end
+
 #===============================================================#
 
 function plot_derivatives1D(

@@ -66,7 +66,7 @@ export AbstractNeuralModel, AbstractPDEProblem, AbstractTimeAlg,
     AbstractTimeIntegrator, AbstractSolveScheme
 
 include("utils.jl")
-export init_siren, scale_init, scaled_siren_init, remake_ca
+export init_siren, scale_init, scaled_siren_init
 
 include("metrics.jl")
 export mae, mse, rsquare, pnorm, elasticreg, codereg,
@@ -102,7 +102,8 @@ export
 include("problems.jl")
 export dudtRHS
 export
-    Advection1D, AdvectionDiffusion1D,
+    Advection1D, Advection2D,
+    AdvectionDiffusion1D,
     BurgersInviscid1D, BurgersViscous1D,
     KuramotoSivashinsky1D
 
@@ -128,7 +129,8 @@ export train_model, callback, optimize, plot_training
 
 include("vis.jl")
 export
-    animate1D, plot_1D_surrogate_steady,
-    plot_derivatives1D, plot_derivatives1D_autodecoder
+    animate1D, animate2D, meshplt,
+    plot_derivatives1D, plot_derivatives1D_autodecoder,
+    plot_1D_surrogate_steady
 
 end # module

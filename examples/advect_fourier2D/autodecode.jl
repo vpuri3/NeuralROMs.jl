@@ -28,6 +28,7 @@ function test_autodecoder(
     Xdata = data["x"]
     Udata = data["u"]
     mu = data["mu"]
+    md_data = data["metadata"]
 
     close(data)
 
@@ -49,8 +50,9 @@ function test_autodecoder(
     # subsample in space
     #==============#
     Udata = @view Udata[md.makedata_kws.Ix, :, :]
-    Xdata = @view Xdata[md.makedata_kws.Ix]
-    Nx = length(Xdata)
+    Xdata = @view Xdata[:, md.makedata_kws.Ix]
+
+    in_dim, Nx = size(Xdata)
 
     #==============#
     mkpath(outdir)
@@ -59,36 +61,41 @@ function test_autodecoder(
     k = 1
     It = LinRange(1,length(Tdata), 10) .|> Base.Fix1(round, Int)
 
-    Ud = Udata[:, k, It]
-    U0 = Ud[:, 1]
-    data = (reshape(Xdata, 1, :), reshape(U0, 1, :), Tdata[It])
+    Udata = Udata[:, k, It]
+    data = (Xdata, reshape(Udata[:, 1], 1, :), Tdata[It])
+
+    data = copy.(data) # ensure no SubArrays
 
     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     p0 = _code[2].weight[:, 1]
 
     # time evolution prams
     timealg = EulerForward() # EulerForward(), RK2(), RK4()
-    Δt = 1f-1
+    Δt = 1f-2
     adaptive = false
 
-    @time _, _, Up = evolve_autodecoder(
+    @time _, _, Upred = evolve_autodecoder(
         prob, decoder, md, data, p0, timealg, Δt, adaptive;
         rng, device, verbose)
 
-    Ix_plt = 1:4:Nx
-    plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
-    plot!(plt, Xdata, Up, w = 2, palette = :tab10)
-    scatter!(plt, Xdata[Ix_plt], Ud[Ix_plt, :], w = 1, palette = :tab10)
+    # visualiaztion
+    kw = (; xlabel = "x", ylabel = "y", zlabel = "u(x,t)")
 
-    _inf  = norm(Up - Ud, Inf)
-    _mse  = sum(abs2, Up - Ud) / length(Ud)
-    _rmse = sum(abs2, Up - Ud) / sum(abs2, Ud) |> sqrt
-    println("||∞ : $(_inf)")
-    println("MSE : $(_mse)")
-    println("RMSE: $(_rmse)")
+    x_plt = reshape(Xdata[1, :], md_data.Nx, md_data.Ny)
+    y_plt = reshape(Xdata[2, :], md_data.Nx, md_data.Ny)
 
-    png(plt, joinpath(outdir, "evolve_$k"))
-    display(plt)
+    for i in eachindex(It)
+        upred_re = reshape(Upred[:, i], md_data.Nx, md_data.Ny)
+        udata_re = reshape(Udata[:, i], md_data.Nx, md_data.Ny)
+
+        p1 = meshplt(x_plt, y_plt, upred_re;
+                     title = "Solution", kw...,)
+        png(p1, joinpath(outdir, "evolve_$(k)_time_$(i)"))
+
+        p2 = meshplt(x_plt, y_plt, upred_re - udata_re;
+                     title = "Error", kw...,)
+        png(p2, joinpath(outdir, "evolve_$(k)_time_$(i)_error"))
+    end
 
     nothing
 end
@@ -99,7 +106,7 @@ end
 rng = Random.default_rng()
 Random.seed!(rng, 460)
 
-# prob = Advection2D(0.25f0)
+prob = Advection2D(0.25f0, 0.00f0)
 
 device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "data_advect/", "data.jld2")
@@ -124,10 +131,10 @@ weight_decays = 1f-2             # 1f-2
 
 ## process
 outdir = joinpath(modeldir, "results")
-postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-    makeplot = true, verbose = true)
-# test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+# postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
 #     makeplot = true, verbose = true)
+test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+    makeplot = true, verbose = true)
 #======================================================#
 nothing
 #

@@ -16,7 +16,7 @@ function dudtRHS(
     c = prob.c
     _, udx = dudx1_1D(model, x, p; autodiff, ϵ)
 
-    @. -c * udx
+    @. -(c * udx)
 end
 
 #===================================================#
@@ -36,7 +36,7 @@ function dudtRHS(
 )
     cx, cy = prob.cx, prob.cy
 
-    _, udx, udy = dudx1_2D(model, x, p; autodiff, ϵ)
+    _, (udx, udy) = dudx1_2D(model, x, p; autodiff, ϵ)
 
     @. -(cx * udx + cy * udy)
 end
