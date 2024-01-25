@@ -13,8 +13,8 @@ function animate1D(
     ylims = begin
         mi = minimum(u)
         ma = maximum(u)
-        buf = (ma - mi) / 5
-    (mi - buf, ma + buf)
+        buf = false #(ma - mi) / 5
+        (mi - buf, ma + buf)
     end
     kw = (; ylims, kwargs...)
     anim = @animate for i in 1:size(u, 2)
@@ -54,24 +54,59 @@ end
 #===============================================================#
 
 function animate2D(
-    u::AbstractMatrix,
-    x::AbstractVector,
+    u::AbstractArray{T,3},
+    x::AbstractMatrix,
+    y::AbstractMatrix,
     t::AbstractVector = [];
     title = "",
     kwargs...
-)
+) where{T <: Real}
+
     if isempty(t)
         t = 1:size(u, 2)
     end
 
-    clim = begin
+    zlims = begin
         mi = minimum(u)
         ma = maximum(u)
-        (mi, ma)
+        buf = false #(ma - mi) / 5
+        (mi - buf, ma + buf)
     end
-    anim = @animate for i in 1:size(u, 2)
-        titlestr = "time = $(round(t[i], digits=8))"
-        plt = plot(u[:, i], space; clim = clim, title = titlestr, kwargs...)
+    kw = (; zlims, kwargs...)
+
+    anim = @animate for i in 1:size(u, 3)
+        titlestr = title * "time = $(round(t[i], digits=8))"
+        meshplt(x, y, u[:, :, i], ; title = titlestr, kw...)
+    end
+end
+
+function animate2D(
+    u::AbstractArray{T,3},
+    v::AbstractArray{T,3},
+    x::AbstractMatrix,
+    y::AbstractMatrix,
+    t::AbstractVector = [];
+    title = "",
+    kwargs...
+) where{T <: Real}
+
+    if isempty(t)
+        t = 1:size(u, 2)
+    end
+
+    zlims = begin
+        mi = minimum(u)
+        ma = maximum(u)
+        buf = false #(ma - mi) / 5
+        (mi - buf, ma + buf)
+    end
+    kw = (; zlims, kwargs...)
+
+    anim = @animate for i in 1:size(u, 3)
+        titlestr = title * "time = $(round(t[i], digits=8))"
+        p1 = plot(; title = titlestr)
+        p1 = meshplt(x, y, u[:, :, i]; plt = p1, c=:black, w = 1.0, kw...,)
+        p1 = meshplt(x, y, v[:, :, i]; plt = p1, c=:red  , w = 0.2, kw...,)
     end
 end
 
@@ -79,12 +114,14 @@ function meshplt(
     x::AbstractArray,
     y::AbstractArray,
     u::AbstractArray;
+    plt::Union{Nothing, Plots.Plot} = nothing,
     a::Real = 45, b::Real = 30, c = :grays, legend = false,
     kwargs...,
 )
+    plt = isnothing(plt) ? plot() : plt
 
-    plt = plot(x, y, u; c, camera = (a,b), legend, kwargs...)
-    plt = plot!(plt, x', y', u'; c, camera = (a,b), legend, kwargs...)
+    plot!(plt, x , y , u ; c, camera = (a,b), legend, kwargs...)
+    plot!(plt, x', y', u'; c, camera = (a,b), legend, kwargs...)
 end
 
 #===============================================================#

@@ -473,21 +473,29 @@ function postprocess_autodecoder(
 
                 kw = (; xlabel, ylabel, zlabel,)
 
-                x_plt = reshape(Xdata[1, :], md_data.Nx, md_data.Ny)
-                y_plt = reshape(Xdata[2, :], md_data.Nx, md_data.Ny)
+                x_re = reshape(Xdata[1, :], md_data.Nx, md_data.Ny)
+                y_re = reshape(Xdata[2, :], md_data.Nx, md_data.Ny)
+
+                upred_re = reshape(upred, md_data.Nx, md_data.Ny, :)
+                udata_re = reshape(udata, md_data.Nx, md_data.Ny, :)
 
                 for i in eachindex(idx_pred)
-                    upred_re = reshape(upred[:, i], md_data.Nx, md_data.Ny)
-                    udata_re = reshape(udata[:, i], md_data.Nx, md_data.Ny)
+                    up_re = upred_re[:, :, i]
+                    ud_re = udata_re[:, :, i]
 
-                    p1 = meshplt(x_plt, y_plt, upred_re;
-                        title, kw...,)
+                    p1 = plot()
+                    p1 = meshplt(x_re, y_re, ud_re; plt = p1, c=:black, w = 1.0, kw...,)
+                    p1 = meshplt(x_re, y_re, up_re; plt = p1, c=:red  , w = 0.2, kw...,)
+
                     png(p1, joinpath(outdir, "train_$(k)_time_$(i)"))
 
-                    p2 = meshplt(x_plt, y_plt, upred_re - udata_re;
+                    p2 = meshplt(x_re, y_re, ud_re - up_re;
                         title = "error", kw...,)
                     png(p2, joinpath(outdir, "train_$(k)_time_$(i)_error"))
                 end
+
+                anim = animate2D(udata_re, upred_re, x_re, y_re, Tdata[idx_data])
+                gif(anim, joinpath(outdir, "train_$(k).gif"), fps = 10)
             end
         end
     end
@@ -535,59 +543,59 @@ function postprocess_autodecoder(
     # evolve
     #==============#
     
-    decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-    p0 = _code[2].weight[:, 1]
-    
-    for k in axes(mu)[1]
-        Ud = Udata[:, k, :]
-        data = (Xdata, Ud, Tdata)
-        @time _, Up, Tpred = evolve_autodecoder(prob, decoder, md, data, p0;
-            rng, device, verbose)
-    
-        if makeplot
-            if in_dim == 1
-                xlabel = "x"
-                ylabel = "u(x, t)"
-
-                _mu   = mu[k]
-                title = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
-                _name = k in _Ib ? "evolve_train$(k)" : "evolve_test$(k)"
-
-                plt = plot(; title, xlabel, ylabel, legend = false)
-                plot!(plt, Xdata, Up[:, idx], w = 2.0,  s = :solid)
-                plot!(plt, Xdata, Ud[:, idx], w = 4.0,  s = :dash)
-                png(plt, joinpath(outdir, _name))
-                display(plt)
-
-                anim = animate1D(Ud, Up, Xdata, Tdata;
-                                 w = 2, xlabel, ylabel, title)
-                gif(anim, joinpath(outdir, "$(_name).gif"); fps)
-
-            elseif in_dim == 2
-                xlabel = "x"
-                ylabel = "y"
-                zlabel = "u(x, t)"
-
-                kw = (; xlabel, ylabel, zlabel,)
-
-                x_plt = reshape(Xdata[1, :], md_data.Nx, md_data.Ny)
-                y_plt = reshape(Xdata[2, :], md_data.Nx, md_data.Ny)
-
-                for i in eachindex(idx_pred)
-                    upred_re = reshape(upred[:, i], md_data.Nx, md_data.Ny)
-                    udata_re = reshape(udata[:, i], md_data.Nx, md_data.Ny)
-
-                    p1 = meshplt(x_plt, y_plt, upred_re;
-                        title, kw...,)
-                    png(p1, joinpath(outdir, "train_$(k)_time_$(i)"))
-
-                    p2 = meshplt(x_plt, y_plt, upred_re - udata_re;
-                        title = "error", kw...,)
-                    png(p2, joinpath(outdir, "train_$(k)_time_$(i)_error"))
-                end
-            end
-        end
-    end
+    # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    # p0 = _code[2].weight[:, 1]
+    #
+    # for k in axes(mu)[1]
+    #     Ud = Udata[:, k, :]
+    #     data = (Xdata, Ud, Tdata)
+    #     @time _, Up, Tpred = evolve_autodecoder(prob, decoder, md, data, p0;
+    #         rng, device, verbose)
+    #
+    #     if makeplot
+    #         if in_dim == 1
+    #             xlabel = "x"
+    #             ylabel = "u(x, t)"
+    #
+    #             _mu   = mu[k]
+    #             title = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+    #             _name = k in _Ib ? "evolve_train$(k)" : "evolve_test$(k)"
+    #
+    #             plt = plot(; title, xlabel, ylabel, legend = false)
+    #             plot!(plt, Xdata, Up[:, idx], w = 2.0,  s = :solid)
+    #             plot!(plt, Xdata, Ud[:, idx], w = 4.0,  s = :dash)
+    #             png(plt, joinpath(outdir, _name))
+    #             display(plt)
+    #
+    #             anim = animate1D(Ud, Up, Xdata, Tdata;
+    #                              w = 2, xlabel, ylabel, title)
+    #             gif(anim, joinpath(outdir, "$(_name).gif"); fps)
+    #
+    #         elseif in_dim == 2
+    #             xlabel = "x"
+    #             ylabel = "y"
+    #             zlabel = "u(x, t)"
+    #
+    #             kw = (; xlabel, ylabel, zlabel,)
+    #
+    #             x_re = reshape(Xdata[1, :], md_data.Nx, md_data.Ny)
+    #             y_re = reshape(Xdata[2, :], md_data.Nx, md_data.Ny)
+    #
+    #             for i in eachindex(idx_pred)
+    #                 upred_re = reshape(upred[:, i], md_data.Nx, md_data.Ny)
+    #                 udata_re = reshape(udata[:, i], md_data.Nx, md_data.Ny)
+    #
+    #                 p1 = meshplt(x_re, y_re, upred_re;
+    #                     title, kw...,)
+    #                 png(p1, joinpath(outdir, "train_$(k)_time_$(i)"))
+    #
+    #                 p2 = meshplt(x_re, y_re, upred_re - udata_re;
+    #                     title = "error", kw...,)
+    #                 png(p2, joinpath(outdir, "train_$(k)_time_$(i)_error"))
+    #             end
+    #         end
+    #     end
+    # end
 
     #==============#
     # check derivative

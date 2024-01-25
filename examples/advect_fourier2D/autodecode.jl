@@ -81,21 +81,31 @@ function test_autodecoder(
     # visualiaztion
     kw = (; xlabel = "x", ylabel = "y", zlabel = "u(x,t)")
 
-    x_plt = reshape(Xdata[1, :], md_data.Nx, md_data.Ny)
-    y_plt = reshape(Xdata[2, :], md_data.Nx, md_data.Ny)
+    x_re = reshape(Xdata[1, :], md_data.Nx, md_data.Ny)
+    y_re = reshape(Xdata[2, :], md_data.Nx, md_data.Ny)
+
+    upred_re = reshape(Upred, md_data.Nx, md_data.Ny, length(It))
+    udata_re = reshape(Udata, md_data.Nx, md_data.Ny, length(It))
 
     for i in eachindex(It)
-        upred_re = reshape(Upred[:, i], md_data.Nx, md_data.Ny)
-        udata_re = reshape(Udata[:, i], md_data.Nx, md_data.Ny)
 
-        p1 = meshplt(x_plt, y_plt, upred_re;
-                     title = "Solution", kw...,)
+        up_re = upred_re[:, :, i]
+        ud_re = udata_re[:, :, i]
+
+        p1 = plot()
+        p1 = meshplt(x_re, y_re, ud_re; plt = p1, c=:black, w = 1.0, kw...,)
+        p1 = meshplt(x_re, y_re, up_re; plt = p1, c=:red  , w = 0.2, kw...,)
+
         png(p1, joinpath(outdir, "evolve_$(k)_time_$(i)"))
 
-        p2 = meshplt(x_plt, y_plt, upred_re - udata_re;
-                     title = "Error", kw...,)
+        er_re = up_re - ud_re
+        p2 = meshplt(x_re, y_re, er_re; title = "Error", kw...,)
+
         png(p2, joinpath(outdir, "evolve_$(k)_time_$(i)_error"))
     end
+
+    anim = animate2D(udata_re, upred_re, x_re, y_re, Tdata[It])
+    gif(anim, joinpath(outdir, "evolve_$(k).gif"), fps = 10)
 
     nothing
 end
@@ -131,8 +141,8 @@ weight_decays = 1f-2             # 1f-2
 
 ## process
 outdir = joinpath(modeldir, "results")
-# postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-#     makeplot = true, verbose = true)
+postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+    makeplot = true, verbose = true)
 test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
     makeplot = true, verbose = true)
 #======================================================#
