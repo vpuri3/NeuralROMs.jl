@@ -88,7 +88,6 @@ function test_autodecoder(
     udata_re = reshape(Udata, md_data.Nx, md_data.Ny, length(It))
 
     for i in eachindex(It)
-
         up_re = upred_re[:, :, i]
         ud_re = udata_re[:, :, i]
 
@@ -106,6 +105,13 @@ function test_autodecoder(
 
     anim = animate2D(udata_re, upred_re, x_re, y_re, Tdata[It])
     gif(anim, joinpath(outdir, "evolve_$(k).gif"), fps = 10)
+
+    _inf  = norm(Upred - Udata, Inf)
+    _mse  = sum(abs2, Upred - Udata) / length(Udata)
+    _rmse = sum(abs2, Upred - Udata) / sum(abs2, Udata) |> sqrt
+    println("||∞ : $(_inf)")
+    println("MSE : $(_mse)")
+    println("RMSE: $(_rmse)")
 
     nothing
 end
