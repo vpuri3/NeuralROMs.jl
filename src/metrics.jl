@@ -97,7 +97,7 @@ function elasticreg(lossfun, λ1::Real, λ2::Real; property = nothing)
 
         lreg = l + l1 + l2
 
-        lreg, st_new, (; stats, l, l1, l2)
+        lreg, st_new, (; stats..., l, l1, l2)
     end
 end
 
@@ -127,7 +127,7 @@ function codereg(lossfun, σ2inv::Real)
 
         loss = l + lcode
 
-        loss, st_new, (; stats, l, lcode)
+        loss, st_new, (; stats..., l, lcode)
     end
 end
 
@@ -137,11 +137,12 @@ end
     regularize_autodecoder(lossfun, σ, λ1, λ2, property)(NN, p, st, batch) -> l, st, stats
 
 code reg loss, L1/L2 on decoder
-`lossfun(..) + 1/σ² ||ũ||₂² + L1/L2 on decoder`
+`lossfun(..) + 1/σ² ||ũ||₂² + L1/L2 on decoder + Lipschitz reg. on decoder`
 """
 function regularize_autodecoder(
     lossfun;
     σ2inv::T = Inf32,
+    α::T = 0f0,
     λ1::T = 0f0,
     λ2::T = 0f0,
 ) where{T<:Real}
@@ -167,6 +168,13 @@ function regularize_autodecoder(
         end
 
         ###
+        # Lipschitz reg on decoder
+        ###
+
+        cbound = get_cbound(decoder...)
+        lcond  =  iszero(α) ? T(0) : cbound * α / N
+
+        ###
         # elastic reg on decoder
         ###
 
@@ -189,9 +197,9 @@ function regularize_autodecoder(
         # sum
         ###
 
-        loss = l + lcode + l1 + l2
+        loss = l + lcode + lcond + l1 + l2
     
-        loss, st_new, (; stats, l, lcode, l1, l2)
+        loss, st_new, (; stats..., l, lcode, lcond, cbound, l1, l2)
     end
 end
 #=====================================================================#

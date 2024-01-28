@@ -246,22 +246,95 @@ function (hn::HyperNet)((x, y)::T, ps, st::NamedTuple) where {T <: Tuple}
 end
 
 #======================================================#
-# Lipschitz Layer
+# Sine Layer
+# https://github.com/vsitzmann/siren?tab=readme-ov-file
 #======================================================#
+export SDense
+@concrete struct SDense{use_bias} <: Lux.AbstractExplicitLayer
+    activation
+    in_dims::Int
+    out_dims::Int
+    init_weight
+    init_bias
+    ω0
+    is_first
+end
+
+function SDense(
+    in_dims::Int,
+    out_dims::Int,
+    activation=identity;
+    init_weight=glorot_uniform,
+    init_bias=zeros32,
+    use_bias::Bool=true,
+    allow_fast_activation::Bool=true,
+    ω0::Real = 30f0,
+    is_first::Bool = false,
+)
+    activation = allow_fast_activation ? NNlib.fast_act(activation) : activation
+    return SDense{use_bias}(activation, in_dims, out_dims, init_weight, init_bias, ω0, is_first)
+end
+
+function Lux.initialparameters(
+    rng::AbstractRNG,
+    d::SDense{use_bias}
+) where {use_bias}
+
+    bias = d.init_bias(rng, d.out_dims, 1)
+    weight = d.init_weight(rng, d.out_dims, d.in_dims)
+
+    T = eltype(weight)
+    ω = [T(d.ω0),]
+
+    ## scale so that weight * ω ~ unit
+    if !d.is_first
+        weight = weight ./ ω
+        bias   = bias   ./ ω
+    end
+
+    if use_bias
+        return (; weight, bias, ω)
+    else
+        return (; weight, ω)
+    end
+end
+
+function Lux.parameterlength(d::SDense{use_bias}) where {use_bias}
+    return use_bias ? d.out_dims * (d.in_dims + 1) + 1 : d.out_dims * d.in_dims + 1
+end
+
+Lux.statelength(d::SDense) = 0
+
+@inline function (d::SDense{false})(x::AbstractVecOrMat, ps, st::NamedTuple)
+    z = ps.weight * x
+    return Lux.__apply_activation(d.activation, ps.ω .* z), st
+end
+
+@inline function (d::SDense{true})(x::AbstractVector, ps, st::NamedTuple)
+    z = ps.weight * x .+ vec(ps.bias)
+    y = Lux.__apply_activation(d.activation, ps.ω .* z)
+    return y, st
+end
+
+@inline function (d::SDense{true})(x::AbstractMatrix, ps, st::NamedTuple)
+    z = ps.weight * x .+ ps.bias
+    y = Lux.__apply_activation(d.activation, ps.ω .* z)
+    return y, st
+end
+
+#======================================================#
+# Lipschitz Layer
+# https://arxiv.org/pdf/2202.08345.pdf
+#======================================================#
+export LDense
 @concrete struct LDense{use_bias} <: Lux.AbstractExplicitLayer
     activation
     in_dims::Int
     out_dims::Int
     init_weight
     init_bias
-end
-
-function LDense(
-    mapping::Pair{<:Int, <:Int},
-    activation=identity;
-    kwargs...
-)
-    return LDense(first(mapping), last(mapping), activation; kwargs...)
+    ω0
+    is_first
 end
 
 function LDense(
@@ -271,50 +344,95 @@ function LDense(
     init_weight=glorot_uniform,
     init_bias=zeros32,
     use_bias::Bool=true,
-    allow_fast_activation::Bool=true
+    allow_fast_activation::Bool=true,
+    ω0::Real = 30f0,
+    is_first::Bool = false,
 )
     activation = allow_fast_activation ? NNlib.fast_act(activation) : activation
-    return LDense{use_bias}(activation, in_dims, out_dims, init_weight, init_bias)
+    return LDense{use_bias}(activation, in_dims, out_dims, init_weight, init_bias, ω0, is_first)
 end
 
-function initialparameters(
+function Lux.initialparameters(
     rng::AbstractRNG,
     d::LDense{use_bias}
 ) where {use_bias}
+
+    bias = d.init_bias(rng, d.out_dims, 1)
+    weight = d.init_weight(rng, d.out_dims, d.in_dims)
+
+    T = eltype(weight)
+    ω = [T(d.ω0),]
+
+    ## scale so that weight * ω ~ unit
+    # if !d.is_first
+    #     weight = weight ./ ω
+    #     bias   = bias   ./ ω
+    # end
+
     if use_bias
-        return (weight=d.init_weight(rng, d.out_dims, d.in_dims),
-            bias=d.init_bias(rng, d.out_dims, 1))
+        return (; weight, bias, ω)
     else
-        return (weight=d.init_weight(rng, d.out_dims, d.in_dims),)
+        return (; weight, ω)
     end
 end
 
-function parameterlength(d::LDense{use_bias}) where {use_bias}
-    return use_bias ? d.out_dims * (d.in_dims + 1) : d.out_dims * d.in_dims
+function Lux.parameterlength(d::LDense{use_bias}) where {use_bias}
+    return use_bias ? d.out_dims * (d.in_dims + 1) + 1 : d.out_dims * d.in_dims + 1
 end
 
-statelength(d::LDense) = 0
+Lux.statelength(d::LDense) = 0
 
-# application LDense{false}
-
-@inline function (d::LDense{false})(
-    x::AbstractVecOrMat,
-    ps,
-    st::NamedTuple,
-)
-    return __apply_activation(d.activation, ps.weight * x), st
+@inline function (d::LDense{false})(x::AbstractVecOrMat, ps, st::NamedTuple)
+    w_hat = normalize_lipschitz(ps.weight) .* ps.ω
+    z = w_hat * x
+    return Lux.__apply_activation(d.activation, z), st
 end
-
-# application LDense{true}
 
 @inline function (d::LDense{true})(x::AbstractVector, ps, st::NamedTuple)
-    y = Lux.__apply_activation(d.activation, ps.weight * x .+ vec(ps.bias))
+    w_hat = normalize_lipschitz(ps.weight) .* ps.ω
+    z = w_hat * x .+ vec(ps.bias)
+    y = Lux.__apply_activation(d.activation, z)
     return y, st
 end
 
 @inline function (d::LDense{true})(x::AbstractMatrix, ps, st::NamedTuple)
-    y = Lux.__apply_activation(d.activation, ps.weight * x .+ ps.bias)
+    w_hat = normalize_lipschitz(ps.weight) .* ps.ω
+    z = w_hat * x .+ ps.bias
+    y = Lux.__apply_activation(d.activation, z)
     return y, st
+end
+
+function normalize_lipschitz(W::AbstractMatrix) # ||W||_∞
+    return W / get_cbound(W)
+end
+
+export get_cbound
+
+function get_cbound(NN::Chain, p, st)
+    cbound = true
+
+    for layername in propertynames(NN.layers)
+        layer    = getproperty(NN.layers, layername)
+        p_layer  = getproperty(p, layername)
+        st_layer = getproperty(st, layername)
+
+        cbound *= get_cbound(layer, p_layer, st_layer)
+    end
+
+    cbound
+end
+
+function get_cbound(::LDense, p, st)
+    prod(p.ω)
+end
+
+function get_cbound(::Dense, p, st)
+    get_cbound(p.weight)
+end
+
+function get_cbound(W::AbstractMatrix)
+    rsum = sum(abs, W, dims = 2)
+    maximum(rsum)
 end
 
 #======================================================#

@@ -130,31 +130,69 @@ function train_reg(
     #--------------------------------------------#
     # architecture hyper-params
     #--------------------------------------------#
-    act = sin
 
-    init_wt_in = scaled_siren_init(3f1)
-    init_wt_hd = scaled_siren_init(1f0)
-    init_wt_fn = glorot_uniform
-
-    init_bias = rand32 # zeros32
-    use_bias_fn = false
+    ###
+    # SIREN
+    ###
 
     #--------------------------------------------#
     # AutoDecoder
     #--------------------------------------------#
     decoder = begin
-        in_layer = Dense(l+1, w, act; init_weight = init_wt_in, init_bias)
-        hd_layer = Dense(w  , w, act; init_weight = init_wt_hd, init_bias)
+        ###
+        # MLP `sin(W⋅x + b)`
+        ###
+
+        ω0 = 1f1 # 1f0, 1f1
+        ω1 = 1f0
+        init_wt_in = scaled_siren_init(ω0)
+        init_wt_hd = scaled_siren_init(ω1)
+        init_wt_fn = glorot_uniform
+
+        init_bias = rand32 # zeros32
+        use_bias_fn = false
+
+        in_layer = Dense(l+1, w, sin; init_weight = init_wt_in, init_bias)
+        hd_layer = Dense(w  , w, sin; init_weight = init_wt_hd, init_bias)
         fn_layer = Dense(w  , 1; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
 
-        # weight norm
-        dims = (2,) # (1 (2) => row (col) sums => inf (one) norm)
-        in_layer = WeightNorm(in_layer, (:weight,), dims)
-        hd_layer = WeightNorm(hd_layer, (:weight,), dims)
-        fn_layer = WeightNorm(fn_layer, (:weight,), dims)
+        ###
+        # SIREN (with ω): `sin(ω * (W⋅x + b))`
+        ###
 
-        # TODO - use LDense in src/layers.jl
+        # init_wt_in = init_siren
+        # init_wt_hd = init_siren
+        # init_wt_fn = init_siren
+        #
+        # init_bias = rand32 # zeros32, rand32
+        # use_bias_fn = false
+        #
+        # ω0 = 1f0
+        #
+        # in_layer = SDense(l+1, w, sin; init_weight = init_wt_in, init_bias, ω0, is_first = true)
+        # hd_layer = SDense(w  , w, sin; init_weight = init_wt_hd, init_bias, ω0)
+        # fn_layer = SDense(w  , 1     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn, ω0)
 
+        ###
+        # Lipschitz NN: `act(ω * (W⋅x + b))`
+        ###
+
+        # init_wt_in = init_siren # glorot_uniform
+        # init_wt_hd = init_siren # glorot_uniform
+        # init_wt_fn = init_siren # glorot_uniform
+        #
+        # init_bias = zeros32 # zeros32, rand32
+        # use_bias_fn = false
+        #
+        # ω0  = 1f1 # 1f0, 1f1
+        # ω1  = 1f1 # 1f0, 1f1
+        # act = sin
+        #
+        # in_layer = LDense(l+1, w, act; init_weight = init_wt_in, init_bias, ω0)
+        # hd_layer = LDense(w  , w, act; init_weight = init_wt_hd, init_bias, ω0 = ω1)
+        # fn_layer = LDense(w  , 1     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn, ω0 = ω1)
+
+        ######################
         Chain(
             in_layer,
             fill(hd_layer, h)...,
@@ -163,93 +201,14 @@ function train_reg(
     end
 
     NN = AutoDecoder(decoder, 1, l)
+    lossfun = regularize_autodecoder(mse; σ2inv, α, λ1, λ2)
 
-    lossfun = regularize_autodecoder(mse; σ2inv, λ1, λ2)
-
-    # lossfun = function(NN, p, st::NamedTuple, batch::Tuple)
-    #     T = eltype(p)
-    #     N = numobs(batch)
-    #     l, st_new, stats = _lossfun(NN, p, st, batch)
-    #
-    #     _p = isnothing(property) ? p : getproperty(p, property)
-    #     _N = length(_p)
-    #
-    #     lcond = if iszero(α)
-    #          zero(T)
-    #     else
-    #         # lcond = one(T)
-    #         # for layername in propertynames(_p)
-    #         #     layer = getproperty(_p, layername)
-    #         #     cond = layer.normalized.weight_g
-    #         #     lcond *= prod(abs, cond)
-    #         #     # lcond *= prod(abs, maximum(cond)) # doesn't work
-    #         # end
-    #
-    #         lcond = zero(T)
-    #         for layername in propertynames(_p)
-    #             layer = getproperty(_p, layername)
-    #             cond = layer.normalized.weight_g
-    #             lcond += sum(abs ∘ log ∘ softplus, cond)
-    #         end
-    #
-    #         lcond * α # / _N
-    #     end
-    #
-    #     loss = l + lcond
-    #
-    #     loss, st_new, (; l, lcond, stats)
-    # end
-
-    #--------------------------------------------#
-    # Split Decoder
-    #--------------------------------------------#
-
-    # pou = begin
-    #     in_layer = Dense(1, w, act; init_weight = init_wt_in, init_bias)
-    #     hd_layer = Dense(w, w, act; init_weight = init_wt_hd, init_bias)
-    #     fn_layer = Dense(w, 1; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
-    #
-    #     # in_layer = Dense(l+1, w, sin)
-    #     # hd_layer = Dense(w  , w, sin)
-    #     # fn_layer = Dense(w  , 1)
-    #
-    #     Chain(
-    #         in_layer,
-    #         fill(hd_layer, h)...,
-    #         fn_layer,
-    #     )
-    # end
-    #
-    # coef = begin
-    #     act2 = tanh
-    #     act2 = elu
-    #
-    #     vec_layer = WrappedFunction(vec)
-    #     embedding = Embedding(1 => l)
-    #
-    #     in_layer = Dense(l, w, act2)
-    #     hd_layer = Dense(w, w, act2)
-    #     fn_layer = Dense(w, 1)
-    #
-    #     Chain(
-    #         vec_layer,
-    #         embedding,
-    #         in_layer,
-    #         fill(hd_layer, h)...,
-    #         fn_layer,
-    #         softmax,
-    #     )
-    # end
-    #
-    # connection = (x -> sum(x; dims = 1)) ∘ .*
-    # NN = Parallel(connection, pou, coef) # (x -> NN1) .* (ũ -> NN2)
-    
     #--------------------------------------------#
     display(NN)
 
     _batchsize = isnothing(_batchsize) ? numobs(data) : _batchsize
 
-    train_args = (; l, h, w, E, _batchsize, λ1, λ2, weight_decays)
+    train_args = (; l, h, w, E, _batchsize, λ1, λ2, weight_decays, α)
     metadata = (; metadata..., train_args)
 
     @show metadata
@@ -390,22 +349,22 @@ device = Lux.gpu_device()
 
 E = 1000
 _N, N_ = 512, 8192 # 512, 32768
-_batchsize = 32
+_batchsize = 16
 fps = Int(E / 5)
-
-# l, h, w = 1, 5, 32
-# λ1s = (0.00f0,) # 0.00f0
-# λ2s = (0.00f0,) # 0.00f0
-# αs  = (0.00f0,)
-# weight_decays = 0.05f0 # 1f-2
 
 ## weight norm experiment
 l, h, w = 1, 5, 32
-λ1s = (0.00f-0,)
-λ2s = (0.00f-0,)
-σ2invs = (0.00f0,)
-αs  = (1.00f-2,)
-weight_decays = 0.05f0
+λ1s = (0f-0,)
+λ2s = (0f-0,)
+σ2invs = (0f-0,)
+
+## Lipschitz reg. only
+αs  = (2f-5,) # 1f-5, 5f-5
+weight_decays = 0f-0
+
+## Weight Decay only
+# αs  = (0f-0,)
+# weight_decays = 2f-2 # 2f-2
 
 # # uData(x) = sin(πx)
 # l, h, w = 1, 5, 32
@@ -437,14 +396,11 @@ weight_decays = 0.05f0
 # - Use or modify Lux.WeightNorm (https://arxiv.org/pdf/1602.07868.pdf)
 #
 
-# ps = ()
-
 datagen_reg(_N, datafile; N_) |> display
 
 for (i, (λ1, λ2, α, σ2inv)) in enumerate(zip(λ1s, λ2s, αs, σ2invs,))
     _ps = []
     cb_epoch = function(NN, p, st)
-        push!(_ps, p)
         nothing
     end
 
@@ -459,8 +415,6 @@ for (i, (λ1, λ2, α, σ2inv)) in enumerate(zip(λ1s, λ2s, αs, σ2invs,))
         _batchsize, cb_epoch, device,
     )
 
-    # global ps = (ps..., _ps)
-
     ## process
     p0, p1, p2, p3, p4 = post_reg(datafile, modelfile, outdir, _ps, fps)
 
@@ -468,7 +422,6 @@ for (i, (λ1, λ2, α, σ2inv)) in enumerate(zip(λ1s, λ2s, αs, σ2invs,))
     plot(ptrain, p0, p1, p2, p3, p4; size = (1300, 800)) |> display
 end
 
-# jldsave(joinpath(@__DIR__, "ps.jld2"); ps)
 #======================================================#
 nothing
 #
