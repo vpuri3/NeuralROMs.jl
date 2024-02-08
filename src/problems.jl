@@ -104,11 +104,12 @@ function dudtRHS(
 end
 
 #===================================================#
-struct KuramotoSivashinsky1D <: AbstractPDEProblem
+struct KuramotoSivashinsky1D{T} <: AbstractPDEProblem
+    ν::T
 end
 
 function dudtRHS(
-    ::KuramotoSivashinsky1D,
+    prob::KuramotoSivashinsky1D,
     model::AbstractNeuralModel,
     x::AbstractArray,
     p::AbstractVector,
@@ -116,9 +117,11 @@ function dudtRHS(
     autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ = nothing,
 )
+    ν = prob.ν
     u, ud1x, ud2x, _, ud4x = dudx4_1D(model, x, p; autodiff, ϵ)
 
-    @. -ud2x - ud4x - (u * ud1x) # -lapl (anti-diffusion), biharmonic, convection
+    #  -lapl (anti-diffusion) + biharmonic + convection
+    @. -ud2x - ν * ud4x - (u * ud1x)
 end
 
 #===================================================#

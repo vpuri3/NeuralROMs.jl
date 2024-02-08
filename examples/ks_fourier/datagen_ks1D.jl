@@ -46,7 +46,7 @@ odecb = begin
     DiscreteCallback((u,t,int) -> true, affect!, save_positions=(false,false))
 end
 
-function ks1D(N, L = T(2pi), ν = T(1), mu = nothing, p = nothing;
+function ks1D(N, len = T(2pi), ν = T(1), mu = nothing, p = nothing;
     tspan=(T(0), T(5)),
     ntsave=100,
     odealg=SSPRK43(),
@@ -56,7 +56,7 @@ function ks1D(N, L = T(2pi), ν = T(1), mu = nothing, p = nothing;
 )
 
     # space discr
-    domain = IntervalDomain(-L/2, L/2; periodic = true)
+    domain = IntervalDomain(-len/2, len/2; periodic = true)
     V = FourierSpace(N; domain) |> Float32
     discr = Collocation()
 
@@ -78,10 +78,10 @@ function ks1D(N, L = T(2pi), ν = T(1), mu = nothing, p = nothing;
 
     # operators
     A = laplaceOp(V, discr) # -Δ
-    B = ν * biharmonicOp(V, discr) # Δ²
+    B = biharmonicOp(V, discr) # Δ²
     C = advectionOp((zero(u0),), V, discr; vel_update_funcs! =(convect!,)) # uuₓ
 
-    L = cache_operator(A - B - C, u0)
+    L = cache_operator(A - ν * B - C, u0)
 
     # time discr
     tsave = range(tspan...; length = ntsave)
@@ -119,7 +119,7 @@ function ks1D(N, L = T(2pi), ν = T(1), mu = nothing, p = nothing;
 
     if !isnothing(dir)
         mkpath(dir)
-        metadata = (; L, readme = "u [Nx, Nbatch, Nt]")
+        metadata = (; ν, L = len, readme = "u [Nx, Nbatch, Nt]")
 
         filename = joinpath(dir, "data.jld2")
         jldsave(filename; x, u, udx, ud2x, t, mu, metadata)
@@ -164,7 +164,7 @@ N = 256
 mu = nothing
 L = T(2pi)
 tspan=(T(0), T(0.1))
-ntsave=500
+ntsave=1000
 
 device = cpu_device()
 dir = joinpath(@__DIR__, "data_ks")

@@ -66,13 +66,19 @@ function test_autodecoder(
     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     p0 = _code[2].weight[:, 1]
 
-    @time _, _, Up = evolve_autodecoder(prob, decoder, md, data, p0;
+    # time evolution prams
+    timealg = EulerForward() # EulerForward(), RK2(), RK4()
+    Δt = 1f-4
+    adaptive = false
+
+    @time _, _, Up = evolve_autodecoder(
+        prob, decoder, md, data, p0, timealg, Δt, adaptive;
         rng, device, verbose)
 
     Ix_plt = 1:4:Nx
     plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
     plot!(plt, Xdata, Up, w = 2, palette = :tab10)
-    scatter!(plt, Xdata[Ix_plt], Ud[Ix_plt, :], w = 1, palette = :tab10)
+    # scatter!(plt, Xdata[Ix_plt], Ud[Ix_plt, :], w = 1, palette = :tab10)
 
     _inf  = norm(Up - Ud, Inf)
     _mse  = sum(abs2, Up - Ud) / length(Ud)
@@ -93,31 +99,37 @@ end
 rng = Random.default_rng()
 Random.seed!(rng, 111)
 
-prob = KuramotoSivashinsky1D()
-
 device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "data_ks/", "data.jld2")
 
 modeldir = joinpath(@__DIR__, "model1")
 modelfile = joinpath(modeldir, "model_08.jld2")
 
-## train
-E = 2000
-l, h, w = 16, 5, 128
-isdir(modeldir) && rm(modeldir, recursive = true)
-model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E; λ = 5f-1, # 1f-1
-    _batchsize = nothing, batchsize_ = nothing, device)
+prob = KuramotoSivashinsky1D(0.01f0)
 
-# ideas for fixing evolution
-# - add more snapshots in training
-# - rewrite datagen in Real space to make sure everything matches with ML evolution
+cb_epoch = nothing
+
+## train
+E = 2100
+_It = LinRange(1, 1000, 100) .|> Base.Fix1(round, Int)
+_batchsize = 256 * 5
+l, h, w = 16, 5, 64
+λ1, λ2, σ2inv, α = 0f-0, 0f-0, 1f-3, 5f-6 # 1f-3, 5f-6
+weight_decays = 0f-0
+
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
+# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
+#     λ1, λ2, σ2inv, α, weight_decays, cb_epoch, device, makedata_kws,
+#     _batchsize,
+# )
 
 ## process
 outdir = joinpath(modeldir, "results")
 postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
     makeplot = true, verbose = true)
-# x, u, _ = test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-#     makeplot = true, verbose = true)
+x, up, ud = test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+    makeplot = true, verbose = true)
 #======================================================#
 nothing
 #

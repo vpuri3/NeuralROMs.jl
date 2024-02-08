@@ -191,21 +191,20 @@ function train_autodecoder(
     decoder_axes = Lux.setup(copy(rng), NN)[1] |> ComponentArray |> getaxes
 
     # Grokking (https://arxiv.org/abs/2201.02177)
-    opts = Tuple(OptimiserChain(
-        Adam(lr),
-        # Adam(lr, (0.9f0, 0.95f0)), # 0.999 (default), 0.98, 0.95  # https://www.youtube.com/watch?v=IHikLL8ULa4&ab_channel=NeelNanda
-
-        PartWeightDecay(0f0, decoder_axes),
-        ### WeightDecay(0f0),
-    ) for lr in lrs)
+    # Optimisers.Adam(lr, (0.9f0, 0.95f0)), # 0.999 (default), 0.98, 0.95  # https://www.youtube.com/watch?v=IHikLL8ULa4&ab_channel=NeelNanda
+    opts = Tuple(
+        OptimiserChain(
+            Optimisers.Adam(lr),
+            PartWeightDecay(0f0, decoder_axes),
+        ) for lr in lrs
+    )
 
     nepochs = (round.(Int, E / (Nlrs) * ones(Nlrs))...,)
     schedules = Step.(lrs, 1f0, Inf32)
     early_stoppings = (fill(true, Nlrs)...,)
 
     # warm up
-    # opt_warmup = OptimiserChain(Adam(1f-2), PartWeightDecay(0f0, decoder_axes),)
-    opt_warmup = OptimiserChain(Adam(1f-2), WeightDecay(0f0),)
+    opt_warmup = OptimiserChain(Optimisers.Adam(1f-2), PartWeightDecay(0f0, decoder_axes),)
     nepochs_warmup = 10
     schedule_warmup = Step(1f-2, 1f0, Inf32)
     early_stopping_warmup = true
@@ -386,6 +385,9 @@ function postprocess_autodecoder(
     # data sizes
     Nx, Nb, Nt = size(Udata)
 
+    @assert Xdata isa AbstractVecOrMat
+    Xdata = Xdata isa AbstractVector ? reshape(Xdata, 1, :) : x # (Dim, Npoints)
+
     mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
     mu = isa(mu, AbstractArray) ? vec(mu) : mu
 
@@ -421,6 +423,9 @@ function postprocess_autodecoder(
     _Ib = isa(md.makedata_kws._Ib, Colon) ? (1:size(Udata, 2)) : md.makedata_kws._Ib
     Ib_ = isa(md.makedata_kws.Ib_, Colon) ? (1:size(Udata, 2)) : md.makedata_kws.Ib_
 
+    _It = isa(md.makedata_kws._It, Colon) ? (1:size(Udata, 3)) : md.makedata_kws._It
+    It_ = isa(md.makedata_kws.It_, Colon) ? (1:size(Udata, 3)) : md.makedata_kws.It_
+
     @show md
 
     _data, _, _ = makedata_autodecoder(datafile; md.makedata_kws...)
@@ -430,7 +435,7 @@ function postprocess_autodecoder(
     model = NeuralEmbeddingModel(NN, st, md, _Icode)
 
     _Upred = (model |> device)(_xdata |> device, p |> device) |> Lux.cpu_device()
-    _Upred = reshape(_Upred, Nx, _Ib, Nt)
+    _Upred = reshape(_Upred, Nx, length(_Ib), length(_It))
 
     if makeplot
         for k in _Ib
@@ -441,8 +446,8 @@ function postprocess_autodecoder(
             _mu = mu[_Ib[k]]
             title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
     
-            idx_pred = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
-            idx_data = idx_pred
+            idx_data = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
+            idx_pred = LinRange(1, size(Up, 2), 10) .|> Base.Fix1(round, Int)
     
             upred = Up[:, idx_pred]
             udata = Ud[:, idx_data]
@@ -459,11 +464,14 @@ function postprocess_autodecoder(
                 scatter!(plt, xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
                 png(plt, joinpath(outdir, "train$(k)"))
 
-                Itplt = LinRange(1, size(Ud, 2), 100) .|> Base.Fix1(round, Int)
+                It_data = LinRange(1, size(Ud, 2), 100) .|> Base.Fix1(round, Int)
+                It_pred = LinRange(1, size(Up, 2), 100) .|> Base.Fix1(round, Int)
 
-                anim = animate1D(Ud[:, Itplt], Up[:, Itplt], Xdata, Tdata[Itplt];
+                anim = animate1D(Ud[:, It_data], Up[:, It_pred], vec(Xdata), Tdata[It_data];
                                  w = 2, xlabel, ylabel, title)
                 gif(anim, joinpath(outdir, "train$(k).gif"); fps)
+
+                display(plt)
 
             elseif in_dim == 2
                 xlabel = "x"
@@ -599,34 +607,34 @@ function postprocess_autodecoder(
     #==============#
     # check derivative
     #==============#
-    # begin
-    #     second_derv = false
-    #     third_derv = false
-    #     fourth_derv = true
-    #
-    #     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-    #     ncodes = size(_code[2].weight, 2)
-    #     idx = LinRange(1, ncodes, 10) .|> Base.Fix1(round, Int)
-    #
-    #     for i in idx
-    #         p0 = _code[2].weight[:, i]
-    #
-    #         p1 = plot_derivatives1D_autodecoder(
-    #             decoder, Xdata, p0, md;
-    #             second_derv,
-    #             autodiff = AutoFiniteDiff(), ϵ=1f-2,
-    #         )
-    #         png(p1, joinpath(outdir, "derv_$(i)_FD_AD"))
-    #
-    #         p2 = plot_derivatives1D_autodecoder(
-    #             decoder, Xdata, p0, md;
-    #             second_derv, third_derv, fourth_derv,
-    #             autodiff = AutoForwardDiff(),
-    #         )
-    #         png(p2, joinpath(outdir, "derv_$(i)_FWD_AD"))
-    #         display(p2)
-    #     end
-    # end
+    begin
+        second_derv = false
+        third_derv = false
+        fourth_derv = true
+    
+        decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+        ncodes = size(_code[2].weight, 2)
+        idx = LinRange(1, ncodes, 10) .|> Base.Fix1(round, Int)
+    
+        for i in idx
+            p0 = _code[2].weight[:, i]
+    
+            # p1 = plot_derivatives1D_autodecoder(
+            #     decoder, Xdata, p0, md;
+            #     second_derv,
+            #     autodiff = AutoFiniteDiff(), ϵ=1f-2,
+            # )
+            # png(p1, joinpath(outdir, "derv_$(i)_FD_AD"))
+    
+            p2 = plot_derivatives1D_autodecoder(
+                decoder, vec(Xdata), p0, md;
+                second_derv, third_derv, fourth_derv,
+                autodiff = AutoForwardDiff(),
+            )
+            png(p2, joinpath(outdir, "derv_$(i)_FWD_AD"))
+            display(p2)
+        end
+    end
 
     #==============#
     # Done

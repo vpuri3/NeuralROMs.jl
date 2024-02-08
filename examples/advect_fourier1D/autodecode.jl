@@ -90,7 +90,7 @@ function test_autodecoder(
     png(plt, joinpath(outdir, "evolve_$k"))
     display(plt)
 
-    nothing
+    Xdata, Up, Ud[Ix_plt, :]
 end
 #======================================================#
 # main
@@ -106,6 +106,7 @@ datafile = joinpath(@__DIR__, "data_advect/", "data.jld2")
 
 modeldir = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
+
 cb_epoch = nothing
 
 ## train (original)
@@ -118,8 +119,8 @@ cb_epoch = nothing
 
 ## train (10x less snapshots)
 E = 1400
-# _It = 1:5:500
-_It = 1:10:500
+# _It = 1:10:500
+_It = LinRange(1, 500, 100) .|> Base.Fix1(round, Int)
 _batchsize = 128 * 1
 l, h, w = 2, 5, 32 # (2, 4), 5, 32
 λ1, λ2, σ2inv, α = 0f-0, 0f-0, 1f-3, 5f-6 # 0, 0, 1f-3, 5f-6
@@ -145,7 +146,7 @@ model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
 outdir = joinpath(modeldir, "results")
 # postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
 #     makeplot = true, verbose = true)
-test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+x, up, ud = test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
     makeplot = true, verbose = true)
 #======================================================#
 nothing
