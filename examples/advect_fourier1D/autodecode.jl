@@ -113,23 +113,33 @@ cb_epoch = nothing
 # _It = 1:1:500
 # _batchsize = 1280
 # l, h, w = 4, 5, 32 # (2, 4), 5, 32
-# λ1, λ2, σ2inv = 0f-0, 0f-0, 0f-0 # 0.0, 0.05, 1f-2
+# λ1, λ2, σ2inv, α = 0f-0, 0f-0, 0f-0, 0f0 # 0.0, 0.05, 1f-2
 # weight_decays = 1f-3             # 0 (0.005)
 
-## train
+## train (10x less snapshots)
 E = 1400
+# _It = 1:5:500
 _It = 1:10:500
 _batchsize = 128 * 1
 l, h, w = 2, 5, 32 # (2, 4), 5, 32
-λ1, λ2, σ2inv = 0f-0, 0f-0, 0f-2 # 0.0, 0.05, 1f-2
-weight_decays = 0f-3             # 0 (0.005)
+λ1, λ2, σ2inv, α = 0f-0, 0f-0, 1f-3, 5f-6 # 0, 0, 1f-3, 5f-6
+weight_decays = 0f-3                      # 0,
 
-# isdir(modeldir) && rm(modeldir, recursive = true)
-# makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
-# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
-#     λ1, λ2, σ2inv, weight_decays, cb_epoch, device, makedata_kws,
-#     _batchsize,
-# )
+## train (unit dim latent space) very hard to train
+# Random.seed!(rng, 999)
+# E = 2100
+# _It = 1:10:500
+# _batchsize = 128 * 1
+# l, h, w = 1, 5, 32 # (2, 4), 5, 32
+# λ1, λ2, σ2inv, α = 0f-0, 0f-0, 1f-3, 1f-6 # 0, 0, 1f-3, 1f-6
+# weight_decays = 0f-3                      # 0, 1f-3
+
+isdir(modeldir) && rm(modeldir, recursive = true)
+makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
+model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
+    λ1, λ2, σ2inv, α, weight_decays, cb_epoch, device, makedata_kws,
+    _batchsize,
+)
 
 ## process
 outdir = joinpath(modeldir, "results")

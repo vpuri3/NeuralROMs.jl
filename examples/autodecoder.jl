@@ -127,6 +127,7 @@ function train_autodecoder(
     λ1::Real = 0f0,
     λ2::Real = 0f0,
     σ2inv::Real = 0f0,
+    α::Real = 0f0,
     weight_decays::Union{Real, NTuple{M, <:Real}} = 0f0,
     makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :,),
     init_code = nothing,
@@ -153,7 +154,7 @@ function train_autodecoder(
     _batchsize = isnothing(_batchsize) ? Nx * 10       : _batchsize
     batchsize_ = isnothing(batchsize_) ? numobs(_data) : batchsize_
 
-    lossfun = regularize_autodecoder(mse; σ2inv, λ1, λ2)
+    lossfun = regularize_autodecoder(mse; σ2inv, α, λ1, λ2)
 
     #----------------------#----------------------#
     in_dim, out_dim = size(_data[1][1], 1), size(_data[2], 1) # in/out dim
@@ -164,7 +165,7 @@ function train_autodecoder(
         in_layer = Dense(l + in_dim, w, act; init_weight = init_wt_in, init_bias)
         hd_layer = Dense(w, w, act         ; init_weight = init_wt_hd, init_bias)
         fn_layer = Dense(w, out_dim        ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
-        
+
         Chain(in_layer, fill(hd_layer, h)..., fn_layer)
     end
 
@@ -178,9 +179,7 @@ function train_autodecoder(
         init_code
     end
 
-    NN = AutoDecoder(decoder, metadata._Ns, l;
-        init_weight = init_code,
-    )
+    NN = AutoDecoder(decoder, metadata._Ns, l; init_weight = init_code)
 
     #--------------------------------------------#
     # training hyper-params
@@ -188,7 +187,7 @@ function train_autodecoder(
     lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
     Nlrs = length(lrs)
 
-    #idx = only(getaxes(p))[:decoder].idx
+    # idx = only(getaxes(p))[:decoder].idx
     decoder_axes = Lux.setup(copy(rng), NN)[1] |> ComponentArray |> getaxes
 
     # Grokking (https://arxiv.org/abs/2201.02177)
@@ -219,7 +218,7 @@ function train_autodecoder(
 
     #----------------------#----------------------#
 
-    train_args = (; l, h, w, E, _batchsize, λ1, λ2, σ2inv, weight_decays)
+    train_args = (; l, h, w, E, _batchsize, λ1, λ2, σ2inv, α, weight_decays)
     metadata   = (; metadata..., train_args)
 
     @show metadata

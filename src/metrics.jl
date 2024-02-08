@@ -133,6 +133,33 @@ end
 
 #=====================================================================#
 
+export compute_cbound
+
+function compute_cbound(NN::Chain, p, st)
+    cbound = true
+
+    for layername in propertynames(NN.layers)
+        layer    = getproperty(NN.layers, layername)
+        p_layer  = getproperty(p, layername)
+        st_layer = getproperty(st, layername)
+
+        cbound *= compute_cbound(layer, p_layer, st_layer)
+    end
+
+    cbound
+end
+
+function compute_cbound(::Dense, p, st)
+    compute_cbound(p.weight)
+end
+
+function compute_cbound(W::AbstractMatrix) # ∞ norm
+    rsum = sum(abs, W, dims = 2)
+    maximum(rsum)
+end
+
+#=====================================================================#
+
 """
     regularize_autodecoder(lossfun, σ, λ1, λ2, property)(NN, p, st, batch) -> l, st, stats
 
@@ -171,7 +198,7 @@ function regularize_autodecoder(
         # Lipschitz reg on decoder
         ###
 
-        cbound = get_cbound(decoder...)
+        cbound = compute_cbound(decoder...)
         lcond  =  iszero(α) ? T(0) : cbound * α / N
 
         ###

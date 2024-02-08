@@ -31,12 +31,13 @@ function uData(x; σ = 1.0f0)
 
     # @. sin(5f0 * x^1) * exp(-(x/σ)^2)
     # @. sin(3f0 * x^2) * exp(-(x/σ)^2)
-    @. (x - pi32/2f0) * sin(3f0 * x) * exp(-(x/σ)^2)
+
+    @. (x - pi32/2f0) * sin(x) * exp(-(x/σ)^2)
 end
 
 function datagen_reg(_N, datafile; N_ = 32768)
     pi32 = Float32(pi)
-    L = pi32
+    L = 2pi32
 
     _x = LinRange(-L, L, _N) |> Array
     x_ = LinRange(-L, L, N_) |> Array
@@ -118,35 +119,29 @@ function train_reg(
 
     opts = Optimisers.AdamW.(lrs) # Grokking (https://arxiv.org/abs/2201.02177)
     nepochs = (round.(Int, E / (Nlrs) * ones(Nlrs))...,)
-    schedules = Step.(lrs, 1f0, Inf32)
+    schedules = Step.(lrs, 1f0, E)
     early_stoppings = (fill(true, Nlrs)...,)
 
     # warm up
     opts = (Optimisers.AdamW(1f-1), opts...)
     nepochs = (10, nepochs...,)
-    schedules = (Step(1f-2, 1f0, Inf32), schedules...,)
+    schedules = (Step(1f-2, 1f0, E), schedules...,)
     early_stoppings = (true, early_stoppings...,) # TODO: true
 
     #--------------------------------------------#
     # architecture hyper-params
     #--------------------------------------------#
 
-    ###
-    # SIREN
-    ###
-
-    #--------------------------------------------#
-    # AutoDecoder
-    #--------------------------------------------#
     decoder = begin
         ###
         # MLP `sin(W⋅x + b)`
         ###
 
-        ω0 = 1f1 # 1f0, 1f1
-        ω1 = 1f0
-        init_wt_in = scaled_siren_init(ω0)
-        init_wt_hd = scaled_siren_init(ω1)
+        ω_in = 1f0 # 1f0, 1f1 # pass in for IC
+        ω_hd = 1f0
+
+        init_wt_in = scaled_siren_init(ω_in)
+        init_wt_hd = scaled_siren_init(ω_hd)
         init_wt_fn = glorot_uniform
 
         init_bias = rand32 # zeros32
@@ -157,29 +152,12 @@ function train_reg(
         fn_layer = Dense(w  , 1; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
 
         ###
-        # SIREN (with ω): `sin(ω * (W⋅x + b))`
-        ###
-
-        # init_wt_in = init_siren
-        # init_wt_hd = init_siren
-        # init_wt_fn = init_siren
-        #
-        # init_bias = rand32 # zeros32, rand32
-        # use_bias_fn = false
-        #
-        # ω0 = 1f0
-        #
-        # in_layer = SDense(l+1, w, sin; init_weight = init_wt_in, init_bias, ω0, is_first = true)
-        # hd_layer = SDense(w  , w, sin; init_weight = init_wt_hd, init_bias, ω0)
-        # fn_layer = SDense(w  , 1     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn, ω0)
-
-        ###
         # Lipschitz NN: `act(ω * (W⋅x + b))`
         ###
 
         # init_wt_in = init_siren # glorot_uniform
         # init_wt_hd = init_siren # glorot_uniform
-        # init_wt_fn = init_siren # glorot_uniform
+        # init_wt_fn = glorot_uniform
         #
         # init_bias = zeros32 # zeros32, rand32
         # use_bias_fn = false
@@ -342,7 +320,7 @@ end
 # main
 #======================================================#
 rng = Random.default_rng()
-Random.seed!(rng, 460)
+Random.seed!(rng, 474)
 
 datafile = joinpath(@__DIR__, "data_reg.jld2")
 device = Lux.gpu_device()
@@ -359,7 +337,7 @@ l, h, w = 1, 5, 32
 σ2invs = (0f-0,)
 
 ## Lipschitz reg. only
-αs  = (2f-5,) # 1f-5, 5f-5
+αs  = (5f-6,) # 1f-5, 5f-5
 weight_decays = 0f-0
 
 ## Weight Decay only
@@ -382,12 +360,10 @@ weight_decays = 0f-0
 #   what is the condition number of differentiation?
 #
 # https://arxiv.org/pdf/2207.06283.pdf
-# - (Test with advection case)
-#   Add code regularization term `(1/σ²)||ũ||₂` to loss
+# - Add code regularization term `(1/σ²)||ũ||₂` to loss
 #   This ensures that a compact latent space is learned and improves
 #   the speed of convergence [DeepSDF ss 4.2]. Initialize `ũ ~ N(0,0.1²)`.
 #   This should reduce number of temporal samples needed. Do study on advection eqn?
-#
 # - Insert `ũ` into layers 1, 5, 9, and `x` into every layer. Maybe this
 #   reduced noise in ∂ₓNN(x)
 # - modify `Optimisers.WeightDecay` to only apply decay to decoder??
@@ -419,7 +395,9 @@ for (i, (λ1, λ2, α, σ2inv)) in enumerate(zip(λ1s, λ2s, αs, σ2invs,))
     p0, p1, p2, p3, p4 = post_reg(datafile, modelfile, outdir, _ps, fps)
 
     ptrain = plot_training(STATS...)
-    plot(ptrain, p0, p1, p2, p3, p4; size = (1300, 800)) |> display
+    plt = plot(ptrain, p0, p1, p2, p3, p4; size = (1300, 800))
+    png(plt, joinpath(modeldir, "result"))
+    display(plt)
 end
 
 #======================================================#

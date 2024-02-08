@@ -334,7 +334,6 @@ export LDense
     init_weight
     init_bias
     ω0
-    is_first
 end
 
 function LDense(
@@ -345,11 +344,10 @@ function LDense(
     init_bias=zeros32,
     use_bias::Bool=true,
     allow_fast_activation::Bool=true,
-    ω0::Real = 30f0,
-    is_first::Bool = false,
+    ω0::Real = 1f0,
 )
     activation = allow_fast_activation ? NNlib.fast_act(activation) : activation
-    return LDense{use_bias}(activation, in_dims, out_dims, init_weight, init_bias, ω0, is_first)
+    return LDense{use_bias}(activation, in_dims, out_dims, init_weight, init_bias, ω0)
 end
 
 function Lux.initialparameters(
@@ -362,12 +360,6 @@ function Lux.initialparameters(
 
     T = eltype(weight)
     ω = [T(d.ω0),]
-
-    ## scale so that weight * ω ~ unit
-    # if !d.is_first
-    #     weight = weight ./ ω
-    #     bias   = bias   ./ ω
-    # end
 
     if use_bias
         return (; weight, bias, ω)
@@ -403,36 +395,84 @@ end
 end
 
 function normalize_lipschitz(W::AbstractMatrix) # ||W||_∞
-    return W / get_cbound(W)
+    return W / compute_cbound(W)
 end
 
-export get_cbound
-
-function get_cbound(NN::Chain, p, st)
-    cbound = true
-
-    for layername in propertynames(NN.layers)
-        layer    = getproperty(NN.layers, layername)
-        p_layer  = getproperty(p, layername)
-        st_layer = getproperty(st, layername)
-
-        cbound *= get_cbound(layer, p_layer, st_layer)
-    end
-
-    cbound
-end
-
-function get_cbound(::LDense, p, st)
+function compute_cbound(::LDense, p, st)
     prod(p.ω)
 end
 
-function get_cbound(::Dense, p, st)
-    get_cbound(p.weight)
+#===========================================================#
+# HOSC activation
+# https://arxiv.org/pdf/2401.10967.pdf
+#===========================================================#
+export hosc, HDense
+
+export HDense
+@concrete struct HDense{use_bias} <: Lux.AbstractExplicitLayer
+    in_dims::Int
+    out_dims::Int
+    init_weight
+    init_bias
+    ω0
 end
 
-function get_cbound(W::AbstractMatrix)
-    rsum = sum(abs, W, dims = 2)
-    maximum(rsum)
+function HDense(
+    in_dims::Int,
+    out_dims::Int;
+    init_weight=glorot_uniform,
+    init_bias=zeros32,
+    use_bias::Bool=true,
+    allow_fast_activation::Bool=true,
+    ω0::Real = 1f0,
+)
+    return HDense{use_bias}(in_dims, out_dims, init_weight, init_bias, ω0)
+end
+
+function Lux.initialparameters(
+    rng::AbstractRNG,
+    d::HDense{use_bias}
+) where {use_bias}
+
+    bias = d.init_bias(rng, d.out_dims, 1)
+    weight = d.init_weight(rng, d.out_dims, d.in_dims)
+
+    T = eltype(weight)
+    ω = [T(d.ω0),]
+
+    if use_bias
+        return (; weight, bias, ω)
+    else
+        return (; weight, ω)
+    end
+end
+
+function Lux.parameterlength(d::HDense{use_bias}) where {use_bias}
+    return use_bias ? d.out_dims * (d.in_dims + 1) + 1 : d.out_dims * d.in_dims + 1
+end
+
+Lux.statelength(d::HDense) = 0
+
+@inline function (d::HDense{false})(x::AbstractVecOrMat, ps, st::NamedTuple)
+    y = ps.weight * x
+    z = Lux.__apply_activation(sin, y)
+    return Lux.__apply_activation(tanh_fast, ps.ω .* z), st
+end
+
+@inline function (d::HDense{true})(x::AbstractVector, ps, st::NamedTuple)
+    y = ps.weight * x .+ vec(ps.bias)
+    z = Lux.__apply_activation(sin, y)
+    return Lux.__apply_activation(tanh_fast, ps.ω .* z), st
+end
+
+@inline function (d::HDense{true})(x::AbstractMatrix, ps, st::NamedTuple)
+    y = ps.weight * x .+ ps.bias
+    z = Lux.__apply_activation(sin, y)
+    return Lux.__apply_activation(tanh_fast, ps.ω .* z), st
+end
+
+function compute_cbound(::HDense, p, st)
+    compute_cbound(p.weight) * prod(p.ω) 
 end
 
 #======================================================#

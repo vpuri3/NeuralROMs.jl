@@ -36,7 +36,7 @@ Make `Nx ⋅ Ny` copies of the first dimension and store it in the following
 dimensions. Works for any `(Nx, Ny, ...)`.
 """
 function _ntimes(x::AbstractMatrix, Ns::Union{Int,NTuple{D,Int}}) where{D}
-    L, B = size(x)
+    L, B = size(x), FUNC_ATTRIBUTE_PTX_VERSION
     y = repeat(x; outer = (prod(Ns), 1))
     reshape(y, L, Ns..., B)
 end
@@ -87,6 +87,7 @@ function scale_init(init, scale::Real, shift::Real)
         (init(args...; kwargs...) .* T(scale)) .+ T(shift)
     end
 end
+
 #===========================================================#
 
 function remake_ca_in_model(
