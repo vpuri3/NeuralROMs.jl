@@ -29,15 +29,10 @@ https://royalsocietypublishing.org/doi/epdf/10.1098/rspa.2014.0932
 """
 
 T = Float32
-len = T(10pi)
 
-function uData(x; σ = 0.3f0)
-    u = @. sin(1f1 * Float32(pi) * x) * exp(-(x/σ)^2)
-    reshape(u, :, 1)
-end
-
-function uIC(x; μ=zero(T), σ=T(0.5))
-    u = @. exp(-T(1/10) * ((x-μ)/σ)^2)
+function uIC(x; μ=zero(T), σ=T(0.20)) # 0.30
+    u = @. exp(-T(1/2) * ((x-μ)/σ)^2)
+    # u = @. sin(T(0.5) * T(pi) * x) * exp(-((x-μ)/σ)^2)
     reshape(u, :, 1)
 end
 
@@ -51,9 +46,9 @@ odecb = begin
     DiscreteCallback((u,t,int) -> true, affect!, save_positions=(false,false))
 end
 
-function ks1D(N, len, mu = nothing, p = nothing;
+function ks1D(N, L = T(2pi), ν = T(1), mu = nothing, p = nothing;
     tspan=(T(0), T(5)),
-    ntsave=5000,
+    ntsave=100,
     odealg=SSPRK43(),
     odekw = (;),
     device = cpu_device(),
@@ -61,18 +56,15 @@ function ks1D(N, len, mu = nothing, p = nothing;
 )
 
     # space discr
-    domain = IntervalDomain(-len, len; periodic = true)
+    domain = IntervalDomain(-L/2, L/2; periodic = true)
     V = FourierSpace(N; domain) |> Float32
-    Vh = transform(V)
     discr = Collocation()
 
     (x,) = points(V)
 
     # get initial condition
     u0 = uIC(x) # mu parameter dependence
-    # u0 = uData(x) # mu parameter dependence
     V  = make_transform(V, u0; p)
-    û0 = transformOp(V) * u0
 
     function convect!(v, u, p, t)
         copy!(v, u)
@@ -81,22 +73,19 @@ function ks1D(N, len, mu = nothing, p = nothing;
     # move to device
     V  = V  |> device
     u0 = u0 |> device
-    û0 = û0 |> device
 
     V  = make_transform(V, u0; p)
 
     # operators
-    Â = laplaceOp(Vh, discr) # -Δ
-    B̂ = biharmonicOp(Vh, discr) # Δ²
-    Ĉ = advectionOp((zero(û0),), Vh, discr; vel_update_funcs! =(convect!,)) # uuₓ
-    F̂ = SciMLOperators.NullOperator(Vh) # F = 0
+    A = laplaceOp(V, discr) # -Δ
+    B = ν * biharmonicOp(V, discr) # Δ²
+    C = advectionOp((zero(u0),), V, discr; vel_update_funcs! =(convect!,)) # uuₓ
 
-    L = cache_operator(Â - B̂, û0)
-    N = cache_operator(-Ĉ + F̂, û0)
+    L = cache_operator(A - B - C, u0)
 
     # time discr
     tsave = range(tspan...; length = ntsave)
-    prob = SplitODEProblem(L, N, û0, tspan, p)
+    prob = ODEProblem(L, u0, tspan, p)
 
     # solve
     @time sol = solve(prob, odealg, saveat=tsave, abstol = T(1e-3), callback = odecb)
@@ -104,53 +93,33 @@ function ks1D(N, len, mu = nothing, p = nothing;
 
     # move back to device
     x = x     |> cpu_device()
-    û = sol   |> Array
+    u = sol   |> Array
     t = sol.t |> cpu_device()
     V = V     |> cpu_device()
 
     # compute derivatives
-    u, udx, ud2x, ud3x, ud4x = begin
-        Nk, Nx = size(transformOp(V))
-        _, Nb, Nt = size(û)
-        û_re = reshape(û, Nk, Nb * Nt)
-        u_re = similar(û_re, T, Nx, Nb * Nt)
+    udx, ud2x, ud3x, ud4x = begin
+        Nx, Nb, Nt = size(u)
+        u_re = reshape(u, Nx, Nb * Nt)
 
         V = make_transform(V, u_re; p=p)
         Dx = gradientOp(V)[1]
-
-        ldiv!(u_re, transformOp(V), û_re)
 
         du_re  = Dx * u_re
         d2u_re = Dx * du_re
         d3u_re = Dx * d2u_re
         d4u_re = Dx * d3u_re
 
-        reshape.((u_re, du_re, d2u_re, d3u_re, d4u_re), Nx, Nb, Nt)
-    end
+        udervs = (du_re, d2u_re, d3u_re, d4u_re,)
 
-    # V, x, u, udx, ud2x = begin
-    #     N1 = 1024
-    #
-    #     V1 = FourierSpace(N1; domain) |> Float32
-    #     V1 = make_transform(V1, similar(u, N1, Nb * Nt))
-    #     J = interpOp(V1, V)
-    #
-    #     N, Nb, Nt = size(u)
-    #
-    #     u    = J * reshape(u   , N, Nb * Nt)
-    #     udx  = J * reshape(udx , N, Nb * Nt)
-    #     ud2x = J * reshape(ud2x, N, Nb * Nt)
-    #
-    #     sz = N1, Nb, Nt
-    #
-    #     V1, points(V1)[1], reshape(u, sz), reshape(udx, sz), reshape(ud2x, sz)
-    # end
+        reshape.(udervs, Nx, Nb, Nt)
+    end
 
     mu = isnothing(mu) ? fill(nothing, size(u, 2)) |> Tuple : mu
 
     if !isnothing(dir)
         mkpath(dir)
-        metadata = (; len, readme = "u [Nx, Nbatch, Nt]")
+        metadata = (; L, readme = "u [Nx, Nbatch, Nt]")
 
         filename = joinpath(dir, "data.jld2")
         jldsave(filename; x, u, udx, ud2x, t, mu, metadata)
@@ -168,17 +137,17 @@ function ks1D(N, len, mu = nothing, p = nothing;
             title = isnothing(mu[k]) ? "" : "μ = $(round(mu[k]; digits = 2)), "
 
             anim = animate1D(_u, x, _t; linewidth=2, xlabel, ylabel, title)
-            gif(anim, joinpath(dir, "traj_$(k).gif"), fps = 30)
+            gif(anim, joinpath(dir, "traj_$(k).gif"), fps = 250)
 
             anim = animate1D(_udx, x, _t; linewidth=2, xlabel, ylabel, title)
             gif(anim, joinpath(dir, "traj_dx_$(k).gif"), fps = 30)
-
+            
             anim = animate1D(_ud2x, x, _t; linewidth=2, xlabel, ylabel, title)
             gif(anim, joinpath(dir, "traj_d2x_$(k).gif"), fps = 30)
 
             begin
                 idx = LinRange(1f0, size(_u, 2), 11) .|> Base.Fix1(round, Int)
-                plt = plot(;title = "Data", xlabel, ylabel, legend = false)
+                plt = plot(;title = "Data", xlabel, ylabel, legend = true)
                 plot!(plt, x, _u[:, idx])
                 png(plt, joinpath(dir, "traj_$(k)"))
                 display(plt)
@@ -190,13 +159,19 @@ function ks1D(N, len, mu = nothing, p = nothing;
 end
 
 N = 256
+ν = 0.01f0
+# ν = 0.1f0
 mu = nothing
-tspan=(T(0), T(10))
-ntsave=1000
+L = T(2pi)
+tspan=(T(0), T(0.1))
+ntsave=500
 
 device = cpu_device()
 dir = joinpath(@__DIR__, "data_ks")
-(sol, V), (x, u, t, mu) = ks1D(N, len; tspan, ntsave, device, dir)
+(sol, V), (x, u, t, mu) = ks1D(N, L, ν; tspan, ntsave, device, dir)
+
+# x = LinRange(-L/2, L/2, 1000)
+# plot(x, vec(uIC(x)), w = 2, c = :black) |> display
 
 nothing
 #

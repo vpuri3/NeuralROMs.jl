@@ -17,6 +17,7 @@ CUDA.allowscalar(false)
 
 function uIC(x; μ = -0.5f0, σ = 0.1f0)
     u = @. exp(-1f0/2f0 * ((x-μ)/σ)^2)
+    # u = @. sin(1f0 * Float32(pi) * x) * exp(-(x/σ)^2)
     reshape(u, :, 1)
 end
 
@@ -35,8 +36,6 @@ function advect1D(N, ν, c, mu = nothing, p = nothing;
     discr = Collocation()
 
     (x,) = points(V)
-    (k,) = modes(V)
-    ftr = transformOp(V)
 
     # get initial condition
     u0 = uIC(x) # mu parameter dependence
