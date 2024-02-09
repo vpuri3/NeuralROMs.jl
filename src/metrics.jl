@@ -135,6 +135,10 @@ end
 
 export compute_cbound
 
+function compute_cbound(NN, p, st)
+    true
+end
+
 function compute_cbound(NN::Chain, p, st)
     cbound = true
 

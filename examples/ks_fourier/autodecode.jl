@@ -102,7 +102,7 @@ Random.seed!(rng, 111)
 device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "data_ks/", "data.jld2")
 
-modeldir = joinpath(@__DIR__, "model1")
+modeldir = joinpath(@__DIR__, "model2")
 modelfile = joinpath(modeldir, "model_08.jld2")
 
 prob = KuramotoSivashinsky1D(0.01f0)
@@ -110,11 +110,11 @@ prob = KuramotoSivashinsky1D(0.01f0)
 cb_epoch = nothing
 
 ## train
-E = 7000
+E = 14_000
 _It = LinRange(1, 1000, 100) .|> Base.Fix1(round, Int) # 200
 _batchsize = 256 * 5
 l, h, w = 16, 5, 96
-λ1, λ2, σ2inv, α = 0f-0, 0f-0, 5f-2, 5f-4 # 1f-3, 5f-6
+λ1, λ2, σ2inv, α = 0f-0, 0f-0, 1f-1, 1f-3 # 1f-1, 1f-3
 weight_decays = 0f-0
 
 isdir(modeldir) && rm(modeldir, recursive = true)

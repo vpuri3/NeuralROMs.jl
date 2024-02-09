@@ -314,15 +314,19 @@ function printstatistics(
     # meanRE = norm(rel, 1) / length(ŷ)
     # maxRE  = norm(rel, Inf32)
 
+    cbound = compute_cbound(NN, p, st)
+
     if !isnothing(io)
         str = ""
-        str *= string("R² score:             ", round(R2    ; sigdigits=8), "\n")
-        str *= string("MSE (mean SQR error): ", round(MSE   ; sigdigits=8), "\n")
-        str *= string("RMSE (Root MSE):      ", round(RMSE  ; sigdigits=8), "\n")
-        str *= string("MAE (mean ABS error): ", round(meanAE; sigdigits=8), "\n")
-        str *= string("maxAE (max ABS error) ", round(maxAE ; sigdigits=8), "\n")
+        str *= string("R² score:             ", round(R2     ; sigdigits=8), "\n")
+        str *= string("MSE (mean SQR error): ", round(MSE    ; sigdigits=8), "\n")
+        str *= string("RMSE (Root MSE):      ", round(RMSE   ; sigdigits=8), "\n")
+        str *= string("MAE (mean ABS error): ", round(meanAE ; sigdigits=8), "\n")
+        str *= string("maxAE (max ABS error) ", round(maxAE  ; sigdigits=8), "\n")
         # str *= string("mean REL error: ", round(meanRE, digits=8), "\n")
         # str *= string("max  REL error: ", round(maxRE , digits=8))
+
+        str *= string("Lipschitz bound:      ", round(cbound ; sigdigits=8), "\n")
 
         println(io, str)
     end
