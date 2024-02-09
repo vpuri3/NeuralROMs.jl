@@ -78,7 +78,7 @@ function test_autodecoder(
     Ix_plt = 1:4:Nx
     plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
     plot!(plt, Xdata, Up, w = 2, palette = :tab10)
-    # scatter!(plt, Xdata[Ix_plt], Ud[Ix_plt, :], w = 1, palette = :tab10)
+    scatter!(plt, Xdata[Ix_plt], Ud[Ix_plt, :], w = 1, palette = :tab10)
 
     _inf  = norm(Up - Ud, Inf)
     _mse  = sum(abs2, Up - Ud) / length(Ud)
@@ -110,19 +110,19 @@ prob = KuramotoSivashinsky1D(0.01f0)
 cb_epoch = nothing
 
 ## train
-E = 2100
-_It = LinRange(1, 1000, 100) .|> Base.Fix1(round, Int)
+E = 7000
+_It = LinRange(1, 1000, 100) .|> Base.Fix1(round, Int) # 200
 _batchsize = 256 * 5
-l, h, w = 16, 5, 64
-λ1, λ2, σ2inv, α = 0f-0, 0f-0, 1f-3, 5f-6 # 1f-3, 5f-6
+l, h, w = 16, 5, 96
+λ1, λ2, σ2inv, α = 0f-0, 0f-0, 5f-2, 5f-4 # 1f-3, 5f-6
 weight_decays = 0f-0
 
-# isdir(modeldir) && rm(modeldir, recursive = true)
-# makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
-# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
-#     λ1, λ2, σ2inv, α, weight_decays, cb_epoch, device, makedata_kws,
-#     _batchsize,
-# )
+isdir(modeldir) && rm(modeldir, recursive = true)
+makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
+model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
+    λ1, λ2, σ2inv, α, weight_decays, cb_epoch, device, makedata_kws,
+    _batchsize,
+)
 
 ## process
 outdir = joinpath(modeldir, "results")
