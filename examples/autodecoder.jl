@@ -215,6 +215,12 @@ function train_autodecoder(
     schedules = (schedule_warmup, schedules...,)
     early_stoppings = (early_stopping_warmup, early_stoppings...,)
 
+    # weight_decays = if weight_decays isa Number
+    #     (0f0, fill(weight_decays, Nlrs)...,)
+    # else
+    #     weight_decays
+    # end
+
     #----------------------#----------------------#
 
     train_args = (; l, h, w, E, _batchsize, λ1, λ2, σ2inv, α, weight_decays)

@@ -16,14 +16,13 @@ using Plots, JLD2
 CUDA.allowscalar(false)
 
 """
-Kuramoto-Sivashinsky equation
+Kuramoto-Sivashinsky equation (normalized)
 
-∂ₜu + Δu + Δ²u + 1/2 |∇u|² = 0
+∂ₜu + Δu + νΔ²u + 1/2 |∇u|² = 0
 
-x ∈ [0, L)ᵈ (periodic)
+x ∈ [-π, π)ᵈ (periodic)
 
-TODO: Compute Lyapunov exponent (maybe sensitivities) in 1D/ 2D
-
+https://apps.dtic.mil/sti/tr/pdf/ADA306758.pdf
 https://en.wikipedia.org/wiki/Kuramoto%E2%80%93Sivashinsky_equation
 https://royalsocietypublishing.org/doi/epdf/10.1098/rspa.2014.0932
 """
