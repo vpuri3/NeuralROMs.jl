@@ -607,34 +607,34 @@ function postprocess_autodecoder(
     #==============#
     # check derivative
     #==============#
-    # begin
-    #     second_derv = false
-    #     third_derv = false
-    #     fourth_derv = true
-    #
-    #     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-    #     ncodes = size(_code[2].weight, 2)
-    #     idx = LinRange(1, ncodes, 10) .|> Base.Fix1(round, Int)
-    #
-    #     for i in idx
-    #         p0 = _code[2].weight[:, i]
-    #
-    #         # p1 = plot_derivatives1D_autodecoder(
-    #         #     decoder, Xdata, p0, md;
-    #         #     second_derv,
-    #         #     autodiff = AutoFiniteDiff(), ϵ=1f-2,
-    #         # )
-    #         # png(p1, joinpath(outdir, "derv_$(i)_FD_AD"))
-    #
-    #         p2 = plot_derivatives1D_autodecoder(
-    #             decoder, vec(Xdata), p0, md;
-    #             second_derv, third_derv, fourth_derv,
-    #             autodiff = AutoForwardDiff(),
-    #         )
-    #         png(p2, joinpath(outdir, "derv_$(i)_FWD_AD"))
-    #         display(p2)
-    #     end
-    # end
+    begin
+        second_derv = true
+        third_derv  = false
+        fourth_derv = true
+    
+        decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+        ncodes = size(_code[2].weight, 2)
+        idx = LinRange(1, ncodes, 10) .|> Base.Fix1(round, Int)
+    
+        for i in idx
+            p0 = _code[2].weight[:, i]
+    
+            # p1 = plot_derivatives1D_autodecoder(
+            #     decoder, Xdata, p0, md;
+            #     second_derv,
+            #     autodiff = AutoFiniteDiff(), ϵ=1f-2,
+            # )
+            # png(p1, joinpath(outdir, "derv_$(i)_FD_AD"))
+    
+            p2 = plot_derivatives1D_autodecoder(
+                decoder, vec(Xdata), p0, md;
+                second_derv, third_derv, fourth_derv,
+                autodiff = AutoForwardDiff(),
+            )
+            png(p2, joinpath(outdir, "derv_$(i)_FWD_AD"))
+            display(p2)
+        end
+    end
 
     #==============#
     # Done

@@ -110,12 +110,12 @@ prob = KuramotoSivashinsky1D(0.01f0)
 cb_epoch = nothing
 
 ## train
-E = 14_000
+E = 7000
 _It = LinRange(1, 1000, 100) .|> Base.Fix1(round, Int) # 200
 _batchsize = 256 * 5
 l, h, w = 16, 5, 96
-λ1, λ2, σ2inv, α = 0f-0, 0f-0, 1f-1, 1f-3 # 1f-1, 1f-3
-weight_decays = 0f-0
+λ1, λ2, σ2inv, α = 0f-0, 0f-0, 1f-1, 0f-3 # 1f-1, 1f-3
+weight_decays = 1f-3
 
 isdir(modeldir) && rm(modeldir, recursive = true)
 makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
