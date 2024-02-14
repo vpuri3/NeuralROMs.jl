@@ -56,9 +56,9 @@ function test_autodecoder(
     #==============#
     # subsample in space
     #==============#
-    Udata = @view Udata[:, md.makedata_kws.Ix, :, :]
-    Xdata = @view Xdata[:, md.makedata_kws.Ix]
-    Nx = length(Xdata)
+    # Udata = @view Udata[:, md.makedata_kws.Ix, :, :]
+    # Xdata = @view Xdata[:, md.makedata_kws.Ix]
+    Nx = size(Xdata, 2)
 
     #==============#
     mkpath(outdir)
@@ -95,7 +95,7 @@ function test_autodecoder(
     # visualiaztion
     kw = (; xlabel = "x", ylabel = "y", zlabel = "u(x,t)")
 
-    Nx = Ny = 128
+    Nx = Ny = Int(sqrt(Nx))
 
     upred_re = reshape(Up, out_dim, Nx, Ny, length(It))
     udata_re = reshape(Ud, out_dim, Nx, Ny, length(It))
