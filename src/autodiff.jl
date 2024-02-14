@@ -187,36 +187,19 @@ end
 #======================================================#
 #======================================================#
 
-# first derivative
-function doautodiff1(f, x, autodiff, ϵ)
-    if isa(autodiff, AutoFiniteDiff)
-        finitediff_deriv1(f, x; ϵ)
-    elseif isa(autodiff, AutoForwardDiff)
-        forwarddiff_deriv1(f, x)
-    else
-        error("Got unsupported `autodiff = `$autodiff")
-    end
-end
+const DO_AD_FUNCS  = (:doautodiff1, :doautodiff2, :doautodiff3, :doautodiff4)
+const FIN_AD_FUNCS = (:finitediff_deriv1, :finitediff_deriv2, :finitediff_deriv3, :finitediff_deriv4)
+const FWD_AD_FUNCS = (:forwarddiff_deriv1, :forwarddiff_deriv2, :forwarddiff_deriv3, :forwarddiff_deriv4)
 
-# second derivative
-function doautodiff2(f, x, autodiff, ϵ)
-    if isa(autodiff, AutoFiniteDiff)
-        finitediff_deriv2(f, x; ϵ)
-    elseif isa(autodiff, AutoForwardDiff)
-        forwarddiff_deriv2(f, x)
-    else
-        error("Got unsupported `autodiff = `$autodiff")
-    end
-end
-
-# fourth derivative
-function doautodiff4(f, x, autodiff, ϵ)
-    if isa(autodiff, AutoFiniteDiff)
-        finitediff_deriv4(f, x; ϵ)
-    elseif isa(autodiff, AutoForwardDiff)
-        forwarddiff_deriv4(f, x)
-    else
-        error("Got unsupported `autodiff = `$autodiff")
+for (do_ad_f, fin_f, fwd_f) in zip(DO_AD_FUNCS, FIN_AD_FUNCS, FWD_AD_FUNCS)
+    @eval function $do_ad_f(f, x, autodiff, ϵ)
+        if isa(autodiff, AutoFiniteDiff)
+            $fin_f(f, x; ϵ)
+        elseif isa(autodiff, AutoForwardDiff)
+            $fwd_f(f, x)
+        else
+            error("Got unsupported autodiff = $autodiff")
+        end
     end
 end
 
@@ -227,7 +210,7 @@ function doautodiff_jacobian(f, x, autodiff, ϵ)
     elseif isa(autodiff, AutoForwardDiff)
         forwarddiff_jacobian(f, x)
     else
-        error("Got unsupported `autodiff = `$autodiff")
+        error("Got unsupported autodiff = $autodiff")
     end
 end
 #======================================================#

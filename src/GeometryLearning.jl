@@ -97,7 +97,7 @@ export
     normalizedata, unnormalizedata,
     NeuralModel, NeuralEmbeddingModel,
     dudx1_1D, dudx2_1D, dudx4_1D,
-    dudx1_2D, #dudx2_2D, dudx4_2D,
+    dudx1_2D, dudx2_2D # , dudx4_2D,
     dudp
 
 include("problems.jl")
@@ -105,7 +105,8 @@ export dudtRHS
 export
     Advection1D, Advection2D,
     AdvectionDiffusion1D,
-    BurgersInviscid1D, BurgersViscous1D,
+    BurgersInviscid1D,
+    BurgersViscous1D, BurgersViscous2D,
     KuramotoSivashinsky1D
 
 include("nonlinleastsq.jl")

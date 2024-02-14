@@ -1,9 +1,12 @@
 #
 #======================================================#
-struct PartWeightDecay{Tg, Ta} <: Optimisers.AbstractRule
+struct PartWeightDecay{Tg, Ta, Tn} <: Optimisers.AbstractRule
     gamma::Tg
     ca_axes::Ta
+    name::Tn
 end
+
+PartWeightDecay(gamma, ca_axes) = PartWeightDecay(gamma, ca_axes, "")
 
 Optimisers.init(o::PartWeightDecay, x::AbstractArray) = nothing
 
@@ -28,4 +31,6 @@ function Optimisers.apply!(
 
     return state, getdata(dx′)
 end
+
+Base.show(io::IO, o::PartWeightDecay) = print(io, "PartWeightDecay($(o.name)))")
 #======================================================#

@@ -107,16 +107,16 @@ end
 
 function normalizedata(
     u::AbstractArray,
-    μ::Union{Number, AbstractVecOrMat},
-    σ::Union{Number, AbstractVecOrMat},
+    μ::Union{Number, AbstractArray},
+    σ::Union{Number, AbstractArray},
 )
     (u .- μ) ./ σ
 end
 
 function unnormalizedata(
     u::AbstractArray,
-    μ::Union{Number, AbstractVecOrMat},
-    σ::Union{Number, AbstractVecOrMat},
+    μ::Union{Number, AbstractArray},
+    σ::Union{Number, AbstractArray},
 )
     (u .* σ) .+ μ
 end

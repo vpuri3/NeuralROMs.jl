@@ -34,28 +34,35 @@ function makedata_autodecoder(datafile::String;
     #==============#
     data = jldopen(datafile)
     x = data["x"]
-    u = data["u"] # [Nx, Nb, Nt]
+    u = data["u"] # [Nx, Nb, Nt] or [out_dim, Nx, Nb, Nt]
     md_data = data["metadata"]
     close(data)
 
+    @assert ndims(u) ∈ (3,4,)
     @assert x isa AbstractVecOrMat
     x = x isa AbstractVector ? reshape(x, 1, :) : x # (Dim, Npoints)
 
-    in_dim = size(x, 1) # input size
-    println("input size $in_dim with $(size(x, 2)) points per trajectory")
+    if ndims(u) == 3 # [Nx, Nb, Nt]
+        u = reshape(u, 1, size(u)...)
+    end
+
+    in_dim  = size(x, 1)
+    out_dim = size(u, 1)
+
+    println("input size $in_dim with $(size(x, 2)) points per trajectory.")
+    println("output size $out_dim.")
+
+    @assert eltype(x) === Float32
+    @assert eltype(u) === Float32
 
     #==============#
     # normalize
     #==============#
 
-    # TODO: adjust u normalization for multiple outputs
-
-    # single field prediction
-    ū  = sum(u) / length(u)
-    σu = sum(abs2, u .- ū) / length(u) |> sqrt
+    ū  = sum(u, dims = (2,3,4)) / (length(u) ÷ out_dim) |> vec
+    σu = sum(abs2, u .- ū, dims = (2,3,4)) / (length(u) ÷ out_dim) .|> sqrt |> vec
     u  = normalizedata(u, ū, σu)
 
-    # noramlize x, y separately
     x̄  = sum(x, dims = 2) / size(x, 2) |> vec
     σx = sum(abs2, x .- x̄, dims = 2) / size(x, 2) .|> sqrt |> vec
     x  = normalizedata(x, x̄, σx)
@@ -63,19 +70,22 @@ function makedata_autodecoder(datafile::String;
     #==============#
     # subsample, test/train split
     #==============#
-    x  = @view x[:, Ix]
-    _u = @view u[Ix, _Ib, _It]
-    u_ = @view u[Ix, Ib_, It_]
+    _x = @view x[:, Ix]
+    x_ = @view x[:, Ix]
 
-    Nx = size(x, 2)
+    _u = @view u[:, Ix, _Ib, _It]
+    u_ = @view u[:, Ix, Ib_, It_]
+
+    Nx = size(_x, 2)
+    @assert size(_u, 2) == size(_x, 2)
 
     println("Using $Nx sample points per trajectory.")
 
-    _u = reshape(_u, Nx, :)
-    u_ = reshape(u_, Nx, :)
+    _u = reshape(_u, out_dim, Nx, :)
+    u_ = reshape(u_, out_dim, Nx, :)
 
-    _Ns = size(_u, 2) # number of codes i.e. # trajectories
-    Ns_ = size(u_, 2)
+    _Ns = size(_u, 3) # number of codes i.e. # trajectories
+    Ns_ = size(u_, 3)
 
     println("$_Ns / $Ns_ trajectories in train/test sets.")
 
@@ -90,12 +100,12 @@ function makedata_autodecoder(datafile::String;
     _xyz = zeros(Float32, in_dim, Nx, _Ns)
     xyz_ = zeros(Float32, in_dim, Nx, Ns_)
 
-    _xyz[:, :, :] .= x # VP: rm'd adjoint here
-    xyz_[:, :, :] .= x
+    _xyz[:, :, :] .= _x
+    xyz_[:, :, :] .= x_
 
     # solution
-    _y = reshape(_u, 1, :)
-    y_ = reshape(u_, 1, :)
+    _y = reshape(_u, out_dim, :)
+    y_ = reshape(u_, out_dim, :)
 
     _x = (reshape(_xyz, in_dim, :), reshape(_idx, 1, :))
     x_ = (reshape(xyz_, in_dim, :), reshape(idx_, 1, :))
@@ -137,8 +147,6 @@ function train_autodecoder(
     _data, _, metadata = makedata_autodecoder(datafile; makedata_kws...)
     dir = modeldir
 
-    Nx = isa(makedata_kws.Ix, Colon) ? metadata.Nx : length(makedata_kws.Ix)
-
     #--------------------------------------------#
     # architecture hyper-params
     #--------------------------------------------#
@@ -151,8 +159,8 @@ function train_autodecoder(
     init_bias = rand32 # zeros32
     use_bias_fn = false
 
-    _batchsize = isnothing(_batchsize) ? Nx * 10       : _batchsize
-    batchsize_ = isnothing(batchsize_) ? numobs(_data) : batchsize_
+    _batchsize = isnothing(_batchsize) ? numobs(_data) ÷ 100 : _batchsize
+    batchsize_ = isnothing(batchsize_) ? numobs(_data)       : batchsize_
 
     lossfun = regularize_autodecoder(mse; σ2inv, α, λ1, λ2)
 
@@ -195,7 +203,7 @@ function train_autodecoder(
     opts = Tuple(
         OptimiserChain(
             Optimisers.Adam(lr),
-            PartWeightDecay(0f0, decoder_axes),
+            PartWeightDecay(0f0, decoder_axes, "decoder"),
         ) for lr in lrs
     )
 
@@ -204,7 +212,7 @@ function train_autodecoder(
     early_stoppings = (fill(true, Nlrs)...,)
 
     # warm up
-    opt_warmup = OptimiserChain(Optimisers.Adam(1f-2), PartWeightDecay(0f0, decoder_axes),)
+    opt_warmup = OptimiserChain(Optimisers.Adam(1f-2), PartWeightDecay(0f0, decoder_axes, "decoder"),)
     nepochs_warmup = 10
     schedule_warmup = Step(1f-2, 1f0, Inf32)
     early_stopping_warmup = true
@@ -226,7 +234,12 @@ function train_autodecoder(
     train_args = (; l, h, w, E, _batchsize, λ1, λ2, σ2inv, α, weight_decays)
     metadata   = (; metadata..., train_args)
 
-    @show metadata
+    displaymetadata(metadata)
+
+    # p, st = Lux.setup(rng, NN)
+    # P = ComponentArray(p)
+    # @show eltype(P)
+    # @show st
 
     @time model, ST = train_model(NN, _data; rng,
         _batchsize, batchsize_, weight_decays,
@@ -235,13 +248,24 @@ function train_autodecoder(
         cb_epoch,
     )
 
+    displaymetadata(metadata)
+    
     plot_training(ST...) |> display
 
-    @show metadata
-
-    model
+    model, ST, metadata
 end
 
+#======================================================#
+function displaymetadata(metadata::NamedTuple)
+    println("METADATA:")
+    println("ū, σu: $(metadata.ū), $(metadata.σu)")
+    println("x̄, σx: $(metadata.x̄), $(metadata.σx)")
+    println("Model README: ", metadata.readme)
+    println("Data-metadata: ", metadata.md_data)
+    println("train_args: ", metadata.train_args)
+    println("Nx, _Ncodes, Ncodes_: $(metadata.Nx), $(metadata._Ns), $(metadata.Ns_)")
+    nothing
+end
 #======================================================#
 
 function infer_autodecoder(
@@ -332,6 +356,8 @@ function evolve_autodecoder(
     # data, model
     x, _, _ = data
 
+    display(decoder[1])
+
     NN, p0, st = freeze_autodecoder(decoder, p0; rng)
     model = NeuralEmbeddingModel(NN, st, x, metadata)
 
@@ -388,11 +414,16 @@ function postprocess_autodecoder(
 
     close(data)
 
-    # data sizes
-    Nx, Nb, Nt = size(Udata)
-
+    @assert ndims(Udata) ∈ (3,4,)
     @assert Xdata isa AbstractVecOrMat
-    Xdata = Xdata isa AbstractVector ? reshape(Xdata, 1, :) : x # (Dim, Npoints)
+    Xdata = Xdata isa AbstractVector ? reshape(Xdata, 1, :) : Xdata # (Dim, Npoints)
+
+    if ndims(Udata) == 3 # [Nx, Nb, Nt]
+        Udata = reshape(Udata, 1, size(Udata)...)
+    end
+
+    in_dim  = size(Xdata, 1)
+    out_dim, Nx, Nb, Nt = size(Udata)
 
     mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
     mu = isa(mu, AbstractArray) ? vec(mu) : mu
@@ -412,106 +443,117 @@ function postprocess_autodecoder(
     #==============#
     # subsample in space
     #==============#
-    Udata = @view Udata[md.makedata_kws.Ix, :, :]
-    Xdata = @view Xdata[:, md.makedata_kws.Ix]
+    # Udata = @view Udata[:, md.makedata_kws.Ix, :, :]
+    # Xdata = @view Xdata[:, md.makedata_kws.Ix]
 
     in_dim, Nx = size(Xdata)
 
     #==============#
     # train/test split
     #==============#
-    _Udata = @view Udata[:, md.makedata_kws._Ib, :] # un-normalized
-    Udata_ = @view Udata[:, md.makedata_kws.Ib_, :]
+    _Udata = @view Udata[:, :, md.makedata_kws._Ib, md.makedata_kws._It] # un-normalized
+    Udata_ = @view Udata[:, :, md.makedata_kws.Ib_, md.makedata_kws.It_]
 
     #==============#
     # from training data
     #==============#
-    _Ib = isa(md.makedata_kws._Ib, Colon) ? (1:size(Udata, 2)) : md.makedata_kws._Ib
-    Ib_ = isa(md.makedata_kws.Ib_, Colon) ? (1:size(Udata, 2)) : md.makedata_kws.Ib_
+    _Ib = isa(md.makedata_kws._Ib, Colon) ? (1:size(Udata, 3)) : md.makedata_kws._Ib
+    Ib_ = isa(md.makedata_kws.Ib_, Colon) ? (1:size(Udata, 3)) : md.makedata_kws.Ib_
 
-    _It = isa(md.makedata_kws._It, Colon) ? (1:size(Udata, 3)) : md.makedata_kws._It
-    It_ = isa(md.makedata_kws.It_, Colon) ? (1:size(Udata, 3)) : md.makedata_kws.It_
+    _It = isa(md.makedata_kws._It, Colon) ? (1:size(Udata, 4)) : md.makedata_kws._It
+    It_ = isa(md.makedata_kws.It_, Colon) ? (1:size(Udata, 4)) : md.makedata_kws.It_
 
-    @show md
+    displaymetadata(md)
 
-    _data, _, _ = makedata_autodecoder(datafile; md.makedata_kws...)
+    _data, _, _ = makedata_autodecoder(datafile; _Ib = md.makedata_kws._Ib, _It = md.makedata_kws._It)
     _xdata, _Icode = _data[1]
     _xdata = unnormalizedata(_xdata, md.x̄, md.σx)
 
-    model = NeuralEmbeddingModel(NN, st, md, _Icode)
+    model  = NeuralEmbeddingModel(NN, st, md, _Icode)
+    _Upred = eval_model(model, (_xdata, _Icode), p; device) |> cpu_device()
 
-    _Upred = (model |> device)(_xdata |> device, p |> device) |> Lux.cpu_device()
-    _Upred = reshape(_Upred, Nx, length(_Ib), length(_It))
+    _Upred = reshape(_Upred, out_dim, Nx, length(_Ib), length(_It))
+
+    @show mse(_Upred, _Udata) / sum(abs2, _Udata)
 
     if makeplot
-        for k in _Ib
-
-            Ud = @view _Udata[:, k, :]
-            Up = @view _Upred[:, k, :]
+        for k in axes(_Ib, 1)
 
             _mu = mu[_Ib[k]]
             title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
-    
-            idx_data = LinRange(1, size(Ud, 2), 10) .|> Base.Fix1(round, Int)
-            idx_pred = LinRange(1, size(Up, 2), 10) .|> Base.Fix1(round, Int)
-    
-            upred = Up[:, idx_pred]
-            udata = Ud[:, idx_data]
-    
-            if in_dim == 1
-                xlabel = "x"
-                ylabel = "u(x, t)"
 
-                xdata = vec(Xdata)
-                Iplot = 1:8:Nx
+            Ud = @view _Udata[:, :, k, :]
+            Up = @view _Upred[:, :, k, :]
 
-                plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
-                plot!(plt, xdata, upred, w = 2, palette = :tab10)
-                scatter!(plt, xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
-                png(plt, joinpath(outdir, "train$(k)"))
+            # time-indices
+            idx_data = LinRange(1, size(Ud, 3), 4) .|> Base.Fix1(round, Int)
+            idx_pred = LinRange(1, size(Up, 3), 4) .|> Base.Fix1(round, Int)
 
-                It_data = LinRange(1, size(Ud, 2), 100) .|> Base.Fix1(round, Int)
-                It_pred = LinRange(1, size(Up, 2), 100) .|> Base.Fix1(round, Int)
+            for od in 1:out_dim
+                upred = Up[od, :, idx_pred]
+                udata = Ud[od, :, idx_data]
 
-                anim = animate1D(Ud[:, It_data], Up[:, It_pred], vec(Xdata), Tdata[It_data];
-                                 w = 2, xlabel, ylabel, title)
-                gif(anim, joinpath(outdir, "train$(k).gif"); fps)
+                if in_dim == 1
+                    xlabel = "x"
+                    ylabel = "u$(od)(x, t)"
 
-                display(plt)
+                    xdata = vec(Xdata)
+                    Iplot = 1:8:Nx
 
-            elseif in_dim == 2
-                xlabel = "x"
-                ylabel = "y"
-                zlabel = "u(x, t)"
+                    plt = plot(xlabel = "x", ylabel = "u$(od)(x, t)", legend = false)
+                    plot!(plt, xdata, upred, w = 2, palette = :tab10)
+                    scatter!(plt, xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
+                    png(plt, joinpath(outdir, "train_u$(od)_k$(k)"))
 
-                kw = (; xlabel, ylabel, zlabel,)
+                    It_data = LinRange(1, size(Ud, 2), 100) .|> Base.Fix1(round, Int)
+                    It_pred = LinRange(1, size(Up, 2), 100) .|> Base.Fix1(round, Int)
 
-                x_re = reshape(Xdata[1, :], md_data.Nx, md_data.Ny)
-                y_re = reshape(Xdata[2, :], md_data.Nx, md_data.Ny)
+                    anim = animate1D(Ud[:, It_data], Up[:, It_pred], vec(Xdata), Tdata[It_data];
+                                     w = 2, xlabel, ylabel, title)
+                    gif(anim, joinpath(outdir, "train$(k).gif"); fps)
 
-                upred_re = reshape(upred, md_data.Nx, md_data.Ny, :)
-                udata_re = reshape(udata, md_data.Nx, md_data.Ny, :)
+                    display(plt)
 
-                for i in eachindex(idx_pred)
-                    up_re = upred_re[:, :, i]
-                    ud_re = udata_re[:, :, i]
+                elseif in_dim == 2
+                    xlabel = "x"
+                    ylabel = "y"
+                    zlabel = "u$(od)(x, t)"
 
-                    p1 = plot()
-                    p1 = meshplt(x_re, y_re, ud_re; plt = p1, c=:black, w = 1.0, kw...,)
-                    p1 = meshplt(x_re, y_re, up_re; plt = p1, c=:red  , w = 0.2, kw...,)
+                    kw = (; xlabel, ylabel, zlabel,)
 
-                    png(p1, joinpath(outdir, "train_$(k)_time_$(i)"))
+                    x_re = reshape(Xdata[1, :], md_data.Nx, md_data.Ny)
+                    y_re = reshape(Xdata[2, :], md_data.Nx, md_data.Ny)
 
-                    p2 = meshplt(x_re, y_re, ud_re - up_re;
-                        title = "error", kw...,)
-                    png(p2, joinpath(outdir, "train_$(k)_time_$(i)_error"))
-                end
+                    upred_re = reshape(upred, md_data.Nx, md_data.Ny, :)
+                    udata_re = reshape(udata, md_data.Nx, md_data.Ny, :)
 
-                anim = animate2D(udata_re, upred_re, x_re, y_re, Tdata[idx_data])
-                gif(anim, joinpath(outdir, "train_$(k).gif"), fps = 10)
-            end
-        end
-    end
+                    for i in eachindex(idx_pred)
+                        up_re = upred_re[:, :, i]
+                        ud_re = udata_re[:, :, i]
+
+                        # p1 = plot()
+                        # p1 = meshplt(x_re, y_re, up_re; plt = p1, c=:black, w = 1.0, kw...,)
+                        # p1 = meshplt(x_re, y_re, up_re - ud_re; plt = p1, c=:red  , w = 0.2, kw...,)
+                        #
+                        # p2 = meshplt(x_re, y_re, ud_re - up_re; title = "error", kw...,)
+                        #
+                        # png(p1, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)"))
+                        # png(p2, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)_error"))
+
+                        p3 = heatmap(up_re; title = "u$(od)(x, y)")
+                        p4 = heatmap(up_re - ud_re; title = "u$(od)(x, y)")
+
+                        png(p3, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)"))
+                        png(p4, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)_error"))
+                    end
+
+                    # anim = animate2D(udata_re, upred_re, x_re, y_re, Tdata[idx_data])
+                    # gif(anim, joinpath(outdir, "train_u$(od)_$(k).gif"); fps)
+
+                end # in_dim
+            end # out_dim
+        end # k ∈ _Ib
+    end # makeplot
 
     #==============#
     # inference (via data regression)
@@ -614,31 +656,84 @@ function postprocess_autodecoder(
     # check derivative
     #==============#
     begin
-        second_derv = true
-        third_derv  = false
-        fourth_derv = true
-    
         decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
         ncodes = size(_code[2].weight, 2)
-        idx = LinRange(1, ncodes, 10) .|> Base.Fix1(round, Int)
+        idx = LinRange(1, ncodes, 4) .|> Base.Fix1(round, Int)
     
         for i in idx
             p0 = _code[2].weight[:, i]
-    
-            # p1 = plot_derivatives1D_autodecoder(
-            #     decoder, Xdata, p0, md;
-            #     second_derv,
-            #     autodiff = AutoFiniteDiff(), ϵ=1f-2,
-            # )
-            # png(p1, joinpath(outdir, "derv_$(i)_FD_AD"))
-    
-            p2 = plot_derivatives1D_autodecoder(
-                decoder, vec(Xdata), p0, md;
-                second_derv, third_derv, fourth_derv,
-                autodiff = AutoForwardDiff(),
-            )
-            png(p2, joinpath(outdir, "derv_$(i)_FWD_AD"))
-            display(p2)
+
+            if in_dim == 1
+
+                ###
+                # AutoFiniteDiff
+                ###
+
+                ϵ  = 1f-2
+
+                plt = plot_derivatives1D_autodecoder(
+                    decoder, vec(Xdata), p0, md;
+                    second_derv = false, third_derv = false, fourth_derv = false,
+                    autodiff = AutoFiniteDiff(), ϵ,
+                )
+                png(plt, joinpath(outdir, "dudx1_$(i)_FIN_AD"))
+
+                plt = plot_derivatives1D_autodecoder(
+                    decoder, vec(Xdata), p0, md;
+                    second_derv = true, third_derv = false, fourth_derv = false,
+                    autodiff = AutoFiniteDiff(), ϵ,
+                )
+                png(plt, joinpath(outdir, "dudx2_$(i)_FIN_AD"))
+
+                plt = plot_derivatives1D_autodecoder(
+                    decoder, vec(Xdata), p0, md;
+                    second_derv = false, third_derv = true, fourth_derv = false,
+                    autodiff = AutoFiniteDiff(), ϵ,
+                )
+                png(plt, joinpath(outdir, "dudx3_$(i)_FIN_AD"))
+
+                plt = plot_derivatives1D_autodecoder(
+                    decoder, vec(Xdata), p0, md;
+                    second_derv = false, third_derv = false, fourth_derv = true,
+                    autodiff = AutoFiniteDiff(), ϵ,
+                )
+                png(plt, joinpath(outdir, "dudx4_$(i)_FIN_AD"))
+
+                ###
+                # AutoForwardDiff
+                ###
+                plt = plot_derivatives1D_autodecoder(
+                    decoder, vec(Xdata), p0, md;
+                    second_derv = false, third_derv = false, fourth_derv = false,
+                    autodiff = AutoForwardDiff(),
+                )
+                png(plt, joinpath(outdir, "dudx1_$(i)_FWD_AD"))
+
+                plt = plot_derivatives1D_autodecoder(
+                    decoder, vec(Xdata), p0, md;
+                    second_derv = true, third_derv = false, fourth_derv = false,
+                    autodiff = AutoForwardDiff(),
+                )
+                png(plt, joinpath(outdir, "dudx2_$(i)_FWD_AD"))
+
+                plt = plot_derivatives1D_autodecoder(
+                    decoder, vec(Xdata), p0, md;
+                    second_derv = false, third_derv = true, fourth_derv = false,
+                    autodiff = AutoForwardDiff(),
+                )
+                png(plt, joinpath(outdir, "dudx3_$(i)_FWD_AD"))
+
+                plt = plot_derivatives1D_autodecoder(
+                    decoder, vec(Xdata), p0, md;
+                    second_derv = false, third_derv = false, fourth_derv = true,
+                    autodiff = AutoForwardDiff(),
+                )
+                png(plt, joinpath(outdir, "dudx4_$(i)_FWD_AD"))
+
+            elseif in_dim == 2
+
+            end # in-dim
+
         end
     end
 
@@ -656,6 +751,55 @@ function postprocess_autodecoder(
 end
 
 #===========================================================#
+function eval_model(
+    model::GeometryLearning.AbstractNeuralModel,
+    x::AbstractArray,
+    p::AbstractArray;
+    batchsize = numobs(x) ÷ 100,
+    device = Lux.cpu_device(),
+)
+    loader = MLUtils.DataLoader(x; batchsize, shuffle = false, partial = true)
 
-nothing
+    p = p |> device
+    model = model |> device
+
+    if device isa Lux.LuxCUDADevice
+        loader = CuIterator(loader)
+    end
+
+    y = ()
+    for batch in loader
+        yy = model(batch, p)
+        y = (y..., yy)
+    end
+
+    hcat(y...)
+end
+
+function eval_model(
+    model::NeuralEmbeddingModel,
+    x::Tuple,
+    p::AbstractArray;
+    batchsize = numobs(x) ÷ 101,
+    device = Lux.cpu_device(),
+)
+    loader = MLUtils.DataLoader(x; batchsize, shuffle = false, partial = true)
+
+    p = p |> device
+    model = model |> device
+
+    if device isa Lux.LuxCUDADevice
+        loader = CuIterator(loader)
+    end
+
+    y = ()
+    for batch in loader
+        yy = model(batch[1], p, batch[2])
+        yy = reshape(yy, size(yy, 1), :)
+        y = (y..., yy)
+    end
+
+    hcat(y...)
+end
+#===========================================================#
 #

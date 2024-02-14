@@ -68,13 +68,17 @@ function train_model(
     # parameters
     _p, _st = Lux.setup(rng, NN)
 
-    p  = isnothing(p ) ? _p  : p
+    p  = isnothing(p)  ? _p  : p
     st = isnothing(st) ? _st : st
 
     _p = p |> ComponentArray
     p = isreal(_p) ? _p : p
 
     p, st = (p, st) |> device
+
+    @assert eltype(p) ∈ (Float32, ComplexF32)
+    # @assert eltype(first(_loader))
+    # @assert eltype(data) ∈ (Bool, Int8, Int16, Int32, Float32, ComplexF32)
 
     println(io, "#======================#")
     println(io, "Starting Trainig Loop")

@@ -75,17 +75,16 @@ function test_autodecoder(
         prob, decoder, md, data, p0, timealg, Δt, adaptive;
         rng, device, verbose)
 
-    Ix_plt = 1:4:Nx
+    Ix_plt = 1:8:Nx
     plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
     plot!(plt, Xdata, Up, w = 2, palette = :tab10)
     scatter!(plt, Xdata[Ix_plt], Ud[Ix_plt, :], w = 1, palette = :tab10)
 
-    _inf  = norm(Up - Ud, Inf)
-    _mse  = sum(abs2, Up - Ud) / length(Ud)
-    _rmse = sum(abs2, Up - Ud) / sum(abs2, Ud) |> sqrt
-    println("||∞ : $(_inf)")
-    println("MSE : $(_mse)")
-    println("RMSE: $(_rmse)")
+    denom  = sum(abs2, Ud) / length(Ud) |> sqrt
+    _max  = norm(Up - Ud, Inf) / sqrt(denom)
+    _mean = sqrt(sum(abs2, Up - Ud) / length(Ud)) / denom
+    println("Max error  (normalized): $(_max * 100 ) %")
+    println("Mean error (normalized): $(_mean * 100) %")
 
     png(plt, joinpath(outdir, "evolve_$k"))
     display(plt)
@@ -102,7 +101,7 @@ Random.seed!(rng, 111)
 device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "data_ks/", "data.jld2")
 
-modeldir = joinpath(@__DIR__, "model2")
+modeldir = joinpath(@__DIR__, "model3")
 modelfile = joinpath(modeldir, "model_08.jld2")
 
 prob = KuramotoSivashinsky1D(0.01f0)
@@ -115,8 +114,8 @@ _It = LinRange(1, 1000, 100) .|> Base.Fix1(round, Int) # 200
 _batchsize = 256 * 5
 l, h, w = 16, 5, 64
 λ1, λ2 = 0f0, 0f0
-σ2inv, α = 1f-1, 0f-4 # 1f-1, 1f-3
-weight_decays = 2f-2  # 1f-2
+σ2inv, α = 1f-1, 0f-5 # 1f-1, 1f-3
+weight_decays = 1f-2  # 1f-2
 
 isdir(modeldir) && rm(modeldir, recursive = true)
 makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)

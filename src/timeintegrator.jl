@@ -303,7 +303,7 @@ function evolve_integrator!(
 
     ts = [ts...]
     ps = mapreduce(getdata, hcat, ps) |> Lux.cpu_device()
-    us = mapreduce(adjoint, hcat, us) |> Lux.cpu_device()
+    us = cat(us...; dims = 3)         |> Lux.cpu_device()
 
     @assert norm(integrator.tsave - ts, Inf) < 1e-6
 
@@ -362,6 +362,7 @@ function evolve_model(
         abstol = nlsabstol,
         verbose,
     )
+
     u0 = model(x, p0)
 
     Δt = isnothing(Δt) ? -(reverse(extrema(tsave))...) / 200 |> T : T(Δt)

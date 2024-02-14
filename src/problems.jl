@@ -104,6 +104,51 @@ function dudtRHS(
 end
 
 #===================================================#
+struct BurgersViscous2D{T} <: AbstractPDEProblem
+    ν::T
+end
+
+function dudtRHS(
+    prob::BurgersViscous2D,
+    model::AbstractNeuralModel,
+    x::AbstractArray,
+    p::AbstractVector,
+    t::Real;
+    autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
+    ϵ = nothing,
+)
+    ν = prob.ν
+
+    uv, (uvdx, uvdy), (uvdxx, uvdyy) = dudx2_2D(model, x, p; autodiff, ϵ)
+
+    u = getindex(uv, 1:1, :)
+    v = getindex(uv, 2:2, :)
+
+    udx = getindex(uvdx, 1:1, :)
+    vdx = getindex(uvdx, 2:2, :)
+
+    udy = getindex(uvdy, 1:1, :)
+    vdy = getindex(uvdy, 2:2, :)
+
+    # diffusion:
+    # ν * (udxx + udyy)
+    # ν * (vdxx + vdyy)
+
+    diffusion = ν * (uvdxx + uvdyy)
+
+    # convection:
+    #   u * udx + v * udy
+    #   u * vdx + v * vdy
+
+    conv_x = @. u * udx + v * udy
+    conv_y = @. u * vdx + v * vdy
+
+    convection = vcat(conv_x, conv_y)
+
+    diffusion - convection
+end
+
+#===================================================#
 struct KuramotoSivashinsky1D{T} <: AbstractPDEProblem
     ν::T
 end

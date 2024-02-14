@@ -11,7 +11,7 @@ mae(y, ŷ) = sum(abs, ŷ - y) / numobs(ŷ)
 function mae(NN, p, st, batch)
     x, ŷ = batch
     y, st = NN(x, p, st)
-    mae(y, ŷ), st, ()
+    mae(y, ŷ), st, (;)
 end
 
 """
@@ -26,7 +26,7 @@ function mse(NN, p, st, batch)
     x, ŷ = batch
     y, st = NN(x, p, st)
 
-    mse(y, ŷ), st, ()
+    mse(y, ŷ), st, (;)
 end
 
 """
@@ -183,19 +183,28 @@ function regularize_autodecoder(
         N = numobs(batch)
         l, st_new, stats = lossfun(NN, p, st, batch)
 
+        if p isa AbstractArray
+            @assert eltype(p) === T "got $(eltype(p)) === $(T)."
+            @assert eltype(l) === T "got $(eltype(l)) === $(T)."
+        end
+
+        stats = (; stats..., l)
+
         decoder, code = get_autodecoder(NN, p, st)
 
         ###
         # code regularization
         ###
 
-        lcode = if iszero(σ2inv)
-             zero(T)
+        lcode, stats = if iszero(σ2inv)
+             zero(T), stats
         else
             pcode, _ = code[1](batch[1][2], code[2], code[3])
             lcode = sum(abs2, pcode)
 
-            σ2inv * lcode / N
+            lcode = σ2inv * lcode / N
+
+            lcode, (; stats..., lcode)
         end
 
         ###
@@ -203,7 +212,14 @@ function regularize_autodecoder(
         ###
 
         cbound = compute_cbound(decoder...)
-        lcond  =  iszero(α) ? T(0) : cbound * α / N
+        stats = (; stats..., cbound)
+
+        lcond, stats = if iszero(α)
+            zero(T), stats
+        else
+            lcond = cbound * α / N
+            lcond, (; stats..., lcond)
+        end
 
         ###
         # elastic reg on decoder
@@ -212,16 +228,18 @@ function regularize_autodecoder(
         _p = decoder[2]
         _N = length(_p)
 
-        l1 = if iszero(λ1)
-            zero(T)
+        l1, stats = if iszero(λ1)
+            zero(T), stats
         else
-            λ1 * sum(abs , _p) / _N 
+            l1 = λ1 * sum(abs , _p) / _N 
+            l1, (; stats..., l1,)
         end
 
-        l2 = if iszero(λ2)
-            zero(T)
+        l2, stats = if iszero(λ2)
+            zero(T), stats
         else
-            T(0.5) * λ2 * sum(abs2, _p) / _N
+            l2 = T(0.5) * λ2 * sum(abs2, _p) / _N
+            l2, (; stats..., l2,)
         end
 
         ###
@@ -229,8 +247,8 @@ function regularize_autodecoder(
         ###
 
         loss = l + lcode + lcond + l1 + l2
-    
-        loss, st_new, (; stats..., l, lcode, lcond, cbound, l1, l2)
+
+        loss, st_new, stats
     end
 end
 #=====================================================================#

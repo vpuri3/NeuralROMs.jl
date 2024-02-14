@@ -80,12 +80,11 @@ function test_autodecoder(
     plot!(plt, Xdata, Up, w = 2, palette = :tab10)
     scatter!(plt, Xdata[Ix_plt], Ud[Ix_plt, :], w = 1, palette = :tab10)
 
-    _inf  = norm(Up - Ud, Inf)
-    _mse  = sum(abs2, Up - Ud) / length(Ud)
-    _rmse = sum(abs2, Up - Ud) / sum(abs2, Ud) |> sqrt
-    println("||∞ : $(_inf)")
-    println("MSE : $(_mse)")
-    println("RMSE: $(_rmse)")
+    denom  = sum(abs2, Ud) / length(Ud) |> sqrt
+    _max  = norm(Up - Ud, Inf) / sqrt(denom)
+    _mean = sqrt(sum(abs2, Up - Ud) / length(Ud)) / denom
+    println("Max error  (normalized): $(_max * 100 )%")
+    println("Mean error (normalized): $(_mean * 100)%")
 
     png(plt, joinpath(outdir, "evolve_$k"))
     display(plt)
@@ -135,12 +134,12 @@ weight_decays = 0f-3                      # 0,
 # λ1, λ2, σ2inv, α = 0f-0, 0f-0, 1f-3, 1f-6 # 0, 0, 1f-3, 1f-6
 # weight_decays = 0f-3                      # 0, 1f-3
 
-isdir(modeldir) && rm(modeldir, recursive = true)
-makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
-model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
-    λ1, λ2, σ2inv, α, weight_decays, cb_epoch, device, makedata_kws,
-    _batchsize,
-)
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
+# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
+#     λ1, λ2, σ2inv, α, weight_decays, cb_epoch, device, makedata_kws,
+#     _batchsize,
+# )
 
 ## process
 outdir = joinpath(modeldir, "results")

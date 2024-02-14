@@ -33,20 +33,21 @@ end
 rng = Random.default_rng()
 Random.seed!(rng, 199)
 
-dir = joinpath(@__DIR__, "CAE_stationary")
-datadir = joinpath(@__DIR__, "burg_visc_re10k_stationary/data.bson")
-
-# dir = joinpath(@__DIR__, "CAE_traveling")
-# datadir = joinpath(@__DIR__, "burg_visc_re10k_traveling/data.bson")
+dir = joinpath(@__DIR__, "model")
+datadir = joinpath(@__DIR__, "burg_visc_re10k/data.bson")
 
 # get data
 V, _data, data_, metadata = begin
     data = BSON.load(datadir)
 
     u = data[:u] # [Nx, Nb, Nt]
+    mu = data[:mu] # [0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
 
     # get sizes
-    Nx, Nt, Nb = size(u)
+    Nx, Nb, Nt = size(u)
+
+    Nx = Int(Nx / 8)
+    Ix = 1:8:8192
 
     # normalize arrays
     mean = sum(u) / length(u)
@@ -54,21 +55,22 @@ V, _data, data_, metadata = begin
     u    = (u .- mean) / sqrt(var)
 
     # train/test split
-    _Ib, Ib_ = splitobs(1:Nb; at = 0.8, shuffle = true)
+    _Ib, Ib_ = splitobs(1:Nb; at = 0.5, shuffle = true)
+    # _Ib, Ib_ = [4, 6], [1, 2, 3, 5, 7]
 
-    # train on times 0 - 5s
-    _It = 1:2:Int(Nt/2) |> Array
-    It_ = 1:4:Nt        |> Array
+    # train on times 0.0 - 0.5s
+    _It = Colon() # 1:1:Int(Nt/2) |> Array
+    It_ = Colon() # 1:2:Nt        |> Array
 
-    _u = @view u[:, _Ib, _It]
-    u_ = @view u[:, Ib_, It_]
+    _u = @view u[Ix, _Ib, _It]
+    u_ = @view u[Ix, Ib_, It_]
 
     _u = reshape(_u, Nx, 1, :)
     u_ = reshape(u_, Nx, 1, :)
 
     V = nothing # FourierSpace(N)
 
-    readme = "Train from time 0-5, test on 0-10."
+    readme = "Train/test on 0.0-0.5."
 
     metadata = (; mean, var, _Ib, Ib_, _It, readme)
 
@@ -77,13 +79,13 @@ end
 
 # parameters
 E = 200 # epochs
-w = 128 # width
-l = 64  # latent
+w = 64  # width
+l = 16  # latent
 act = tanh # relu
 
 opt = Optimisers.Adam()
-batchsize  = 100
-batchsize_ = 200
+batchsize  = 50
+batchsize_ = 50
 learning_rates = 1f-3 ./ (2 .^ (0:9))
 nepochs = E/10 * ones(10) .|> Int
 device = Lux.gpu_device()
