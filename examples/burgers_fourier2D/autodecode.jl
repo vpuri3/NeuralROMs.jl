@@ -105,11 +105,11 @@ function test_autodecoder(
             up_re = upred_re[od, :, :, i]
             ud_re = udata_re[od, :, :, i]
 
-            p1 = heatmap(ud_re; kw...,)
-            p2 = heatmap(up_re; kw...,)
+            p1 = heatmap(up_re; kw...,)
+            p2 = heatmap(ud_re - up_re; kw...,)
 
-            png(p1, joinpath(outdir, "evolve_u$(od)_$(k)_time_$(i)_data"))
-            png(p2, joinpath(outdir, "evolve_u$(od)_$(k)_time_$(i)_pred"))
+            png(p1, joinpath(outdir, "evolve_u$(od)_$(k)_time_$(i)_pred"))
+            png(p2, joinpath(outdir, "evolve_u$(od)_$(k)_time_$(i)_errr"))
         end
     end
 
@@ -143,8 +143,8 @@ _It = LinRange(1, 500, 201) .|> Base.Fix1(round, Int) # 101
 E = 7000
 l, h, w = 8, 5, 128
 λ1, λ2   = 0f0, 0f0
-σ2inv, α = 1f-2, 0f-6 # 5f-3
-weight_decays = 2f-2  # 1f-2
+σ2inv, α = 1f-2, 0f-6
+weight_decays = 2f-2
 
 # isdir(modeldir) && rm(modeldir, recursive = true)
 # makedata_kws = (; Ix, _Ib = :, Ib_ = :, _It = _It, It_ = :)

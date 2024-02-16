@@ -256,17 +256,6 @@ function train_autodecoder(
 end
 
 #======================================================#
-function displaymetadata(metadata::NamedTuple)
-    println("METADATA:")
-    println("ū, σu: $(metadata.ū), $(metadata.σu)")
-    println("x̄, σx: $(metadata.x̄), $(metadata.σx)")
-    println("Model README: ", metadata.readme)
-    println("Data-metadata: ", metadata.md_data)
-    println("train_args: ", metadata.train_args)
-    println("Nx, _Ncodes, Ncodes_: $(metadata.Nx), $(metadata._Ns), $(metadata.Ns_)")
-    nothing
-end
-#======================================================#
 
 function infer_autodecoder(
     model::AbstractNeuralModel,
@@ -339,6 +328,7 @@ function infer_autodecoder(
 end
 
 #======================================================#
+
 function evolve_autodecoder(
     prob::AbstractPDEProblem,
     decoder::NTuple{3, Any},
@@ -747,6 +737,19 @@ function postprocess_autodecoder(
         close(RM)
     end
 
+    nothing
+end
+
+#======================================================#
+
+function displaymetadata(metadata::NamedTuple)
+    println("METADATA:")
+    println("ū, σu: $(metadata.ū), $(metadata.σu)")
+    println("x̄, σx: $(metadata.x̄), $(metadata.σx)")
+    println("Model README: ", metadata.readme)
+    println("Data-metadata: ", metadata.md_data)
+    println("train_args: ", metadata.train_args)
+    println("Nx, _Ncodes, Ncodes_: $(metadata.Nx), $(metadata._Ns), $(metadata.Ns_)")
     nothing
 end
 
