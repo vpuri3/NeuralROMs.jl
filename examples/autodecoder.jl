@@ -19,7 +19,8 @@ begin
 end
 
 #======================================================#
-function makedata_autodecoder(datafile::String;
+function makedata_autodecoder(
+    datafile::String;
     Ix = Colon(), # subsample in space
     _Ib = Colon(), # train/test split in batches
     Ib_ = Colon(),
@@ -43,7 +44,7 @@ function makedata_autodecoder(datafile::String;
     x = x isa AbstractVector ? reshape(x, 1, :) : x # (Dim, Npoints)
 
     if ndims(u) == 3 # [Nx, Nb, Nt]
-        u = reshape(u, 1, size(u)...)
+        u = reshape(u, 1, size(u)...) # [1, Nx, Nb, Nt]
     end
 
     in_dim  = size(x, 1)
@@ -395,11 +396,11 @@ function postprocess_autodecoder(
     #==============#
     # load data
     #==============#
-    data = jldopen(datafile)
+    data  = jldopen(datafile)
     Tdata = data["t"]
     Xdata = data["x"]
     Udata = data["u"]
-    mu = data["mu"]
+    mu    = data["mu"]
     md_data = data["metadata"]
 
     close(data)
