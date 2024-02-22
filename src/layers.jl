@@ -39,15 +39,15 @@ trajectory.
 function ImplicitEncoderDecoder(
     encoder::Lux.AbstractExplicitLayer,
     decoder::Lux.AbstractExplicitLayer,
-    Npoints::NTuple{D, Int},
-    encoder_width::Integer, # number of input channels to encoder
-    # channel_dim::Integer = D + 1,
+    Npoints::NTuple{D, Integer},
+    out_dim::Integer,
 ) where{D}
 
-    channel_dim = D + 1
+    in_dim = D
+    channel_dim = D + 1 # in_dim
 
     # channel length
-    channel_split = 1:encoder_width, (encoder_width+1):(encoder_width+D)
+    channel_split = 1:in_dim, (in_dim+1):(in_dim + out_dim)
 
     repeat = WrappedFunction(Base.Fix2(_ntimes, Npoints))
     noop = NoOpLayer()
@@ -59,11 +59,10 @@ function ImplicitEncoderDecoder(
     perm2 = PermuteLayer(PERM2)
 
     Chain(;
-        split   = SplitRows(channel_split...; channel_dim), # u[N, 1, B], x[N, 1, B]
-        encode  = Parallel(nothing; encoder, noop),         # ũ[L, B]   , x[N, 1, B]
-        assem   = Parallel(vcat, repeat, perm1),            # [L,N,B], [1,N,B] -> [L+1,N,B]
-        decoder = decoder,                                  # [L+1,N,B] -> [out_dim, N, B]
-        perm    = perm2,
+        split   = SplitRows(channel_split...; channel_dim), # x[N, in_dim, B], u[N, out_dim, B] 
+        encode  = Parallel(nothing; noop, encoder),         # x[N, in_dim, B], ũ[L, B]
+        assem   = Parallel(vcat, perm1, repeat),            # x[in_dim, N, B], ũ[L, N, B]  -> [L + in_dim, N, B]
+        decoder = decoder,                                  # [L + in_dim, N, B] -> [out_dim, N, B]
     )
 end
 

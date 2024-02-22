@@ -150,31 +150,28 @@ function train_autodecoder(
     dir = modeldir
 
     #--------------------------------------------#
-    # architecture hyper-params
+    # architecture
     #--------------------------------------------#
-    act = sin
-
-    init_wt_in = scaled_siren_init(3f1)
-    init_wt_hd = scaled_siren_init(1f0)
-    init_wt_fn = glorot_uniform
-
-    init_bias = rand32 # zeros32
-    use_bias_fn = false
-
-    _batchsize = isnothing(_batchsize) ? numobs(_data) ÷ 100 : _batchsize
-    batchsize_ = isnothing(batchsize_) ? numobs(_data)       : batchsize_
-
-    lossfun = regularize_autodecoder(mse; σ2inv, α, λ1, λ2)
-
-    #----------------------#----------------------#
     in_dim, out_dim = size(_data[1][1], 1), size(_data[2], 1) # in/out dim
 
     println("input size, output size, $in_dim, $out_dim")
 
     decoder = begin
-        in_layer = Dense(l + in_dim, w, act; init_weight = init_wt_in, init_bias)
-        hd_layer = Dense(w, w, act         ; init_weight = init_wt_hd, init_bias)
-        fn_layer = Dense(w, out_dim        ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
+        init_wt_in = scaled_siren_init(3f1)
+        init_wt_hd = scaled_siren_init(1f0)
+        init_wt_fn = glorot_uniform
+
+        init_bias = rand32 # zeros32
+        use_bias_fn = false
+
+        act = sin
+
+        wi = l + in_dim
+        wo = out_dim
+
+        in_layer = Dense(wi, w , act; init_weight = init_wt_in, init_bias)
+        hd_layer = Dense(w , w , act; init_weight = init_wt_hd, init_bias)
+        fn_layer = Dense(w , wo     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
 
         Chain(in_layer, fill(hd_layer, h)..., fn_layer)
     end
@@ -190,6 +187,11 @@ function train_autodecoder(
     end
 
     NN = AutoDecoder(decoder, metadata._Ns, l; init_weight = init_code)
+
+    _batchsize = isnothing(_batchsize) ? numobs(_data) ÷ 100 : _batchsize
+    batchsize_ = isnothing(batchsize_) ? numobs(_data)       : batchsize_
+
+    lossfun = regularize_autodecoder(mse; σ2inv, α, λ1, λ2)
 
     #--------------------------------------------#
     # training hyper-params

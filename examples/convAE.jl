@@ -175,10 +175,8 @@ function makedata_CAE(
     _u = reshape(_u, Nx, out_dim, _Ns)
     u_ = reshape(u_, Nx, out_dim, Ns_)
 
-    makedata_kws = (; Ix, _Ib, Ib_, _It, It_)
-
     readme = "Train/test on 0.0-0.5."
-    
+    makedata_kws = (; Ix, _Ib, Ib_, _It, It_,)
     metadata = (; ū, σu, x̄, σx,
         Nx, _Ns, Ns_,
         makedata_kws, md_data, readme,

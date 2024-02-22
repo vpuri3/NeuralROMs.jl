@@ -129,7 +129,7 @@ cb_epoch = nothing
 # weight_decays = 1f-3  # 1-f0,
 
 ## train (intrinsic latent space size)
-E = 2800
+E = 1400
 _It = Colon()
 _batchsize = 128 * 5
 l, h, w = 1, 5, 64
