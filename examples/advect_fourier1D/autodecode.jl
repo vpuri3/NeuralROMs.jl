@@ -57,8 +57,8 @@ function test_autodecoder(
     #==============#
 
     k = 1
-    It = LinRange(1,0.8 * length(Tdata), 3) .|> Base.Fix1(round, Int)
-    # It = LinRange(1,length(Tdata), 10) .|> Base.Fix1(round, Int)
+    # It = LinRange(1,0.8 * length(Tdata), 3) .|> Base.Fix1(round, Int)
+    It = LinRange(1,length(Tdata), 10) .|> Base.Fix1(round, Int)
 
     Ud = Udata[:, k, It]
     U0 = Ud[:, 1]
@@ -129,13 +129,13 @@ cb_epoch = nothing
 # weight_decays = 1f-3  # 1-f0,
 
 ## train (intrinsic latent space size)
-E = 1400
+E = 3500
 _It = Colon()
-_batchsize = 128 * 5
-l, h, w = 1, 5, 64
+_batchsize = 128 * 10
+l, h, w = 1, 5, 32 # 1, 5, 64
 λ1, λ2 = 0f0, 0f0
-σ2inv, α = 1f-3, 0f-6 # 1f-3
-weight_decays = 2f-3  # 2f-3
+σ2inv, α = 5f-3, 0f-6 # 1f-3
+weight_decays = 1f-3  # 2f-3
 
 # isdir(modeldir) && rm(modeldir, recursive = true)
 # makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)

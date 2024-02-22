@@ -181,7 +181,6 @@ function makedata_INR(
 end
 
 #======================================================#
-
 function train_INR(
     datafile::String,
     modeldir::String,
@@ -255,14 +254,145 @@ function train_INR(
 
     model, ST, metadata
 end
+#======================================================#
+
+function evolve_INR(
+    prob::AbstractPDEProblem,
+    datafile::String,
+    modelfile::String,
+    outdir::String;
+    rng::AbstractRNG = Random.default_rng(),
+    device = Lux.cpu_device(),
+)
+
+    #==============#
+    # load data
+    #==============#
+    data = jldopen(datafile)
+    Tdata = data["t"]
+    Xdata = data["x"]
+    Udata = data["u"]
+    mu = data["mu"]
+
+    close(data)
+
+    @assert ndims(Udata) ∈ (3,4,)
+    @assert Xdata isa AbstractVecOrMat
+    Xdata = Xdata isa AbstractVector ? reshape(Xdata, 1, :) : Xdata # (Dim, Npoints)
+
+    if ndims(Udata) == 3 # [Nx, Nb, Nt]
+        Udata = reshape(Udata, 1, size(Udata)...) # [out_dim, Nx, Nb, Nt]
+    end
+
+    in_dim  = size(Xdata, 1)
+    out_dim = size(Udata, 1)
+
+    mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
+    mu = isa(mu, AbstractArray) ? vec(mu) : mu
+
+    #==============#
+    # load model
+    #==============#
+    model = jldopen(modelfile)
+    NN, p, st = model["model"]
+    md = model["metadata"] # (; ū, σu, _Ib, Ib_, _It, It_, readme)
+    close(model)
+
+    #==============#
+    # subsample in space
+    #==============#
+    # Udata = @view Udata[:, md.makedata_kws.Ix, :, :]
+    # Xdata = @view Xdata[:, md.makedata_kws.Ix]
+    Nx = size(Xdata, 2)
+
+    #==============#
+    mkpath(outdir)
+    #==============#
+
+    k = 1
+    It = LinRange(1,length(Tdata), 4) .|> Base.Fix1(round, Int)
+
+    Ud = Udata[:, :, k, It]
+    U0 = Ud[:, :, 1]
+
+    data = (Xdata, U0, Tdata[It])
+    data = copy.(data) # ensure no SubArrays
+
+    #==============#
+    # get encoder / decoer
+    #==============#
+    encoder, decoder = GeometryLearning.get_encoder_decoder(NN, p, st)
+
+    #==============#
+    # get initial state
+    #==============#
+    U0_norm = normalizedata(U0, md.ū, md.σu)
+    U0_perm = permutedims(U0_norm, (2, 1))
+    U0_resh = reshape(U0_perm, size(U0_perm)..., 1)
+
+    p0 = encoder[1](U0_resh, encoder[2], encoder[3])[1]
+    p0 = dropdims(p0; dims = 2)
+
+    ### debuggin
+    @show size(U0_resh)
+    tmp1 = vcat(Xdata, p0 * ones(1, size(Xdata, 2)))
+    @show size(tmp1)
+    tmp2 = decoder[1](tmp1, decoder[2], decoder[3])[1]
+    @show size(tmp2)
+
+    tmp3 = hcat(reshape(Xdata, (Nx, 1, 1)), U0_resh)
+    tmp4 = NN(tmp3, p, st)[1]
+    
+    # @show norm(vec(tmp2) - vec(U0_resh))
+    #
+    plt = plot(vec(U0_norm))
+    plot!(plt, vec(tmp2))
+    plot!(plt, vec(tmp4))
+    display(plt)
+
+    #==============#
+    # freeze decoder weights
+    #==============#
+    decoder = freeze_autodecoder(decoder, p0; rng)
+
+    p0 = ComponentArray(p0, getaxes(decoder[2]))
+
+    #==============#
+    # make model
+    #==============#
+    model = NeuralEmbeddingModel(decoder[1], decoder[3], Xdata, md)
+
+    #==============#
+    # evolve
+    #==============#
+    linsolve = QRFactorization()
+    autodiff = AutoForwardDiff()
+    linesearch = LineSearch() # TODO
+    nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
+    nlsmaxiters = 10
+
+    Δt = 1f-2
+    scheme  = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
+    timealg = EulerForward() # EulerForward(), RK2(), RK4()
+    adaptive = false
+
+    ϵ_space = nothing
+    autodiff_space = AutoForwardDiff()
+
+    # @time evolve_model(prob, model, timealg, scheme, data, p0, Δt;
+    #     nlssolve, adaptive, autodiff_space, ϵ_space, device,
+    # )
+    0, 0, 0
+end
 
 #======================================================#
+
 rng = Random.default_rng()
 Random.seed!(rng, 199)
 
 # parameters
 E   = 700  # epochs
-l   = 1    # latent
+l   = 8    # latent
 h   = 5    # hidden
 we  = 32   # width
 wd  = 32   # width
@@ -270,24 +400,29 @@ act = tanh # relu, tanh
 
 prob = Advection1D(0.25f0)
 datafile  = joinpath(@__DIR__, "data_advect/", "data.jld2")
-modeldir  = joinpath(@__DIR__, "CAE")
+modeldir  = joinpath(@__DIR__, "INR")
 modelfile = joinpath(modeldir, "model_07.jld2")
 outdir    = joinpath(modeldir, "results")
 device = Lux.gpu_device()
 
 NN = inr_network(prob, l, h, we, wd, act)
 
-p, st = Lux.setup(rng, NN)
-p = ComponentArray(p)
-_data, _, _ = makedata_INR(datafile)
-@show _data[1] |> size
-@show _data[2] |> size
-@show NN(_data[1], p, st)[1] |> size
-@show length(p.decoder)
+## check sizes
+# p, st = Lux.setup(rng, NN)
+# p = ComponentArray(p)
+# _data, _, _ = makedata_INR(datafile)
+# @show _data[1] |> size
+# @show _data[2] |> size
+# @show NN(_data[1], p, st)[1] |> size
+# @show length(p.decoder)
 
-# ## train
-isdir(modeldir) && rm(modeldir, recursive = true)
-model, ST, metadata = train_INR(datafile, modeldir, NN, E; rng, warmup = false, device)
+## train
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# model, ST, metadata = train_INR(datafile, modeldir, NN, E; rng, warmup = false, device)
+
+## evolve
+x, u, p = evolve_INR(prob, datafile, modelfile, outdir; rng, device)
+
 #======================================================#
 nothing
 #
