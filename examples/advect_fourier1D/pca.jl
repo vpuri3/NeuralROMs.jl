@@ -113,6 +113,7 @@ function pca_project(
     datafile::String,
     modeldir::String,
     R::Int;
+    makeplot = true,
     rng::Random.AbstractRNG = Random.default_rng(),
     makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :,),
     device = Lux.cpu_device(),
@@ -193,13 +194,27 @@ function pca_project(
 
     nothing
 end
+#======================================================#
+
+function pca_basis(
+    R::Integer,
+    u::AbstractMatrix;
+    device = Lux.cpu_device(),
+)
+    F = svd(u |> device)
+    U = F.U[:, 1:R]
+end
 
 #======================================================#
 device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "data_advect/", "data.jld2")
+makeplot = false
+
+basedir = joinpath(@__DIR__, "PCA")
+mkpath(basedir)
 
 for R in (4, 8, 16, 32)
-    modeldir = joinpath(@__DIR__, "PCA$(R)")
-    pca_project(datafile, modeldir, R)
+    modeldir = joinpath(basedir, "PCA$(R)")
+    pca_project(datafile, modeldir, R; makeplot, device)
 end
 #======================================================#

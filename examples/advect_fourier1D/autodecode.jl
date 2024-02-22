@@ -57,7 +57,8 @@ function test_autodecoder(
     #==============#
 
     k = 1
-    It = LinRange(1,length(Tdata), 10) .|> Base.Fix1(round, Int)
+    It = LinRange(1,0.8 * length(Tdata), 3) .|> Base.Fix1(round, Int)
+    # It = LinRange(1,length(Tdata), 10) .|> Base.Fix1(round, Int)
 
     Ud = Udata[:, k, It]
     U0 = Ud[:, 1]
@@ -67,8 +68,8 @@ function test_autodecoder(
     p0 = _code[2].weight[:, 1]
 
     # time evolution prams
-    timealg = EulerForward() # EulerForward(), RK2(), RK4()
     Δt = 1f-2
+    timealg = EulerForward() # EulerForward(), RK2(), RK4()
     adaptive = false
 
     @time _, _, Up = evolve_autodecoder(
@@ -98,7 +99,7 @@ end
 #======================================================#
 
 rng = Random.default_rng()
-Random.seed!(rng, 220)
+Random.seed!(rng, 199)
 
 prob = Advection1D(0.25f0)
 
@@ -112,34 +113,36 @@ cb_epoch = nothing
 
 ## train (original)
 # E = 1400
-# _It = 1:1:500
+# _It = Colon()
 # _batchsize = 1280
 # l, h, w = 4, 5, 32 # (2, 4), 5, 32
 # λ1, λ2, σ2inv, α = 0f-0, 0f-0, 0f-0, 0f0
 # weight_decays = 1f-3
 
-## train (5x less snapshots)
-E = 1400
-_It = LinRange(1, 500, 201) .|> Base.Fix1(round, Int)
-_batchsize = 128 * 1
-l, h, w = 4, 5, 32 # (2, 4), 5, 32
-λ1, λ2 = 0f0, 0f0
-σ2inv, α = 1f-3, 0f-6 # 1f-0, 1f-0
-weight_decays = 1f-3  # 1-f0,
-
-## train (unit dim latent space) very hard to train
-# E = 2100
+# ## train (5x less snapshots)
+# E = 1400
 # _It = LinRange(1, 500, 201) .|> Base.Fix1(round, Int)
 # _batchsize = 128 * 1
-# l, h, w = 1, 5, 32 # (2, 4), 5, 32
-# λ1, λ2, σ2inv, α = 0f-0, 0f-0, 1f-3, 1f-6 # 0, 0, 1f-3, 1f-6
-# weight_decays = 0f-3                      # 0, 1f-3
+# l, h, w = 4, 5, 32 # (2, 4), 5, 32
+# λ1, λ2 = 0f0, 0f0
+# σ2inv, α = 1f-3, 0f-6 # 1f-0, 1f-0
+# weight_decays = 1f-3  # 1-f0,
 
-isdir(modeldir) && rm(modeldir, recursive = true)
-makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
-model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
-    λ1, λ2, σ2inv, α, weight_decays, cb_epoch, device, makedata_kws,
-)
+## train (intrinsic latent space size)
+E = 2800
+_It = Colon()
+_batchsize = 128 * 5
+l, h, w = 1, 5, 64
+λ1, λ2 = 0f0, 0f0
+σ2inv, α = 1f-3, 0f-6 # 1f-3
+weight_decays = 2f-3  # 2f-3
+
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
+# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
+#     rng, warmup = true, _batchsize,
+#     λ1, λ2, σ2inv, α, weight_decays, cb_epoch, makedata_kws, device,
+# )
 
 ## process
 outdir = joinpath(modeldir, "results")

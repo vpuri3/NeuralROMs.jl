@@ -133,6 +133,7 @@ function train_autodecoder(
     w::Int, # hidden layer width
     E::Int; # num epochs
     rng::Random.AbstractRNG = Random.default_rng(),
+    warmup::Bool = true,
     _batchsize = nothing,
     batchsize_ = nothing,
     λ1::Real = 0f0,
@@ -212,23 +213,18 @@ function train_autodecoder(
     schedules = Step.(lrs, 1f0, Inf32)
     early_stoppings = (fill(true, Nlrs)...,)
 
-    # warm up
-    opt_warmup = OptimiserChain(Optimisers.Adam(1f-2), PartWeightDecay(0f0, decoder_axes, "decoder"),)
-    nepochs_warmup = 10
-    schedule_warmup = Step(1f-2, 1f0, Inf32)
-    early_stopping_warmup = true
+    if warmup
+        opt_warmup = OptimiserChain(Optimisers.Adam(1f-2), PartWeightDecay(0f0, decoder_axes, "decoder"),)
+        nepochs_warmup = 10
+        schedule_warmup = Step(1f-2, 1f0, Inf32)
+        early_stopping_warmup = true
 
-    ######################
-    opts = (opt_warmup, opts...,)
-    nepochs = (nepochs_warmup, nepochs...,)
-    schedules = (schedule_warmup, schedules...,)
-    early_stoppings = (early_stopping_warmup, early_stoppings...,)
-
-    # weight_decays = if weight_decays isa Number
-    #     (0f0, fill(weight_decays, Nlrs)...,)
-    # else
-    #     weight_decays
-    # end
+        ######################
+        opts = (opt_warmup, opts...,)
+        nepochs = (nepochs_warmup, nepochs...,)
+        schedules = (schedule_warmup, schedules...,)
+        early_stoppings = (early_stopping_warmup, early_stoppings...,)
+    end
 
     #----------------------#----------------------#
 

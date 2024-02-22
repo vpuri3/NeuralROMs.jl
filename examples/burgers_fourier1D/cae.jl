@@ -1,38 +1,27 @@
 #
-"""
-Train an autoencoder on 1D Burgers data
-"""
-
 using GeometryLearning
+using LinearAlgebra, ComponentArrays              # arrays
+using Random, Lux, MLUtils, ParameterSchedulers   # ML
+using OptimizationOptimJL, OptimizationOptimisers # opt
+using LinearSolve, NonlinearSolve, LineSearches   # num
+using Plots, JLD2                                 # vis / save
+using CUDA, LuxCUDA, KernelAbstractions           # GPU
 
-# PDE stack
-using LinearAlgebra, FourierSpaces
-
-# ML stack
-using Lux, Random, Optimisers, MLUtils
-
-# vis/analysis, serialization
-using Plots, BSON
-
-# accelerator
-using CUDA, LuxCUDA #, KernelAbstractions
 CUDA.allowscalar(false)
 
-# misc
-using Tullio, Zygote
-
-using FFTW, LinearAlgebra
+# using FFTW
 begin
     nt = Sys.CPU_THREADS
     nc = min(nt, length(Sys.cpu_info()))
 
     BLAS.set_num_threads(nc)
-    FFTW.set_num_threads(nt)
+    # FFTW.set_num_threads(nt)
 end
 
 rng = Random.default_rng()
 Random.seed!(rng, 199)
 
+#======================================================#
 dir = joinpath(@__DIR__, "model")
 datadir = joinpath(@__DIR__, "burg_visc_re10k/data.bson")
 

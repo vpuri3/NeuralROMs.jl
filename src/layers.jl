@@ -1,7 +1,7 @@
 #
 #======================================================#
 """
-    implicit_encoder_decoder
+    ImplicitEncoderDecoder
 
 Composition of a (possibly convolutional) encoder and an implicit
 neural network decoder.
@@ -21,7 +21,7 @@ passed to `encoder` which compresses each `[:, :, :, 1]` slice into
 a latent vector of length `L`. The output of the encoder is of size
 `[L, B]`.
 
-With a compressed mapping of each `image`, we are ready to apply the
+With a compressed representation of each `image`, we are ready to apply the
 decoder mapping. The decoder is an implicit neural network which expects
 as input the concatenation of the latent vector and a query point.
 The decoder returns the value of the target field at that point.
@@ -67,7 +67,7 @@ function ImplicitEncoderDecoder(
     )
 end
 
-function get_INR_encoder_decoder(NN::Lux.AbstractExplicitLayer, p, st)
+function get_encoder_decoder(NN::Lux.AbstractExplicitLayer, p, st)
     encoder = (NN.layers.encode.layers.encoder, p.encode.encoder, st.encode.encoder)
     decoder = (NN.layers.decoder, p.decoder, st.decoder)
     
@@ -132,9 +132,11 @@ function freeze_autodecoder(
     p0::AbstractVector;
     rng::Random.AbstractRNG = Random.default_rng(),
 )
-    decoder_frozen = Lux.Experimental.freeze(decoder...)
+    num_batches = 1
     code_len = length(p0)
-    NN = AutoDecoder(decoder_frozen[1], 1, code_len)
+    decoder_frozen = Lux.Experimental.freeze(decoder...)
+
+    NN = AutoDecoder(decoder_frozen[1], num_batches, code_len)
     p, st = Lux.setup(rng, NN)
     st = Lux.testmode(st)
     p = ComponentArray(p)
