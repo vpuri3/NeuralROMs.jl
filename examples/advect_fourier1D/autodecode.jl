@@ -72,9 +72,10 @@ function test_autodecoder(
     timealg = EulerForward() # EulerForward(), RK2(), RK4()
     adaptive = false
 
-    @time _, _, Up = evolve_autodecoder(
+    _, _, Up = evolve_autodecoder(
         prob, decoder, md, data, p0, timealg, Δt, adaptive;
-        rng, device, verbose)
+        rng, device, verbose
+    )
 
     Up = dropdims(Up; dims = 1)
 
@@ -111,13 +112,13 @@ modelfile = joinpath(modeldir, "model_08.jld2")
 
 cb_epoch = nothing
 
-## train (original)
-# E = 1400
-# _It = Colon()
-# _batchsize = 1280
-# l, h, w = 4, 5, 32 # (2, 4), 5, 32
-# λ1, λ2, σ2inv, α = 0f-0, 0f-0, 0f-0, 0f0
-# weight_decays = 1f-3
+#train (original)
+E = 1400
+_It = Colon()
+_batchsize = 1280
+l, h, w = 4, 5, 32 # (2, 4), 5, 32
+λ1, λ2, σ2inv, α = 0f-0, 0f-0, 0f-0, 0f0
+weight_decays = 1f-3
 
 # ## train (5x less snapshots)
 # E = 1400
@@ -128,14 +129,14 @@ cb_epoch = nothing
 # σ2inv, α = 1f-3, 0f-6 # 1f-0, 1f-0
 # weight_decays = 1f-3  # 1-f0,
 
-## train (intrinsic latent space size)
-E = 3500
-_It = Colon()
-_batchsize = 128 * 10
-l, h, w = 1, 5, 64 # 1, 5, 64
-λ1, λ2 = 0f0, 0f0
-σ2inv, α = 5f-3, 0f-6 # 1f-3
-weight_decays = 1f-3  # 2f-3
+# ## train (intrinsic latent space size)
+# E = 3500
+# _It = Colon()
+# _batchsize = 128 * 10
+# l, h, w = 1, 5, 64 # 1, 5, 64
+# λ1, λ2 = 0f0, 0f0
+# σ2inv, α = 1f-2, 0f-6 # 1f-3
+# weight_decays = 1f-3  # 2f-3
 
 isdir(modeldir) && rm(modeldir, recursive = true)
 makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)

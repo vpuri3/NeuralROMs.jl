@@ -375,9 +375,8 @@ function evolve_INR(
     timealg = EulerForward() # EulerForward(), RK2(), RK4()
     adaptive = false
 
-    ϵ_xyz = 1f-2
+    ϵ_xyz = 1f-3
     autodiff_xyz = AutoFiniteDiff()
-    autodiff_xyz = AutoForwardDiff()
 
     @time _, _, Up = evolve_model(prob, model, timealg, scheme, data, p0, Δt;
         nlssolve, adaptive, autodiff_xyz, ϵ_xyz, device,

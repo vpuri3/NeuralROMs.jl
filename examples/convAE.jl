@@ -124,7 +124,7 @@ function makedata_CAE(
     @assert ndims(u) ∈ (3,4,)
     @assert x isa AbstractVecOrMat
     x = x isa AbstractVector ? reshape(x, 1, :) : x # (Dim, Npoints)
-    
+
     if ndims(u) == 3 # [Nx, Nb, Nt]
         u = reshape(u, 1, size(u)...) # [1, Nx, Nb, Nt]
     end

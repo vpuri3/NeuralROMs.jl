@@ -341,7 +341,6 @@ function evolve_autodecoder(
     device = Lux.cpu_device(),
     verbose::Bool = true,
 )
-
     # data, model
     x, _, _ = data
 
@@ -354,7 +353,7 @@ function evolve_autodecoder(
     linsolve = QRFactorization()
     autodiff = AutoForwardDiff()
     linesearch = LineSearch() # TODO
-    nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
+    nlssolve = GaussNewton(; autodiff, linsolve, linesearch)
     nlsmaxiters = 10
 
     # linesearch = LineSearch(method = BackTracking(), autodiff = AutoZygote())
@@ -363,11 +362,9 @@ function evolve_autodecoder(
 
     # Galerkin
     scheme = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
-
-    ## LSPG
     # scheme = LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, 1f-6, 1f-3, 1f-6)
 
-    evolve_model(prob, model, timealg, scheme, data, p0, Δt;
+    @time evolve_model(prob, model, timealg, scheme, data, p0, Δt;
         nlssolve, adaptive, device, verbose,
     )
 end

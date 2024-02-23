@@ -20,13 +20,18 @@
 
     # state
     tprevs
-    pprevs
+    pprevs # ũprevs
     uprevs
     fprevs
-    f̃prevs   # Galerkin only
+    f̃prevs # Galerkin only (rhs in reduced space)
 
-    autodiff
-    ϵ
+    autodiff_nls
+    autodiff_jac
+    autodiff_xyz
+
+    ϵ_nls
+    ϵ_jac
+    ϵ_xyz
 end
 
 function TimeIntegrator(
@@ -39,8 +44,15 @@ function TimeIntegrator(
     p0::AbstractVector;
     Δt::Union{T,Nothing} = nothing,
     adaptive::Bool = true,
-    autodiff = AutoForwardDiff(),
-    ϵ = nothing,
+
+    autodiff_nls = AutoForwardDiff(),
+    autodiff_jac = AutoForwardDiff(),
+    autodiff_xyz = AutoForwardDiff(),
+
+    ϵ_nls = nothing,
+    ϵ_jac = nothing,
+    ϵ_xyz = nothing,
+
 ) where{T<:Number}
 
     if isnothing(Δt) & !adaptive
@@ -65,10 +77,10 @@ function TimeIntegrator(
     # current state
     t0 = first(tspan)
     u0 = model(x, p0)
-    f0 = dudtRHS(prob, model, x, p0, t0; autodiff, ϵ)
+    f0 = dudtRHS(prob, model, x, p0, t0; autodiff = autodiff_xyz, ϵ = ϵ_xyz)
 
     f̃0 = if scheme isa GalerkinProjection
-        compute_f̃(f0, p0, x, model, scheme; autodiff, ϵ)
+        compute_f̃(f0, p0, x, model, scheme; autodiff_jac, ϵ_jac)
     else
         p0 * NaN
     end
@@ -86,7 +98,8 @@ function TimeIntegrator(
         x, Δt, Δt, adaptive,
         tspan, tsave, tstep, isave,
         tprevs, pprevs, uprevs, fprevs, f̃prevs,
-        autodiff, ϵ,
+        autodiff_nls, autodiff_jac, autodiff_xyz,
+        ϵ_nls, ϵ_jac, ϵ_xyz,
     )
 end
 
@@ -327,9 +340,12 @@ function evolve_model(
     nlsmaxiters = 10,
     nlsabstol = 1f-7,
 
+    autodiff_nls = AutoForwardDiff(),
     autodiff_jac = AutoForwardDiff(),
     autodiff_xyz = AutoForwardDiff(),
-    autodiff_nls = AutoForwardDiff(),
+
+    ϵ_nls = nothing,
+    ϵ_jac = nothing,
     ϵ_xyz = nothing,
 
     verbose::Bool = true,
@@ -374,7 +390,8 @@ function evolve_model(
 
     integrator = TimeIntegrator(
         prob, model, timealg, scheme, x, tsave, p0; Δt, adaptive,
-        autodiff = autodiff_xyz, ϵ = ϵ_xyz,
+        autodiff_nls, autodiff_jac, autodiff_xyz,
+        ϵ_nls, ϵ_jac, ϵ_xyz,
     )
 
     evolve_integrator!(integrator; verbose)

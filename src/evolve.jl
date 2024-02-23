@@ -216,9 +216,9 @@ function solve_timestep(
     verbose::Bool = true,
 ) where{T}
 
-    @unpack timealg, autodiff, ϵ = integrator
+    @unpack prob, model, x, timealg = integrator
+    @unpack autodiff_jac, autodiff_xyz, ϵ_jac, ϵ_xyz = integrator
     @unpack Δt, pprevs, uprevs, tprevs, fprevs, f̃prevs = integrator
-    @unpack prob, model, x = integrator
 
     t0, p0, _, _, _ = get_state(integrator)
 
@@ -227,7 +227,9 @@ function solve_timestep(
         not implemetned"""
     else
         function dpdt_rhs(p, t)
-            compute_f̃(p, x, t, prob, model, scheme; autodiff, ϵ)
+            compute_f̃(p, x, t, prob, model, scheme;
+                autodiff_jac, autodiff_xyz, ϵ_jac, ϵ_xyz,
+            )
         end
 
         f̃1 = nothing
@@ -237,8 +239,8 @@ function solve_timestep(
     # get new states
     t1 = t0 + Δt
     u1 = model(x, p1)
-    f1 = dudtRHS(prob, model, x, p1, t1; autodiff, ϵ)
-    f̃1 = compute_f̃(f1, p1, x, model, scheme; autodiff, ϵ)
+    f1 = dudtRHS(prob, model, x, p1, t1; autodiff = autodiff_xyz, ϵ = ϵ_xyz)
+    f̃1 = compute_f̃(f1, p1, x, model, scheme; autodiff_jac, ϵ_jac)
     r1 = compute_residual(timealg, Δt, fprevs, uprevs, tprevs, f1, u1, nothing) #TODO
 
     # print message
@@ -259,11 +261,13 @@ function compute_f̃(
     prob::AbstractPDEProblem,
     model::AbstractNeuralModel,
     scheme::GalerkinProjection;
-    autodiff = AutoForwardDiff(),
-    ϵ = nothing
+    autodiff_jac = AutoForwardDiff(),
+    autodiff_xyz = AutoForwardDiff(),
+    ϵ_jac = nothing,
+    ϵ_xyz = nothing,
 )
-    f = dudtRHS(prob, model, x, p, t; autodiff, ϵ)
-    compute_f̃(f, p, x, model, scheme; autodiff, ϵ)
+    f = dudtRHS(prob, model, x, p, t; autodiff = autodiff_xyz, ϵ = ϵ_xyz)
+    compute_f̃(f, p, x, model, scheme; autodiff_jac, ϵ_jac,)
 end
 
 function compute_f̃(
@@ -272,16 +276,17 @@ function compute_f̃(
     x::AbstractArray,
     model::AbstractNeuralModel,
     scheme::GalerkinProjection;
-    autodiff = AutoForwardDiff(),
-    ϵ = nothing
+    autodiff_jac = AutoForwardDiff(),
+    ϵ_jac = nothing,
 )
-    J = dudp(model, x, p; autodiff, ϵ) # du/dp (N, n)
+    # du/dp (N, n)
+    J = dudp(model, x, p; autodiff = autodiff_jac, ϵ = ϵ_jac)
 
     linprob = LinearProblem(J, vec(f))
     linsol  = solve(linprob, scheme.linsolve)
 
     # TODO compute_f̃: add stats?
-    
+
     linsol.u
 end
 
@@ -306,8 +311,8 @@ function solve_timestep(
     TODO LSPG: See if regularizing codes improves performance.
     =#
 
-    @unpack timealg, autodiff, ϵ, Δt = integrator
-    @unpack prob, model, x = integrator
+    @unpack prob, model, x, timealg, Δt = integrator
+    @unpack autodiff_nls, autodiff_xyz, ϵ_nls, ϵ_xyz = integrator
 
     t0, p0, u0, _, _ = get_state(integrator)
 
@@ -325,7 +330,7 @@ function solve_timestep(
     # get new states
     t1 = t0 + Δt
     u1 = model(x, p1)
-    f1 = dudtRHS(prob, model, x, p1, t1; autodiff, ϵ)
+    f1 = dudtRHS(prob, model, x, p1, t1; autodiff = autodiff_xyz, ϵ = ϵ_xyz)
     f̃1 = nothing
     r1 = nlssol.resid
 
@@ -344,8 +349,8 @@ end
 function make_residual(
     integrator::TimeIntegrator,
 )
-    @unpack prob, timealg, autodiff, ϵ = integrator
     @unpack Δt, uprevs, fprevs, tprevs = integrator
+    @unpack prob, timealg, autodiff_xyz, ϵ_xyz = integrator
 
     function make_residual_internal(
         model::AbstractNeuralModel,
@@ -357,7 +362,7 @@ function make_residual(
         t1 = get_time(integrator) + Δt
 
         u1 = model(x, p1)
-        f1 = dudtRHS(prob, model, x, p1, t1; autodiff, ϵ)
+        f1 = dudtRHS(prob, model, x, p1, t1; autodiff = autodiff_xyz, ϵ = ϵ_xyz)
 
         function dudt_rhs(u, t)
             if timealg isa AbstractRKMethod

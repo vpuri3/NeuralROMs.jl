@@ -2,7 +2,7 @@
 #======================================================#
 using GeometryLearning
 begin
-    path = joinpath(pkgdir(GeometryLearning), "examples", "convAE.jl")
+    path = joinpath(pkgdir(GeometryLearning), "examples", "convINR.jl")
     include(path)
 end
 
@@ -38,8 +38,8 @@ _data, _, _ = makedata_INR(datafile)
 @show length(p.decoder)
 
 ## train
-isdir(modeldir) && rm(modeldir, recursive = true)
-model, ST, metadata = train_INR(datafile, modeldir, NN, E; rng, warmup = true, device)
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# model, ST, metadata = train_INR(datafile, modeldir, NN, E; rng, warmup = true, device)
 
 ## evolve
 x, u, p = evolve_INR(prob, datafile, modelfile, outdir; rng, device)
