@@ -132,17 +132,17 @@ cb_epoch = nothing
 E = 3500
 _It = Colon()
 _batchsize = 128 * 10
-l, h, w = 1, 5, 32 # 1, 5, 64
+l, h, w = 1, 5, 64 # 1, 5, 64
 λ1, λ2 = 0f0, 0f0
 σ2inv, α = 5f-3, 0f-6 # 1f-3
 weight_decays = 1f-3  # 2f-3
 
-# isdir(modeldir) && rm(modeldir, recursive = true)
-# makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
-# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
-#     rng, warmup = true, _batchsize,
-#     λ1, λ2, σ2inv, α, weight_decays, cb_epoch, makedata_kws, device,
-# )
+isdir(modeldir) && rm(modeldir, recursive = true)
+makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
+model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
+    rng, warmup = true, _batchsize,
+    λ1, λ2, σ2inv, α, weight_decays, cb_epoch, makedata_kws, device,
+)
 
 ## process
 outdir = joinpath(modeldir, "results")

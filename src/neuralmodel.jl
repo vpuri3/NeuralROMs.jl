@@ -132,8 +132,16 @@ function (model::NeuralEmbeddingModel)(
 end
 
 #===========================================================#
+@concrete mutable struct ConvModel{Tx, Tu} <: AbstractNeuralModel
+    x
+    ū::Tu
+    σu::Tu
+end
+
+#===========================================================#
 @concrete mutable struct PCAModel{Tx, Tu} <: AbstractNeuralModel
     P
+    x
     Dx
     ū::Tu
     σu::Tu

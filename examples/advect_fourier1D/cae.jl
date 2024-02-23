@@ -18,7 +18,7 @@ act = tanh # relu, tanh
 
 prob = Advection1D(0.25f0)
 datafile  = joinpath(@__DIR__, "data_advect/", "data.jld2")
-modeldir  = joinpath(@__DIR__, "INR")
+modeldir  = joinpath(@__DIR__, "CAE")
 modelfile = joinpath(modeldir, "model_07.jld2")
 outdir    = joinpath(modeldir, "results")
 device = Lux.gpu_device()

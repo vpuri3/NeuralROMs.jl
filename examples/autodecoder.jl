@@ -361,12 +361,6 @@ function evolve_autodecoder(
     # nlssolve = GaussNewton(;autodiff = AutoZygote(), linsolve, linesearch)
     # nlsmaxiters = 20
 
-    autodiff_space = AutoForwardDiff()
-    ϵ_space = nothing
-
-    # autodiff_space = AutoFiniteDiff()
-    # ϵ_space = 0.005f0
-
     # Galerkin
     scheme = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
 
@@ -374,7 +368,7 @@ function evolve_autodecoder(
     # scheme = LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, 1f-6, 1f-3, 1f-6)
 
     evolve_model(prob, model, timealg, scheme, data, p0, Δt;
-        nlssolve, adaptive, autodiff_space, ϵ_space, device, verbose,
+        nlssolve, adaptive, device, verbose,
     )
 end
 

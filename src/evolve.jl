@@ -206,7 +206,7 @@ e.g.
 """
 @concrete mutable struct GalerkinProjection{T} <: AbstractSolveScheme
     linsolve
-    abstolInf::T # ||∞ # TODO - switch to reltol
+    abstolInf::T # ||∞ # TODO GalerkinProjection - switch to reltol
     abstolMSE::T # ||₂
 end
 
@@ -232,22 +232,12 @@ function solve_timestep(
 
         f̃1 = nothing
         apply_timestep(timealg, Δt, f̃prevs, pprevs, tprevs, f̃1, dpdt_rhs)
-
-        ############
-        # old janky EulerFWD
-        ############
-        # ΔuΔt_rhs = Δt * fprevs[1]            # du/dt (N,)
-        # J0 = dudp(model, x, p0; autodiff, ϵ) # du/dp (N, n)
-        #
-        # linprob = LinearProblem(J0, vec(ΔuΔt_rhs))
-        # ΔpΔt_rhs = solve(linprob, scheme.linsolve).u
-        # p0 + ΔpΔt_rhs
     end
 
     # get new states
     t1 = t0 + Δt
     u1 = model(x, p1)
-    f1 = dudtRHS(prob, model, x, p1, t1)
+    f1 = dudtRHS(prob, model, x, p1, t1; autodiff, ϵ)
     f̃1 = compute_f̃(f1, p1, x, model, scheme; autodiff, ϵ)
     r1 = compute_residual(timealg, Δt, fprevs, uprevs, tprevs, f1, u1, nothing) #TODO
 
@@ -272,7 +262,7 @@ function compute_f̃(
     autodiff = AutoForwardDiff(),
     ϵ = nothing
 )
-    f = dudtRHS(prob, model, x, p, t)
+    f = dudtRHS(prob, model, x, p, t; autodiff, ϵ)
     compute_f̃(f, p, x, model, scheme; autodiff, ϵ)
 end
 
@@ -335,7 +325,7 @@ function solve_timestep(
     # get new states
     t1 = t0 + Δt
     u1 = model(x, p1)
-    f1 = dudtRHS(prob, model, x, p1, t1)
+    f1 = dudtRHS(prob, model, x, p1, t1; autodiff, ϵ)
     f̃1 = nothing
     r1 = nlssol.resid
 
@@ -373,7 +363,6 @@ function make_residual(
             if timealg isa AbstractRKMethod
                 @error "Not implemented LSPG for multistage methods yet."
             end
-            # dudtRHS(prob, model, x, p, t)
         end
 
         compute_residual(timealg, Δt, fprevs, uprevs, tprevs, f1, u1, dudt_rhs)

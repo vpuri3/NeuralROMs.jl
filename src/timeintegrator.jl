@@ -10,6 +10,7 @@
     x
     Δt::T
     Δt_guess::T
+    adaptive::Bool
 
     tspan
     tsave
@@ -24,7 +25,6 @@
     fprevs
     f̃prevs   # Galerkin only
 
-    adaptive::Bool
     autodiff
     ϵ
 end
@@ -83,10 +83,10 @@ function TimeIntegrator(
 
     TimeIntegrator(
         prob, model, timealg, scheme,
-        x, Δt, Δt,
+        x, Δt, Δt, adaptive,
         tspan, tsave, tstep, isave,
         tprevs, pprevs, uprevs, fprevs, f̃prevs,
-        adaptive, autodiff, ϵ,
+        autodiff, ϵ,
     )
 end
 
@@ -318,15 +318,22 @@ function evolve_model(
     scheme::AbstractSolveScheme,
     data::NTuple{3, AbstractVecOrMat},
     p0::AbstractVector,
+
     Δt::Union{Real,Nothing} = nothing;
+    adaptive::Bool = true,
+
+    linsolve = QRFactorization(),
     nlssolve = nothing,
     nlsmaxiters = 10,
     nlsabstol = 1f-7,
-    adaptive::Bool = true,
-    autodiff_space = AutoForwardDiff(),
-    ϵ_space = nothing,
-    device = Lux.cpu_device(),
+
+    autodiff_jac = AutoForwardDiff(),
+    autodiff_xyz = AutoForwardDiff(),
+    autodiff_nls = AutoForwardDiff(),
+    ϵ_xyz = nothing,
+
     verbose::Bool = true,
+    device = Lux.cpu_device(),
 )
     # data
     x, u0, tsave = data
@@ -339,10 +346,8 @@ function evolve_model(
 
     # solvers
     nlssolve = if isnothing(nlssolve)
-        linsolve = QRFactorization()
-        autodiff = AutoForwardDiff()
         linesearch = LineSearch() # TODO
-        nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
+        GaussNewton(; linsolve, linesearch, autodiff = autodiff_nls)
     else
         nlssolve
     end
@@ -367,8 +372,9 @@ function evolve_model(
 
     Δt = isnothing(Δt) ? -(reverse(extrema(tsave))...) / 200 |> T : T(Δt)
 
-    integrator = TimeIntegrator(prob, model, timealg, scheme, x, tsave, p0;
-        Δt, adaptive, autodiff = autodiff_space, ϵ = ϵ_space,
+    integrator = TimeIntegrator(
+        prob, model, timealg, scheme, x, tsave, p0; Δt, adaptive,
+        autodiff = autodiff_xyz, ϵ = ϵ_xyz,
     )
 
     evolve_integrator!(integrator; verbose)
