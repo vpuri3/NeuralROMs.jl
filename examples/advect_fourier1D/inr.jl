@@ -158,14 +158,14 @@ function makedata_INR(
     _xperm = permutedims(_x, (2, 1))
     xperm_ = permutedims(x_, (2, 1))
 
-    _X = zeros(Float32, Nx, in_dim + out_dim, _Ns)
+    _X = zeros(Float32, Nx, in_dim + out_dim, _Ns) # [x; u]
     X_ = zeros(Float32, Nx, in_dim + out_dim, Ns_)
 
-    _X[:, begin:out_dim, :] = _uperm # [x; u]
-    X_[:, begin:out_dim, :] = uperm_
+    _X[:, begin:in_dim, :] .= _xperm
+    X_[:, begin:in_dim, :] .= xperm_
 
-    _X[:, out_dim+1:end, :] .= _xperm
-    X_[:, out_dim+1:end, :] .= xperm_
+    _X[:, in_dim+1:end, :] = _uperm
+    X_[:, in_dim+1:end, :] = uperm_
 
     _U = reshape(_u, out_dim, Nx, _Ns)
     U_ = reshape(u_, out_dim, Nx, _Ns)
@@ -309,8 +309,8 @@ function evolve_INR(
     mkpath(outdir)
     #==============#
 
-    k = 1
-    It = LinRange(1,length(Tdata), 4) .|> Base.Fix1(round, Int)
+    k  = 1
+    It = LinRange(1, length(Tdata), 4) .|> Base.Fix1(round, Int)
 
     Ud = Udata[:, :, k, It]
     U0 = Ud[:, :, 1]
@@ -334,21 +334,20 @@ function evolve_INR(
     p0 = dropdims(p0; dims = 2)
 
     ### debuggin
-    @show size(U0_resh)
-    tmp1 = vcat(Xdata, p0 * ones(1, size(Xdata, 2)))
-    @show size(tmp1)
-    tmp2 = decoder[1](tmp1, decoder[2], decoder[3])[1]
-    @show size(tmp2)
-
-    tmp3 = hcat(reshape(Xdata, (Nx, 1, 1)), U0_resh)
-    tmp4 = NN(tmp3, p, st)[1]
-    
-    # @show norm(vec(tmp2) - vec(U0_resh))
+    # Xnorm = normalizedata(Xdata, md.x̄, md.σx)
     #
-    plt = plot(vec(U0_norm))
-    plot!(plt, vec(tmp2))
-    plot!(plt, vec(tmp4))
-    display(plt)
+    # ## decoder
+    # tmp1 = vcat(Xnorm, p0 * ones(1, size(Xnorm, 2)))
+    # tmp1 = decoder[1](tmp1, decoder[2], decoder[3])[1]
+    #
+    # ## conv-INR
+    # tmp2 = hcat(reshape(Xnorm, (Nx, 1, 1)), U0_resh) # [x, u]
+    # tmp2 = NN(tmp2, p, st)[1]
+    #
+    # plt = plot(vec(U0_norm), w = 2, label = "data")
+    # plot!(plt, vec(tmp1   ), w = 2, label = "decoder  [ũ, x]") 
+    # plot!(plt, vec(tmp2   ), w = 2, label = "conv-INR [ũ, x]") 
+    # display(plt)
 
     #==============#
     # freeze decoder weights
@@ -376,49 +375,69 @@ function evolve_INR(
     timealg = EulerForward() # EulerForward(), RK2(), RK4()
     adaptive = false
 
-    ϵ_space = nothing
-    autodiff_space = AutoForwardDiff()
+    ϵ_space = 1f-2
+    autodiff_space = AutoFiniteDiff()
 
-    # @time evolve_model(prob, model, timealg, scheme, data, p0, Δt;
-    #     nlssolve, adaptive, autodiff_space, ϵ_space, device,
-    # )
-    0, 0, 0
+    @time _, _, Up = evolve_model(prob, model, timealg, scheme, data, p0, Δt;
+        nlssolve, adaptive, autodiff_space, ϵ_space, device,
+    )
+
+    Xd = dropdims(Xdata; dims = 1)
+    Up = dropdims(Up; dims = 1)
+    Ud = dropdims(Ud; dims = 1)
+
+    Ix_plt = 1:4:Nx
+    plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
+    plot!(plt, Xd, Up, w = 2, palette = :tab10)
+    scatter!(plt, Xdata[Ix_plt], Ud[Ix_plt, :], w = 1, palette = :tab10)
+
+    denom  = sum(abs2, Ud) / length(Ud) |> sqrt
+    _max  = norm(Up - Ud, Inf) / sqrt(denom)
+    _mean = sqrt(sum(abs2, Up - Ud) / length(Ud)) / denom
+    println("Max error  (normalized): $(_max * 100 )%")
+    println("Mean error (normalized): $(_mean * 100)%")
+
+    png(plt, joinpath(outdir, "evolve_$k"))
+    display(plt)
+
+    Xd, Up, Ud
 end
 
 #======================================================#
 
 rng = Random.default_rng()
-Random.seed!(rng, 199)
+Random.seed!(rng, 210)
 
 # parameters
-E   = 700  # epochs
-l   = 8    # latent
-h   = 5    # hidden
-we  = 32   # width
-wd  = 32   # width
-act = tanh # relu, tanh
+E   = 3500  # epochs
+l   = 8     # latent
+h   = 5     # hidden
+we  = 32    # width
+wd  = 64    # width
+act = tanh  # relu, tanh
 
 prob = Advection1D(0.25f0)
 datafile  = joinpath(@__DIR__, "data_advect/", "data.jld2")
 modeldir  = joinpath(@__DIR__, "INR")
-modelfile = joinpath(modeldir, "model_07.jld2")
+modelfile = joinpath(modeldir, "model_08.jld2")
 outdir    = joinpath(modeldir, "results")
 device = Lux.gpu_device()
 
 NN = inr_network(prob, l, h, we, wd, act)
 
 ## check sizes
-# p, st = Lux.setup(rng, NN)
-# p = ComponentArray(p)
-# _data, _, _ = makedata_INR(datafile)
-# @show _data[1] |> size
-# @show _data[2] |> size
-# @show NN(_data[1], p, st)[1] |> size
-# @show length(p.decoder)
+p, st = Lux.setup(rng, NN)
+p = ComponentArray(p)
+_data, _, _ = makedata_INR(datafile)
+@show _data[1] |> size
+@show _data[2] |> size
+@show NN(_data[1], p, st)[1] |> size
+@show length(p.encode.encoder)
+@show length(p.decoder)
 
 ## train
 # isdir(modeldir) && rm(modeldir, recursive = true)
-# model, ST, metadata = train_INR(datafile, modeldir, NN, E; rng, warmup = false, device)
+# model, ST, metadata = train_INR(datafile, modeldir, NN, E; rng, warmup = true, device)
 
 ## evolve
 x, u, p = evolve_INR(prob, datafile, modelfile, outdir; rng, device)
