@@ -211,14 +211,12 @@ function regularize_autodecoder(
         # Lipschitz reg on decoder
         ###
 
-        cbound = compute_cbound(decoder...)
-        stats = (; stats..., cbound)
-
         lcond, stats = if iszero(α)
             zero(T), stats
         else
-            lcond = cbound * α / N
-            lcond, (; stats..., lcond)
+            cbound = compute_cbound(decoder...)
+            lcond  = cbound * α / N
+            lcond, (; stats..., cbound, lcond)
         end
 
         ###

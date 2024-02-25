@@ -19,7 +19,7 @@ begin
 end
 
 #======================================================#
-function makedata_autodecoder(
+function makedata_SNF(
     datafile::String;
     Ix = Colon(), # subsample in space
     _Ib = Colon(), # train/test split in batches
@@ -28,7 +28,7 @@ function makedata_autodecoder(
     It_ = Colon(),
 )
 
-    # TODO makedata_autodecoder: allow for _Ix, Ix_ for testing
+    # TODO makedata_SNF: allow for _Ix, Ix_ for testing
 
     #==============#
     # load data
@@ -125,7 +125,7 @@ end
 
 #===========================================================#
 
-function train_autodecoder(
+function train_SNF(
     datafile::String,
     modeldir::String,
     l::Int, # latent space size
@@ -146,7 +146,7 @@ function train_autodecoder(
     cb_epoch = nothing,
     device = Lux.cpu_device(),
 ) where{M}
-    _data, _, metadata = makedata_autodecoder(datafile; makedata_kws...)
+    _data, _, metadata = makedata_SNF(datafile; makedata_kws...)
     dir = modeldir
 
     #--------------------------------------------#
@@ -256,7 +256,7 @@ end
 
 #======================================================#
 
-function infer_autodecoder(
+function infer_SNF(
     model::AbstractNeuralModel,
     data::Tuple, # (X, U, T)
     p0::AbstractVector;
@@ -327,50 +327,139 @@ function infer_autodecoder(
 end
 
 #======================================================#
-
-function evolve_autodecoder(
+function evolve_SNF(
     prob::AbstractPDEProblem,
-    decoder::NTuple{3, Any},
-    metadata::NamedTuple,
-    data::NTuple{3, AbstractVecOrMat},
-    p0::AbstractVector,
-    timealg::AbstractTimeAlg,
-    Δt::Real,
-    adaptive::Bool;
+    datafile::String,
+    modelfile::String,
+    case::Integer;
     rng::Random.AbstractRNG = Random.default_rng(),
-    device = Lux.cpu_device(),
+
+    data_kws = (; Ix = :, It = :),
+
+    Δt::Union{Real, Nothing} = nothing,
+    timealg::GeometryLearning.AbstractTimeAlg = EulerForward(),
+    adaptive::Bool = false,
+    scheme::Union{Nothing, GeometryLearning.AbstractSolveScheme} = nothing,
+
+    autodiff_xyz::ADTypes.AbstractADType = AutoForwardDiff(),
+    ϵ_xyz::Union{Real, Nothing} = nothing,
+
     verbose::Bool = true,
+    device = Lux.cpu_device(),
 )
-    # data, model
-    x, _, _ = data
+
+    #==============#
+    # load data
+    #==============#
+    data = jldopen(datafile)
+    Tdata = data["t"]
+    Xdata = data["x"]
+    Udata = data["u"]
+    mu = data["mu"]
+
+    close(data)
+
+    @assert ndims(Udata) ∈ (3,4,)
+    @assert Xdata isa AbstractVecOrMat
+    Xdata = Xdata isa AbstractVector ? reshape(Xdata, 1, :) : Xdata # (Dim, Npoints)
+
+    if ndims(Udata) == 3 # [Nx, Nb, Nt]
+        Udata = reshape(Udata, 1, size(Udata)...) # [out_dim, Nx, Nb, Nt]
+    end
+
+    in_dim  = size(Xdata, 1)
+    out_dim = size(Udata, 1)
+
+    mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
+    mu = isa(mu, AbstractArray) ? vec(mu) : mu
+
+    #==============#
+    # load model
+    #==============#
+    model = jldopen(modelfile)
+    NN, p, st = model["model"]
+    md = model["metadata"]
+    close(model)
+
+    #==============#
+    # subsample in space
+    #==============#
+    Udata = @view Udata[:, data_kws.Ix, :, data_kws.It]
+    Xdata = @view Xdata[:, data_kws.Ix]
+    Tdata = @view Tdata[data_kws.It]
+
+    Nx = size(Xdata, 2)
+
+    Ud = Udata[:, :, case, :]
+    U0 = Ud[:, :, 1]
+
+    data = (Xdata, U0, Tdata)
+    data = copy.(data) # ensure no SubArrays
+
+    #==============#
+    # get decoer
+    #==============#
+
+    decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
 
     display(decoder[1])
 
-    NN, p0, st = freeze_autodecoder(decoder, p0; rng)
-    model = NeuralEmbeddingModel(NN, st, x, metadata)
+    #==============#
+    # make model
+    #==============#
 
-    # solvers
+    p0 = _code[2].weight[:, 1]
+    NN, p0, st = freeze_autodecoder(decoder, p0; rng)
+    model = NeuralEmbeddingModel(NN, st, Xdata, md)
+
+    #==============#
+    # evolve
+    #==============#
+
     linsolve = QRFactorization()
     autodiff = AutoForwardDiff()
     linesearch = LineSearch() # TODO
-    nlssolve = GaussNewton(; autodiff, linsolve, linesearch)
+    nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
     nlsmaxiters = 10
 
-    # linesearch = LineSearch(method = BackTracking(), autodiff = AutoZygote())
-    # nlssolve = GaussNewton(;autodiff = AutoZygote(), linsolve, linesearch)
-    # nlsmaxiters = 20
+    Δt = isnothing(Δt) ? -(-(extrema(Tdata)...)) / 100.0f0 : Δt
 
-    # Galerkin
-    scheme = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
-    # scheme = LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, 1f-6, 1f-3, 1f-6)
+    if isnothing(scheme)
+        scheme  = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
+        # scheme = LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, 1f-6, 1f-3, 1f-6)
+    end
 
-    @time evolve_model(prob, model, timealg, scheme, data, p0, Δt;
-        nlssolve, adaptive, device, verbose,
+    @time _, ps, Up = evolve_model(prob, model, timealg, scheme, data, p0, Δt;
+        nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz,
+        verbose, device,
     )
+
+    # #==============#
+    # mkpath(outdir)
+    # #==============#
+    #
+    # Up = dropdims(Up; dims = 1)
+    #
+    # Ix_plt = 1:4:Nx
+    # plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
+    # plot!(plt, Xdata, Up, w = 2, palette = :tab10)
+    # scatter!(plt, Xdata[Ix_plt], Ud[Ix_plt, :], w = 1, palette = :tab10)
+    #
+    # denom  = sum(abs2, Ud) / length(Ud) |> sqrt
+    # _max  = norm(Up - Ud, Inf) / sqrt(denom)
+    # _mean = sqrt(sum(abs2, Up - Ud) / length(Ud)) / denom
+    # println("Max error  (normalized): $(_max * 100 )%")
+    # println("Mean error (normalized): $(_mean * 100)%")
+    #
+    # png(plt, joinpath(outdir, "evolve_$k"))
+    # display(plt)
+    #
+
+    Xdata, Tdata, Ud, Up, ps
 end
 
 #===========================================================#
-function postprocess_autodecoder(
+function postprocess_SNF(
     prob::AbstractPDEProblem,
     datafile::String,
     modelfile::String,
@@ -445,7 +534,7 @@ function postprocess_autodecoder(
 
     displaymetadata(md)
 
-    _data, _, _ = makedata_autodecoder(datafile; _Ib = md.makedata_kws._Ib, _It = md.makedata_kws._It)
+    _data, _, _ = makedata_SNF(datafile; _Ib = md.makedata_kws._Ib, _It = md.makedata_kws._It)
     _xdata, _Icode = _data[1]
     _xdata = unnormalizedata(_xdata, md.x̄, md.σx)
 

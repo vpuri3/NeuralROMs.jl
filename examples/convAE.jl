@@ -321,6 +321,32 @@ function evolve_CAE(
     decoder = GeometryLearning.remake_ca_in_model(decoder...)
 
     #==============#
+    # get initial state
+    #==============#
+    U0_norm = normalizedata(U0, md.ū, md.σu)
+    U0_perm = permutedims(U0_norm, (2, 1))
+    U0_resh = reshape(U0_perm, size(U0_perm)..., 1)
+
+    p0 = encoder[1](U0_resh, encoder[2], encoder[3])[1]
+    p0 = dropdims(p0; dims = 2)
+
+    ### debuggin
+    Xnorm = normalizedata(Xdata, md.x̄, md.σx)
+    
+    ## decoder
+    tmp1 = vcat(Xnorm, p0 * ones(1, size(Xnorm, 2)))
+    tmp1 = decoder[1](tmp1, decoder[2], decoder[3])[1]
+    
+    ## conv-INR
+    tmp2 = hcat(reshape(Xnorm, (Nx, 1, 1)), U0_resh) # [x, u]
+    tmp2 = NN(tmp2, p, st)[1]
+    
+    plt = plot(vec(U0_norm), w = 2, label = "data")
+    plot!(plt, vec(tmp1   ), w = 2, label = "decoder  [ũ, x]") 
+    plot!(plt, vec(tmp2   ), w = 2, label = "conv-INR [ũ, x]") 
+    display(plt)
+
+    #==============#
     # make model
     #==============#
     # model = NeuralModel()
@@ -352,14 +378,7 @@ function evolve_CAE(
     # evolve
     #==============#
 
-    Δt = 1f-2
-    timealg = EulerForward() # EulerForward(), RK2(), RK4()
-    adaptive = false
-
-    @time _, _, Up = evolve_model(
-        prob, decoder, md, data, p0, timealg, Δt, adaptive;
-        rng, device)
-
+    0, 0, 0
 end
 #======================================================#
 nothing

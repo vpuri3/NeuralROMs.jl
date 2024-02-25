@@ -40,7 +40,7 @@ function inr_decoder(l, h, w, in_dim, out_dim)
     Chain(in_layer, fill(hd_layer, h)..., fn_layer)
 end
 
-function inr_network(
+function convINR_network(
     prob::GeometryLearning.AbstractPDEProblem,
     l::Integer,
     h::Integer,
@@ -69,7 +69,70 @@ function inr_network(
         
         ImplicitEncoderDecoder(encoder, decoder, Ns, out_dim)
 
-    elseif prob isa ViscousBurgers1D
+    elseif prob isa KuramotoSivashinsky1D
+
+        Ns = (256,)
+        in_dim  = 1
+        out_dim = 1
+
+        wi = in_dim
+
+        encoder = Chain(
+            Conv((8,), wi  => we, act; stride = 4, pad = 2), # /4
+            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4
+            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4
+            Conv((4,), we  => we, act; stride = 1, pad = 0), # /4
+            flatten,
+            Dense(we, l),
+        )
+
+        decoder = inr_decoder(l, h, wd, in_dim, out_dim)
+        
+        ImplicitEncoderDecoder(encoder, decoder, Ns, out_dim)
+
+    elseif prob isa BurgersViscous1D
+
+        Ns = (1024,)
+        in_dim  = 1
+        out_dim = 1
+
+        wi = in_dim
+
+        encoder = Chain(
+            Conv((8,), wi  => we, act; stride = 4, pad = 2), # /4 = 256
+            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4 = 64
+            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4 = 16
+            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4 = 4
+            Conv((4,), we  => we, act; stride = 1, pad = 0), # /4 = 1
+            flatten,
+            Dense(we, l),
+        )
+
+        decoder = inr_decoder(l, h, wd, in_dim, out_dim)
+        
+        ImplicitEncoderDecoder(encoder, decoder, Ns, out_dim)
+
+    elseif prob isa BurgersViscous2D
+
+        Ns = (512, 512,)
+        in_dim  = 1
+        out_dim = 1
+
+        wi = in_dim
+
+        encoder = Chain(
+            Conv((8,8), wi  => we, act; stride = 4, pad = 2), # /4 = 128
+            Conv((8,8), we  => we, act; stride = 4, pad = 2), # /4 = 32
+            Conv((8,8), we  => we, act; stride = 4, pad = 2), # /4 = 8
+            Conv((8,8), we  => we, act; stride = 1, pad = 0), # /8 = 1
+            flatten,
+            Dense(we, l),
+        )
+
+        decoder = inr_decoder(l, h, wd, in_dim, out_dim)
+        
+        ImplicitEncoderDecoder(encoder, decoder, Ns, out_dim)
+
     end
 end
 
@@ -181,7 +244,7 @@ function makedata_INR(
 end
 
 #======================================================#
-function train_INR(
+function train_CINR(
     datafile::String,
     modeldir::String,
     NN::Lux.AbstractExplicitLayer,
@@ -256,12 +319,24 @@ function train_INR(
 end
 #======================================================#
 
-function evolve_INR(
+function evolve_CINR(
     prob::AbstractPDEProblem,
     datafile::String,
     modelfile::String,
-    outdir::String;
-    rng::AbstractRNG = Random.default_rng(),
+    case::Integer;
+    rng::Random.AbstractRNG = Random.default_rng(),
+
+    data_kws = (; Ix = :, It = :),
+
+    Δt::Union{Real, Nothing} = nothing,
+    timealg::GeometryLearning.AbstractTimeAlg = EulerForward(),
+    adaptive::Bool = false,
+    scheme::Union{Nothing, GeometryLearning.AbstractSolveScheme} = nothing,
+
+    autodiff_xyz::ADTypes.AbstractADType = AutoFiniteDiff(),
+    ϵ_xyz::Union{Real, Nothing} = 1f-2,
+
+    verbose::Bool = true,
     device = Lux.cpu_device(),
 )
 
@@ -295,27 +370,24 @@ function evolve_INR(
     #==============#
     model = jldopen(modelfile)
     NN, p, st = model["model"]
-    md = model["metadata"] # (; ū, σu, _Ib, Ib_, _It, It_, readme)
+    md = model["metadata"]
     close(model)
 
     #==============#
     # subsample in space
     #==============#
-    # Udata = @view Udata[:, md.makedata_kws.Ix, :, :]
-    # Xdata = @view Xdata[:, md.makedata_kws.Ix]
+    Udata = @view Udata[:, data_kws.Ix, :, data_kws.It]
+    Xdata = @view Xdata[:, data_kws.Ix]
+    Tdata = @view Tdata[data_kws.It]
     Nx = size(Xdata, 2)
 
-    #==============#
-    mkpath(outdir)
-    #==============#
-
     k  = 1
-    It = LinRange(1, length(Tdata), 4) .|> Base.Fix1(round, Int)
+    It = LinRange(1, length(Tdata), 10) .|> Base.Fix1(round, Int)
 
-    Ud = Udata[:, :, k, It]
+    Ud = Udata[:, :, case, :]
     U0 = Ud[:, :, 1]
 
-    data = (Xdata, U0, Tdata[It])
+    data = (Xdata, U0, Tdata)
     data = copy.(data) # ensure no SubArrays
 
     #==============#
@@ -353,7 +425,6 @@ function evolve_INR(
     # freeze decoder weights
     #==============#
     decoder = freeze_autodecoder(decoder, p0; rng)
-
     p0 = ComponentArray(p0, getaxes(decoder[2]))
 
     #==============#
@@ -370,37 +441,19 @@ function evolve_INR(
     nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
     nlsmaxiters = 10
 
-    Δt = 1f-2
-    scheme  = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
-    timealg = EulerForward() # EulerForward(), RK2(), RK4()
-    adaptive = false
+    Δt = isnothing(Δt) ? -(-(extrema(Tdata)...)) / 100.0f0 : Δt
 
-    ϵ_xyz = 1f-3
-    autodiff_xyz = AutoFiniteDiff()
+    if isnothing(scheme)
+        scheme  = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
+        # scheme = LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, 1f-6, 1f-3, 1f-6)
+    end
 
-    @time _, _, Up = evolve_model(prob, model, timealg, scheme, data, p0, Δt;
-        nlssolve, adaptive, autodiff_xyz, ϵ_xyz, device,
+    @time _, ps, Up = evolve_model(prob, model, timealg, scheme, data, p0, Δt;
+        nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz,
+        verbose, device,
     )
 
-    Xd = dropdims(Xdata; dims = 1)
-    Up = dropdims(Up; dims = 1)
-    Ud = dropdims(Ud; dims = 1)
-
-    Ix_plt = 1:4:Nx
-    plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
-    plot!(plt, Xd, Up, w = 2, palette = :tab10)
-    scatter!(plt, Xdata[Ix_plt], Ud[Ix_plt, :], w = 1, palette = :tab10)
-
-    denom  = sum(abs2, Ud) / length(Ud) |> sqrt
-    _max  = norm(Up - Ud, Inf) / sqrt(denom)
-    _mean = sqrt(sum(abs2, Up - Ud) / length(Ud)) / denom
-    println("Max error  (normalized): $(_max * 100 )%")
-    println("Mean error (normalized): $(_mean * 100)%")
-
-    png(plt, joinpath(outdir, "evolve_$k"))
-    display(plt)
-
-    Xd, Up, Ud
+    Xdata, Tdata, Ud, Up, ps
 end
 
 #======================================================#

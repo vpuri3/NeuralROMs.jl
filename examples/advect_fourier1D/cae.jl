@@ -30,14 +30,15 @@ p = ComponentArray(p)
 _data, _, _ = makedata_CAE(datafile)
 @show _data[1] |> size
 @show NN(_data[1], p, st)[1] |> size
+@show length(p.encoder)
 @show length(p.decoder)
 
-## train
-isdir(modeldir) && rm(modeldir, recursive = true)
-model, ST, metadata = train_CAE(datafile, modeldir, NN, E; rng, warmup = false, device)
+# ## train
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# model, ST, metadata = train_CAE(datafile, modeldir, NN, E; rng, warmup = false, device)
 
-## evolve
-# x, u, p = evolve_CAE(prob, datafile, modelfile, outdir; rng, device)
+# ## evolve
+x, u, p = evolve_CAE(prob, datafile, modelfile, outdir; rng, device)
 
 #======================================================#
 nothing
