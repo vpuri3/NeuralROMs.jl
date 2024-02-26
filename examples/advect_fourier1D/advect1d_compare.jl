@@ -1,5 +1,6 @@
 #
 using GeometryLearning
+using Plots, LaTeXStrings
 
 begin
     snfpath = joinpath(pkgdir(GeometryLearning), "examples", "autodecoder.jl")
@@ -59,7 +60,7 @@ function advect1d_train_SNFL(
     w = 64    # width
 
     λ1, λ2 = 0f0, 0f0     # L1 / L2 reg
-    σ2inv, α = 1f-3, 5f-5 # code / Lipschitz regularization
+    σ2inv, α = 1f-3, 1f-4 # code / Lipschitz regularization
     weight_decays = 0f-0  # AdamW weight decay
 
     train_SNF(datafile, modeldir, l, h, w, E;
@@ -122,8 +123,6 @@ ud3, up3 = dropdims.((ud3, up3); dims = 1)
 #==================#
 # figure
 #==================#
-using Plots
-using LaTeXStrings
 
 plt = plot(;
     xlabel = L"x",

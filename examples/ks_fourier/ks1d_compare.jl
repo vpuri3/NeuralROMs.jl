@@ -1,5 +1,6 @@
 #
 using GeometryLearning
+using Plots, LaTeXStrings
 
 begin
     snfpath = joinpath(pkgdir(GeometryLearning), "examples", "autodecoder.jl")
@@ -16,10 +17,9 @@ function ks1d_train_CINR(
     device = Lux.cpu_device(),
 )
     E   = 7000  # epochs
-    # l   = 4     # latent
     h   = 5     # num decoder hidden
-    we  = 32    # encoder width
-    wd  = 64    # decoder width
+    we  = 64    # encoder width
+    wd  = 128   # decoder width
     act = tanh  # relu, tanh
 
     NN = convINR_network(prob, l, h, we, wd, act)
@@ -34,13 +34,12 @@ function ks1d_train_SNFW(
     device = Lux.cpu_device(),
 )
     E = 7000  # epochs
-    # l = 4     # latent
     h = 5     # num hidden
-    w = 64    # width
+    w = 128   # width
 
     λ1, λ2 = 0f0, 0f0     # L1 / L2 reg
-    σ2inv, α = 1f-3, 0f-0 # code / Lipschitz regularization
-    weight_decays = 1f-3  # AdamW weight decay
+    σ2inv, α = 1f-2, 0f-0 # code / Lipschitz regularization
+    weight_decays = 1f-2  # AdamW weight decay
 
     train_SNF(datafile, modeldir, l, h, w, E;
         rng, warmup = true,
@@ -54,15 +53,15 @@ function ks1d_train_SNFL(
     device = Lux.cpu_device(),
 )
     E = 7000  # epochs
-    # l = 4     # latent
     h = 5     # num hidden
-    w = 64    # width
+    w = 128   # width
 
     λ1, λ2 = 0f0, 0f0     # L1 / L2 reg
-    σ2inv, α = 1f-3, 1f-5 # code / Lipschitz regularization
+    σ2inv, α = 1f-2, 5f-4 # code / Lipschitz regularization
     weight_decays = 0f-0  # AdamW weight decay
 
-    train_SNF(datafile, modeldir, l, h, w, E;
+    train_SNF(
+        datafile, modeldir, l, h, w, E;
         rng, warmup = true,
         λ1, λ2, σ2inv, α, weight_decays, device,
     )
@@ -75,7 +74,7 @@ Random.seed!(rng, 200)
 prob = KuramotoSivashinsky1D(0.01f0)
 datafile = joinpath(@__DIR__, "data_ks/", "data.jld2")
 
-latent = 4
+latent = 16
 ll = lpad(latent, 2, "0")
 
 device = Lux.gpu_device()
@@ -88,9 +87,9 @@ modeldir_CINR = joinpath(@__DIR__, "model_CINR_l_$(ll)")
 modeldir_SNFW = joinpath(@__DIR__, "model_SNFW_l_$(ll)")
 modeldir_SNFL = joinpath(@__DIR__, "model_SNFL_l_$(ll)")
 
-ks1d_train_CINR(latent, modeldir_CINR; device)
-ks1d_train_SNFW(latent, modeldir_SNFW; device)
-ks1d_train_SNFL(latent, modeldir_SNFL; device)
+# ks1d_train_CINR(latent, modeldir_CINR; device)
+# ks1d_train_SNFW(latent, modeldir_SNFW; device)
+# ks1d_train_SNFL(latent, modeldir_SNFL; device)
 
 #==================#
 # evolve
@@ -120,9 +119,6 @@ ud3, up3 = dropdims.((ud3, up3); dims = 1)
 #==================#
 # figure
 #==================#
-using Plots
-using LaTeXStrings
-
 plt = plot(;
     xlabel = L"x",
     ylabel = L"u(x, t)",
@@ -131,10 +127,10 @@ plt = plot(;
 Nt = length(t1)
 ii = [1, Nt]
 
-plot!(plt, x1, ud1[:, ii], w = 4, s = :solid     , c = :black, label = "Ground truth")
-plot!(plt, x1, up1[:, ii], w = 4, s = :dashdot   , c = :green, label = "C-ROM")
-plot!(plt, x2, up2[:, ii], w = 4, s = :dashdotdot, c = :red  , label = "Smooth-NFW (ours)")
-plot!(plt, x3, up3[:, ii], w = 4, s = :dashdotdot, c = :red  , label = "Smooth-NFL (ours)")
+plot!(plt, x1, ud1[:, ii], w = 4, s = :solid, c = :black, label = "Ground truth")
+plot!(plt, x1, up1[:, ii], w = 4, s = :solid, c = :green, label = "C-ROM")
+plot!(plt, x2, up2[:, ii], w = 4, s = :solid, c = :red  , label = "Smooth-NFW (ours)")
+plot!(plt, x3, up3[:, ii], w = 4, s = :solid, c = :blue , label = "Smooth-NFL (ours)")
 
 pltname = joinpath(@__DIR__, "compare_l_$(latent)")
 png(plt, pltname)
