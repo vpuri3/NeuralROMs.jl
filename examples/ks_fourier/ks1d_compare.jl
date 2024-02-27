@@ -1,6 +1,7 @@
 #
 using GeometryLearning
 using Plots, LaTeXStrings
+using NPZ
 
 begin
     snfpath = joinpath(pkgdir(GeometryLearning), "examples", "autodecoder.jl")
@@ -94,6 +95,7 @@ modeldir_SNFL = joinpath(@__DIR__, "model_SNFL_l_$(ll)")
 #==================#
 # evolve
 #==================#
+
 case = 1
 
 modelfile_CINR = joinpath(modeldir_CINR, "model_08.jld2")
@@ -117,6 +119,31 @@ ud2, up2 = dropdims.((ud2, up2); dims = 1)
 ud3, up3 = dropdims.((ud3, up3); dims = 1)
 
 #==================#
+# save data
+#==================#
+filename = joinpath(@__DIR__, "ks1d.npz")
+
+dict = Dict(
+    "xdata" => x1,
+    "tdata" => t1,
+    "udata" => ud1,
+
+    "xCROM" => x1,
+    "tCROM" => t1,
+    "uCROM" => up1,
+
+    "xSNFW" => x2,
+    "tSNFW" => t2,
+    "uSNFW" => up2,
+
+    "xSNFW" => x3,
+    "tSNFW" => t3,
+    "uSNFW" => up3,
+)
+
+npzwrite(filename, dict)
+
+#==================#
 # figure
 #==================#
 plt = plot(;
@@ -125,12 +152,13 @@ plt = plot(;
 )
 
 Nt = length(t1)
-ii = [1, Nt]
+i1 = [1, Nt]
+i2 = Nt
 
-plot!(plt, x1, ud1[:, ii], w = 4, s = :solid, c = :black, label = "Ground truth")
-plot!(plt, x1, up1[:, ii], w = 4, s = :solid, c = :green, label = "C-ROM")
-plot!(plt, x2, up2[:, ii], w = 4, s = :solid, c = :red  , label = "Smooth-NFW (ours)")
-plot!(plt, x3, up3[:, ii], w = 4, s = :solid, c = :blue , label = "Smooth-NFL (ours)")
+plot!(plt, x1, ud1[:, i1], w = 4, s = :solid, c = :black, label = "Ground truth")
+plot!(plt, x1, up1[:, i2], w = 4, s = :solid, c = :green, label = "C-ROM")
+plot!(plt, x2, up2[:, i2], w = 4, s = :solid, c = :red  , label = "Smooth-NFW (ours)")
+plot!(plt, x3, up3[:, i2], w = 4, s = :solid, c = :blue , label = "Smooth-NFL (ours)")
 
 pltname = joinpath(@__DIR__, "compare_l_$(latent)")
 png(plt, pltname)
