@@ -136,9 +136,9 @@ dict = Dict(
     "tSNFW" => t2,
     "uSNFW" => up2,
 
-    "xSNFW" => x3,
-    "tSNFW" => t3,
-    "uSNFW" => up3,
+    "xSNFL" => x3,
+    "tSNFL" => t3,
+    "uSNFL" => up3,
 )
 
 npzwrite(filename, dict)
