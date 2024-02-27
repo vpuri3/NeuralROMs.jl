@@ -36,6 +36,7 @@ zpts = @. zfunc(xpts, ypts; ϵ = 1e-2, rng)
 zpca = 0.5 .+ 0 * xsrf
 zcrm = @. zfunc(xsrf, ysrf; ϵ = 2e-2)
 zsnf = @. zfunc(xsrf, ysrf)
+#===============================#
 
 fig = Figure(
     size = (800, 800),
