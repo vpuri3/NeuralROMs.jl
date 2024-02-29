@@ -153,14 +153,23 @@ npzwrite(filename, dict)
 plt = plot(;
     xlabel = L"x",
     ylabel = L"u(x, t)",
+
+    title = "1D Advection",
+
+    legendfontsize = 10,
+    legend = :bottomleft,
 )
 
 Nt = length(t1)
-i1 = [1, Nt]
+i1 = 1
 i2 = Nt
 
-plot!(plt, x1, ud1[:, i1], w = 4, s = :solid     , c = :black, label = "Ground truth")
-plot!(plt, x1, up1[:, i2], w = 4, s = :dashdot   , c = :green, label = "C-ROM")
+# data
+plot!(plt, x1, ud1[:, i1], w = 4, s = :solid, c = :black, label = "Ground truth")
+plot!(plt, x1, ud1[:, i2], w = 4, s = :solid, c = :black, label = nothing)
+
+# plots
+plot!(plt, x1, up1[:, i2], w = 4, s = :dashdot   , c = :green, label = "C-ROM (ref. [2])")
 plot!(plt, x2, up2[:, i2], w = 4, s = :dashdotdot, c = :red  , label = "Smooth-NFW (ours)")
 plot!(plt, x3, up3[:, i2], w = 4, s = :dashdotdot, c = :blue , label = "Smooth-NFL (ours)")
 

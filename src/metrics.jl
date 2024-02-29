@@ -75,10 +75,19 @@ end
 
 Elastic Regularization (L1 + L2)
 """
-function elasticreg(lossfun, λ1::Real, λ2::Real; property = nothing)
+function elasticreg(
+    lossfun,
+    λ1::Real,
+    λ2::Real;
+    property = nothing,
+    lname::Symbol = :mse,
+)
+
     function elasticreg_internal(NN, p, st::NamedTuple, batch::Tuple)
         T  = eltype(p)
         l, st_new, stats = lossfun(NN, p, st, batch)
+
+        lstats = NamedTuple{(lname,)}((l,))
 
         _p = isnothing(property) ? p : getproperty(p, property)
         _N = length(_p)
@@ -97,7 +106,7 @@ function elasticreg(lossfun, λ1::Real, λ2::Real; property = nothing)
 
         lreg = l + l1 + l2
 
-        lreg, st_new, (; stats..., l, l1, l2)
+        lreg, st_new, (; stats..., lstats..., l1, l2)
     end
 end
 
@@ -108,12 +117,14 @@ end
 
 code regularized loss: `lossfun(..) + 1/σ² ||ũ||₂²`
 """
-function codereg(lossfun, σ2inv::Real)
+function codereg(lossfun, σ2inv::Real; lname::Symbol = :mse)
 
     function codereg_internal(NN, p, st::NamedTuple, batch::Tuple)
         T = eltype(p)
         N = numobs(batch)
         l, st_new, stats = lossfun(NN, p, st, batch)
+
+        lstats = NamedTuple{(lname,)}((l,))
 
         lcode = if iszero(σ2inv)
              zero(T)
@@ -127,7 +138,7 @@ function codereg(lossfun, σ2inv::Real)
 
         loss = l + lcode
 
-        loss, st_new, (; stats..., l, lcode)
+        loss, st_new, (; stats..., lstats..., lcode)
     end
 end
 
@@ -176,6 +187,7 @@ function regularize_autodecoder(
     α::T = 0f0,
     λ1::T = 0f0,
     λ2::T = 0f0,
+    lname::Symbol = :mse,
 ) where{T<:Real}
 
     function regularize_autodecoder_internal(NN, p, st::NamedTuple, batch::Tuple)
@@ -188,7 +200,8 @@ function regularize_autodecoder(
             @assert eltype(l) === T "got $(eltype(l)) === $(T)."
         end
 
-        stats = (; stats..., l)
+        lstats = NamedTuple{(lname,)}((l,))
+        stats = (; stats..., lstats...)
 
         decoder, code = get_autodecoder(NN, p, st)
 

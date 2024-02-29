@@ -235,34 +235,41 @@ Only for callbacks. Enforce this by setting Lux.testmode
 - `NN, p, st`: neural network
 - `loader`: data loader
 - `lossfun`: loss function: (x::Array, y::Array) -> l::Real
-- `ismean`: lossfun takes a mean
 """
-function fullbatch_metric(NN, p, st, loader, lossfun, ismean = true)
-    L = 0f0
+function fullbatch_metric(NN, p, st, loader, lossfun)
     N = 0
-    S = nothing
+    L = 0f0
+
+    SK = nothing # stats keys
+    SV = nothing # stats values
 
     st = Lux.testmode(st)
 
     for batch in loader
         l, _, stats = lossfun(NN, p, st, batch)
 
-        # if isnothing(S)
-        #     S = stats
-        # else
-        #     S .+= stats
-        # end
-
-        if ismean
-            n = numobs(batch)
-            N += n
-            L += l * n
-        else
-            L += l
+        if isnothing(SK)
+            SK = keys(stats)
         end
+
+        n = numobs(batch)
+        N += n
+
+        # compute mean stats
+        if isnothing(SV)
+            SV = values(stats) .* n
+        else
+            SV = SV .+ values(stats) .* n
+        end
+
+        L += l * n
     end
 
-    ismean ? L / N : L
+    SV   = SV ./ N
+    loss = L   / N
+    stats = NamedTuple{SK}(SV)
+
+    loss, stats
 end
 
 """
@@ -409,38 +416,46 @@ function callback(p, st;
     end
 
     # log training loss
-    _l = if !isnothing(_loss)
-        _l = _loss(p, st)
+    _l, _stats = if !isnothing(_loss)
+        _l, _stats = _loss(p, st)
         !isnothing(_LOSS) && push!(_LOSS, _l)
-        _l
+        _l, _stats
     else
-        nothing
+        nothing, nothing
     end
 
     # log test loss
-    l_ = if !isnothing(loss_)
-        l_ = loss_(p, st)
+    l_, stats_ = if !isnothing(loss_)
+        l_, stats_ = loss_(p, st)
         !isnothing(LOSS_) && push!(LOSS_, l_)
-        l_
+        l_, stats_
     else
-        nothing
+        nothing, nothing
     end
 
     isnothing(io) && return
 
     if !isnothing(_l)
         print(io, "TRAIN LOSS: ")
-        __l = round(_l; sigdigits=8)
-        printstyled(io, __l; color = :magenta)
+        _lprint = round(_l; sigdigits=8)
+        printstyled(io, _lprint; color = :magenta)
     end
 
     if !isnothing(l_)
         print(io, " || TEST LOSS: ")
-        l__ = round(l_; sigdigits = 8)
-        printstyled(io, l__; color = :magenta)
+        lprint_ = round(l_; sigdigits = 8)
+        printstyled(io, lprint_; color = :magenta)
     end
 
     println(io)
+
+    # if !isnothing(_stats)
+    #     println(io, "TRAIN STATS:", _stats)
+    # end
+    #
+    # if isnothing(stats_)
+    #     println(io, "TRAIN STATS:", stats_)
+    # end
 
     if !isnothing(_printstatistics)
         println(io, "#======================#")
@@ -448,6 +463,7 @@ function callback(p, st;
         _printstatistics(p, st; io)
         println(io, "#======================#")
     end
+
     if !isnothing(printstatistics_) 
         println(io, "#======================#")
         println(io, "TEST  STATS")
@@ -455,7 +471,35 @@ function callback(p, st;
         println(io, "#======================#")
     end
 
-    _l, l_
+    # terminate optimization
+    MSE_MIN = 5f-7
+    ifbreak = false
+
+    # avoid over-fitting on training set
+    if !isnothing(_stats)
+        if haskey(_stats, :mse)
+            lmse = _stats[:mse]
+            if lmse < MSE_MIN
+                println("Ending optimization")
+                println("MSE = $lmse < 5f-7 reached on training set.")
+                ifbreak = true
+            end
+        end
+    end
+
+    # avoid over-fitting on test set
+    if !isnothing(stats_)
+        if haskey(stats_, :mse)
+            lmse = stats_[:mse]
+            if lmse < MSE_MIN
+                println("Ending optimization")
+                println("MSE = $lmse < 5f-7 reached on test set.")
+                ifbreak = true
+            end
+        end
+    end
+
+    _l, l_, ifbreak
 end
 
 #===============================================================#
@@ -568,9 +612,12 @@ function optimize(
         ProgressMeter.finish!(prog)
 
         # callback, early stopping
-        _, l_ = cb(p, st; epoch, nepoch, io)
-        minconfig, ifbreak = update_minconfig(minconfig, l_, p, st, opt_st; io)
-        ifbreak && break
+        _, l_, ifbreak_cb = cb(p, st; epoch, nepoch, io)
+        minconfig, ifbreak_mc = update_minconfig(minconfig, l_, p, st, opt_st; io)
+
+        if ifbreak_cb | ifbreak_mc
+            break
+        end
 
         println(io, "#=======================#")
     end

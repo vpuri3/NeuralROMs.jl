@@ -331,7 +331,7 @@ function evolve_SNF(
     prob::AbstractPDEProblem,
     datafile::String,
     modelfile::String,
-    case::Integer;
+    case::Integer; # batch
     rng::Random.AbstractRNG = Random.default_rng(),
 
     data_kws = (; Ix = :, It = :),

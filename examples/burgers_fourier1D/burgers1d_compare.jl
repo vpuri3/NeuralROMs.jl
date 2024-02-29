@@ -12,7 +12,7 @@ begin
 end
 #======================================================#
 
-function ks1d_train_CINR(
+function burgers1d_train_CINR(
     l::Integer, 
     modeldir::String;
     device = Lux.cpu_device(),
@@ -23,13 +23,15 @@ function ks1d_train_CINR(
     wd  = 128   # decoder width
     act = tanh  # relu, tanh
 
+    # _batchsize = 1
+
     NN = convINR_network(prob, l, h, we, wd, act)
 
     isdir(modeldir) && rm(modeldir, recursive = true)
     train_CINR(datafile, modeldir, NN, E; rng, warmup = true, device)
 end
 
-function ks1d_train_SNFW(
+function burgers1d_train_SNFW(
     l::Integer, 
     modeldir::String;
     device = Lux.cpu_device(),
@@ -39,16 +41,22 @@ function ks1d_train_SNFW(
     w = 128   # width
 
     λ1, λ2 = 0f0, 0f0     # L1 / L2 reg
-    σ2inv, α = 1f-2, 0f-0 # code / Lipschitz regularization
-    weight_decays = 1f-2  # AdamW weight decay
+    σ2inv, α = 5f-3, 0f-0 # code / Lipschitz regularization
+    weight_decays = 5f-3  # AdamW weight decay
 
+    _Ib, Ib_ = [1, 3], [1, 3]
+    Ix = LinRange(1, 8192, 1024) .|> Base.Fix1(round, Int)
+    makedata_kws = (; Ix, _Ib, Ib_, _It = :, It_ = :)
+
+    isdir(modeldir) && rm(modeldir, recursive = true)
     train_SNF(datafile, modeldir, l, h, w, E;
         rng, warmup = true,
         λ1, λ2, σ2inv, α, weight_decays, device,
+        makedata_kws,
     )
 end
 
-function ks1d_train_SNFL(
+function burgers1d_train_SNFL(
     l::Integer, 
     modeldir::String;
     device = Lux.cpu_device(),
@@ -58,24 +66,31 @@ function ks1d_train_SNFL(
     w = 128   # width
 
     λ1, λ2 = 0f0, 0f0     # L1 / L2 reg
-    σ2inv, α = 1f-2, 5f-4 # code / Lipschitz regularization
+    σ2inv, α = 1f-3, 1f-4 # code / Lipschitz regularization
     weight_decays = 0f-0  # AdamW weight decay
 
-    train_SNF(
-        datafile, modeldir, l, h, w, E;
+    _Ib, Ib_ = [1], [1]
+    Ix = LinRange(1, 8192, 1024) .|> Base.Fix1(round, Int)
+    makedata_kws = (; Ix, _Ib, Ib_, _It = :, It_ = :)
+
+    isdir(modeldir) && rm(modeldir, recursive = true)
+    train_SNF(datafile, modeldir, l, h, w, E;
         rng, warmup = true,
         λ1, λ2, σ2inv, α, weight_decays, device,
+        makedata_kws,
     )
 end
 #======================================================#
+# main
+#======================================================#
 
 rng = Random.default_rng()
-Random.seed!(rng, 200)
+Random.seed!(rng, 199)
 
-prob = KuramotoSivashinsky1D(0.01f0)
-datafile = joinpath(@__DIR__, "data_ks/", "data.jld2")
+prob = BurgersViscous1D(1f-4)
+datafile = joinpath(@__DIR__, "burg_visc_re10k", "data.jld2")
 
-latent = 16
+latent = 8
 ll = lpad(latent, 2, "0")
 
 device = Lux.gpu_device()
@@ -88,57 +103,61 @@ modeldir_CINR = joinpath(@__DIR__, "model_CINR_l_$(ll)")
 modeldir_SNFW = joinpath(@__DIR__, "model_SNFW_l_$(ll)")
 modeldir_SNFL = joinpath(@__DIR__, "model_SNFL_l_$(ll)")
 
-# ks1d_train_CINR(latent, modeldir_CINR; device)
-# ks1d_train_SNFW(latent, modeldir_SNFW; device)
-# ks1d_train_SNFL(latent, modeldir_SNFL; device)
+# burgers1d_train_CINR(latent, modeldir_CINR; device)
+# burgers1d_train_SNFW(latent, modeldir_SNFW; device)
+# burgers1d_train_SNFL(latent, modeldir_SNFL; device)
 
 #==================#
 # evolve
 #==================#
 
-case = 1
+case = 1 # train
+# case = 2 # test
+# case = 3 # train
 
 modelfile_CINR = joinpath(modeldir_CINR, "model_08.jld2")
 modelfile_SNFW = joinpath(modeldir_SNFW, "model_08.jld2")
 modelfile_SNFL = joinpath(modeldir_SNFL, "model_08.jld2")
 
-x1, t1, ud1, up1, _ = evolve_CINR(prob, datafile, modelfile_CINR, case; rng, device)
+modelfile_SNFW = joinpath(@__DIR__, "model_case1_SNFW_l_8/model_08.jld2")
+
+# x1, t1, ud1, up1, _ = evolve_CINR(prob, datafile, modelfile_CINR, case; rng, device)
 x2, t2, ud2, up2, _ = evolve_SNF( prob, datafile, modelfile_SNFW, case; rng, device)
-x3, t3, ud3, up3, _ = evolve_SNF( prob, datafile, modelfile_SNFL, case; rng, device)
+# x3, t3, ud3, up3, _ = evolve_SNF( prob, datafile, modelfile_SNFL, case; rng, device)
 
 #==================#
 # clean data
 #==================#
 
-x1 = dropdims(x1; dims = 1)
+# x1 = dropdims(x1; dims = 1)
 x2 = dropdims(x2; dims = 1)
-x3 = dropdims(x3; dims = 1)
+# x3 = dropdims(x3; dims = 1)
 
-ud1, up1 = dropdims.((ud1, up1); dims = 1)
+# ud1, up1 = dropdims.((ud1, up1); dims = 1)
 ud2, up2 = dropdims.((ud2, up2); dims = 1)
-ud3, up3 = dropdims.((ud3, up3); dims = 1)
+# ud3, up3 = dropdims.((ud3, up3); dims = 1)
 
 #==================#
 # save data
 #==================#
-filename = joinpath(@__DIR__, "ks1d.npz")
+filename = joinpath(@__DIR__, "burgers1d.npz")
 
 dict = Dict(
-    "xdata" => x1,
-    "tdata" => t1,
-    "udata" => ud1,
+    "xdata" => x2,
+    "tdata" => t2,
+    "udata" => ud2,
 
-    "xCROM" => x1,
-    "tCROM" => t1,
-    "uCROM" => up1,
+    # "xCROM" => x1,
+    # "tCROM" => t1,
+    # "uCROM" => up1,
 
     "xSNFW" => x2,
     "tSNFW" => t2,
     "uSNFW" => up2,
 
-    "xSNFL" => x3,
-    "tSNFL" => t3,
-    "uSNFL" => up3,
+    # "xSNFL" => x3,
+    # "tSNFL" => t3,
+    # "uSNFL" => up3,
 )
 
 npzwrite(filename, dict)
@@ -150,24 +169,24 @@ plt = plot(;
     xlabel = L"x",
     ylabel = L"u(x, t)",
 
-    title = "1D Kuramoto Sivashinsky",
+    title = "1D Viscous Burgers (Re = 10k)",
 
     legendfontsize = 10,
     legend = :bottomleft,
 )
 
-Nt = length(t1)
+Nt = length(t2)
 i1 = 1
 i2 = Nt
 
 # data
-plot!(plt, x1, ud1[:, i1], w = 4, s = :solid, c = :black, label = "Ground truth")
-plot!(plt, x1, ud1[:, i2], w = 4, s = :solid, c = :black, label = nothing)
+plot!(plt, x2, ud2[:, i1], w = 4, s = :solid, c = :black, label = "Ground truth")
+plot!(plt, x2, ud2[:, i2], w = 4, s = :solid, c = :black, label = nothing)
 
 # plots
-plot!(plt, x1, up1[:, i2], w = 4, s = :dashdot   , c = :green, label = "C-ROM (ref. [2])")
+# plot!(plt, x1, up1[:, i2], w = 4, s = :dashdot   , c = :green, label = "C-ROM (ref. [2])")
 plot!(plt, x2, up2[:, i2], w = 4, s = :dashdotdot, c = :red  , label = "Smooth-NFW (ours)")
-plot!(plt, x3, up3[:, i2], w = 4, s = :dashdotdot, c = :blue , label = "Smooth-NFL (ours)")
+# plot!(plt, x3, up3[:, i2], w = 4, s = :dashdotdot, c = :blue , label = "Smooth-NFL (ours)")
 
 pltname = joinpath(@__DIR__, "compare_l_$(latent)")
 png(plt, pltname)
