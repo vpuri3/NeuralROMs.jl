@@ -2,6 +2,7 @@
 /docs/Manifest.toml
 /docs/build/
 *.bson
+*.npz
 *.jld2
 *.hdf5
 *.h5
