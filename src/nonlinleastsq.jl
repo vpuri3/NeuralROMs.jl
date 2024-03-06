@@ -113,6 +113,62 @@ function nonlinleastsq(
     nlssol.u, nlssol
 end
 #======================================================#
+#======================================================#
+
+function nonlinleastsq(
+    model::AbstractNeuralModel,
+    p0::Union{NamedTuple, AbstractVector},
+    data::NTuple{2, Any},
+    opt::Union{Optim.AbstractOptimizer, Optimisers.AbstractRule};
+    maxiters::Integer = 50,
+    abstol = nothing,
+    reltol = nothing,
+    adtype::ADTypes.AbstractADType = AutoZygote(),
+    io::Union{Nothing, IO} = stdout,
+    verbose::Bool = true,
+    residual = nothing, # (NN, p, st, data) -> resid
+    callback = nothing,
+)
+    p0 = ComponentArray(p0)
+
+    residual = isnothing(residual) ? residual_learn : residual
+
+    function optloss(optx, optp)
+        r = residual(model, optx, data, optp)
+        sum(abs2, r) / length(r)
+    end
+
+    iter = Ref(0)
+
+    callback = !isnothing(callback) ? callback : function(optx, l)
+        iter[] += 1
+        if verbose
+            println(io, "NonlinearSolve [$(iter[]) / $maxiters] MSE: $l")
+        end
+        return false
+    end
+
+    optfun  = OptimizationFunction(optloss, adtype)
+    optprob = OptimizationProblem(optfun, p0)
+    optsol  = solve(optprob, opt;
+        maxiters,
+        callback,
+        abstol,
+        reltol,
+    )
+
+    if verbose
+        obj = round(optsol.objective; sigdigits = 8)
+
+        println(io, "#=======================#")
+        @show optsol.retcode
+        println(io, "Achieved objective value $(obj).")
+        println(io, "#=======================#")
+    end
+
+    optsol.u, optsol
+end
+#======================================================#
 
 function nonlinleastsq(
     NN::Lux.AbstractExplicitLayer,
@@ -132,11 +188,7 @@ function nonlinleastsq(
     st = Lux.testmode(st)
     p0 = ComponentArray(p0)
 
-    residual = if isnothing(residual)
-        (NN, p, st, data) -> NN(data[1], p, st)[1] - data[2]
-    else
-        residual
-    end
+    residual = isnothing(residual) ? residual_learn : residual
 
     function optloss(optx, optp)
         r = residual(NN, optx, st, data)
@@ -161,14 +213,12 @@ function nonlinleastsq(
         reltol,
     )
 
-
     if verbose
         obj = round(optsol.objective; sigdigits = 8)
-        tym = round(optsol.solve_time; sigdigits = 8)
 
         println(io, "#=======================#")
         @show optsol.retcode
-        println(io, "Achieved objective value $(obj) in time $(tym)s.")
+        println(io, "Achieved objective value $(obj).")
         println(io, "#=======================#")
     end
 

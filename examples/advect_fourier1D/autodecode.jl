@@ -13,7 +13,7 @@ Random.seed!(rng, 199)
 
 prob = Advection1D(0.25f0)
 datafile  = joinpath(@__DIR__, "data_advect/", "data.jld2")
-modeldir  = joinpath(@__DIR__, "model1")
+modeldir  = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
 device = Lux.gpu_device()
 
@@ -23,23 +23,23 @@ case = 1
 E = 1400
 _It = Colon()
 _batchsize = 1280
-l, h, w = 4, 5, 32 # (2, 4), 5, 32
+l, h, w = 4, 5, 64 # (2, 4), 5, 32
 λ1, λ2 = 0f0, 0f0
-σ2inv, α = 0f-0, 0f0
-weight_decays = 1f-3
+σ2inv, α = 1f-3, 0f0
+weight_decays = 0f-3
 
-# isdir(modeldir) && rm(modeldir, recursive = true)
-# makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
-# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
-#     rng, warmup = true, _batchsize,
-#     λ1, λ2, σ2inv, α, weight_decays, makedata_kws, device,
-# )
+isdir(modeldir) && rm(modeldir, recursive = true)
+makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
+model, STATS, metadata = train_SNF(datafile, modeldir, l, h, w, E;
+    rng, warmup = true, _batchsize,
+    λ1, λ2, σ2inv, α, weight_decays, makedata_kws, device,
+)
 
 ## process
 # outdir = joinpath(modeldir, "results")
 # postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
 #     makeplot = true, verbose = true)
-x, up, ud = evolve_autodecoder(prob, datafile, modelfile, case; rng, device)
+x, t, up, ud, _ = evolve_SNF(prob, datafile, modelfile, case; rng, device)
 #======================================================#
 # ## train (5x less snapshots)
 # E = 1400

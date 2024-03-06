@@ -41,10 +41,10 @@ function burgers1d_train_SNFW(
     w = 128   # width
 
     λ1, λ2 = 0f0, 0f0     # L1 / L2 reg
-    σ2inv, α = 5f-3, 0f-0 # code / Lipschitz regularization
-    weight_decays = 5f-3  # AdamW weight decay
+    σ2inv, α = 1f-2, 0f-0 # code / Lipschitz regularization
+    weight_decays = 5f-2  # AdamW weight decay
 
-    _Ib, Ib_ = [1, 3], [1, 3]
+    _Ib, Ib_ = [3], [3]
     Ix = LinRange(1, 8192, 1024) .|> Base.Fix1(round, Int)
     makedata_kws = (; Ix, _Ib, Ib_, _It = :, It_ = :)
 
@@ -104,22 +104,20 @@ modeldir_SNFW = joinpath(@__DIR__, "model_SNFW_l_$(ll)")
 modeldir_SNFL = joinpath(@__DIR__, "model_SNFL_l_$(ll)")
 
 # burgers1d_train_CINR(latent, modeldir_CINR; device)
-# burgers1d_train_SNFW(latent, modeldir_SNFW; device)
+burgers1d_train_SNFW(latent, modeldir_SNFW; device)
 # burgers1d_train_SNFL(latent, modeldir_SNFL; device)
 
 #==================#
 # evolve
 #==================#
 
-case = 1 # train
+# case = 1 # train
 # case = 2 # test
-# case = 3 # train
+case = 3 # train
 
 modelfile_CINR = joinpath(modeldir_CINR, "model_08.jld2")
 modelfile_SNFW = joinpath(modeldir_SNFW, "model_08.jld2")
 modelfile_SNFL = joinpath(modeldir_SNFL, "model_08.jld2")
-
-modelfile_SNFW = joinpath(@__DIR__, "model_case1_SNFW_l_8/model_08.jld2")
 
 # x1, t1, ud1, up1, _ = evolve_CINR(prob, datafile, modelfile_CINR, case; rng, device)
 x2, t2, ud2, up2, _ = evolve_SNF( prob, datafile, modelfile_SNFW, case; rng, device)
@@ -160,7 +158,7 @@ dict = Dict(
     # "uSNFL" => up3,
 )
 
-npzwrite(filename, dict)
+# npzwrite(filename, dict)
 
 #==================#
 # figure

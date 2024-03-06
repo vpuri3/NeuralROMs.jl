@@ -40,7 +40,7 @@ function ks1d_train_SNFW(
 
     λ1, λ2 = 0f0, 0f0     # L1 / L2 reg
     σ2inv, α = 1f-2, 0f-0 # code / Lipschitz regularization
-    weight_decays = 1f-2  # AdamW weight decay
+    weight_decays = 1f-1  # AdamW weight decay
 
     train_SNF(datafile, modeldir, l, h, w, E;
         rng, warmup = true,
@@ -165,9 +165,9 @@ plot!(plt, x1, ud1[:, i1], w = 4, s = :solid, c = :black, label = "Ground truth"
 plot!(plt, x1, ud1[:, i2], w = 4, s = :solid, c = :black, label = nothing)
 
 # plots
-plot!(plt, x1, up1[:, i2], w = 4, s = :dashdot   , c = :green, label = "C-ROM (ref. [2])")
-plot!(plt, x2, up2[:, i2], w = 4, s = :dashdotdot, c = :red  , label = "Smooth-NFW (ours)")
-plot!(plt, x3, up3[:, i2], w = 4, s = :dashdotdot, c = :blue , label = "Smooth-NFL (ours)")
+plot!(plt, x1, up1[:, i2], w = 4, s = :solid, c = :green, label = "C-ROM (ref. [2])")
+plot!(plt, x2, up2[:, i2], w = 4, s = :solid, c = :red  , label = "Smooth-NFW (ours)")
+plot!(plt, x3, up3[:, i2], w = 4, s = :solid, c = :blue , label = "Smooth-NFL (ours)")
 
 pltname = joinpath(@__DIR__, "compare_l_$(latent)")
 png(plt, pltname)

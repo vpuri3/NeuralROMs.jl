@@ -141,6 +141,8 @@ function train_SNF(
     σ2inv::Real = 0f0,
     α::Real = 0f0,
     weight_decays::Union{Real, NTuple{M, <:Real}} = 0f0,
+    WeightDecayOpt = nothing,
+    weight_decay_ifunc = nothing,
     makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :,),
     init_code = nothing,
     cb_epoch = nothing,
@@ -199,15 +201,28 @@ function train_SNF(
     lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
     Nlrs = length(lrs)
 
-    # idx = only(getaxes(p))[:decoder].idx
-    decoder_axes = Lux.setup(copy(rng), NN)[1] |> ComponentArray |> getaxes
+    weightdecay = if isnothing(WeightDecayOpt) | (WeightDecayOpt === DecoderWeightDecay)
+        ca_axes = p_axes(NN; rng)
+        DecoderWeightDecay(0f0, ca_axes)
+    elseif WeightDecayOpt === IdxWeightDecay
+        decoder_idx = if isnothing(weight_decay_ifunc) | (weight_decay_ifunc === decoder_indices)
+            # decoder_W_indices(NN; rng) # WD on decoder weights
+            decoder_indices(NN; rng)   # WD on decoder weights and biases
+        else
+            weight_decay_ifunc(NN; rng)
+        end
+
+        IdxWeightDecay(0f0, decoder_idx)
+    else
+        error("Unsupported weight decay algorithm")
+    end
 
     # Grokking (https://arxiv.org/abs/2201.02177)
     # Optimisers.Adam(lr, (0.9f0, 0.95f0)), # 0.999 (default), 0.98, 0.95  # https://www.youtube.com/watch?v=IHikLL8ULa4&ab_channel=NeelNanda
     opts = Tuple(
         OptimiserChain(
             Optimisers.Adam(lr),
-            PartWeightDecay(0f0, decoder_axes, "decoder"),
+            weightdecay,
         ) for lr in lrs
     )
 
@@ -216,7 +231,7 @@ function train_SNF(
     early_stoppings = (fill(true, Nlrs)...,)
 
     if warmup
-        opt_warmup = OptimiserChain(Optimisers.Adam(1f-2), PartWeightDecay(0f0, decoder_axes, "decoder"),)
+        opt_warmup = OptimiserChain(Optimisers.Adam(1f-2), weightdecay,)
         nepochs_warmup = 10
         schedule_warmup = Step(1f-2, 1f0, Inf32)
         early_stopping_warmup = true
@@ -266,7 +281,9 @@ function infer_SNF(
 )
     # make data
     xdata, udata, _ = data
-    Nx, Nt = size(udata)
+
+    in_dim, Nx = size(xdata)
+    out_dim, Nx, Nt = size(udata)
 
     model = model |> device # problem here.
     xdata = xdata |> device
@@ -276,16 +293,7 @@ function infer_SNF(
     # optimizer
     autodiff = AutoForwardDiff()
     linsolve = QRFactorization()
-    linesearch = LineSearch()
-
-    # linesearchalg = Static()
-    # linesearchalg = BackTracking()
-    # linesearchalg = HagerZhang()
-    # linesearch = LineSearch(; method = linesearchalg, autodiff = AutoZygote())
-    # linesearch = LineSearch(; method = linesearchalg, autodiff = AutoFiniteDiff())
-
-    # nlssolve = BFGS()
-    # nlssolve = LevenbergMarquardt(; autodiff, linsolve)
+    linesearch = LineSearch() # BackTracking(), HagerZhang(), 
     nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
 
     codes  = ()
@@ -293,37 +301,35 @@ function infer_SNF(
     MSEs   = []
 
     for iter in 1:Nt
-
-        xbatch = reshape(xdata, 1, Nx)
-        ubatch = reshape(udata[:, iter], 1, Nx)
-        batch  = xbatch, ubatch
+        batch = xdata, udata[:, :, iter]
 
         if learn_init & (iter == 1)
-            p, _ = nonlinleastsq(model, p, batch, Optimisers.Adam(1f-1); verbose)
-            p, _ = nonlinleastsq(model, p, batch, Optimisers.Adam(1f-2); verbose)
-            p, _ = nonlinleastsq(model, p, batch, Optimisers.Adam(1f-3); verbose)
+            p, _ = nonlinleastsq(model, p, batch, Optimisers.Descent(1f-3); verbose, maxiters = 100)
+            p, _ = nonlinleastsq(model, p, batch, Optimisers.Descent(1f-4); verbose, maxiters = 100)
+            p, _ = nonlinleastsq(model, p, batch, Optimisers.Descent(1f-5); verbose, maxiters = 100)
         end
 
         p, _ = nonlinleastsq(model, p, batch, nlssolve; maxiters = 20, verbose)
 
         # eval
-        upred = model(xbatch, p)
-        l = round(mse(upred, ubatch); sigdigits = 8)
+        upred = model(batch[1], p)
+        l = round(mse(upred, batch[2]); sigdigits = 8)
 
         codes  = push(codes, p)
         upreds = push(upreds, upred)
         push!(MSEs, l)
 
         if verbose
+            println("#=============================#")
             println("Iter $iter, MSE: $l")
             iter += 1
         end
     end
 
-    code  = mapreduce(getdata, hcat, codes ) |> Lux.cpu_device()
-    upred = mapreduce(adjoint, hcat, upreds) |> Lux.cpu_device()
+    code = mapreduce(getdata, hcat, codes) |> Lux.cpu_device()
+    pred = cat(upreds...; dims = 3)        |> Lux.cpu_device()
 
-    return code, upred, MSEs
+    return code, pred, MSEs
 end
 
 #======================================================#
@@ -344,6 +350,7 @@ function evolve_SNF(
     autodiff_xyz::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ_xyz::Union{Real, Nothing} = nothing,
 
+    zeroinit::Bool = false,
     verbose::Bool = true,
     device = Lux.cpu_device(),
 )
@@ -402,8 +409,6 @@ function evolve_SNF(
 
     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
 
-    display(decoder[1])
-
     #==============#
     # make model
     #==============#
@@ -412,15 +417,28 @@ function evolve_SNF(
     NN, p0, st = freeze_autodecoder(decoder, p0; rng)
     model = NeuralEmbeddingModel(NN, st, Xdata, md)
 
+    if zeroinit
+        p0 *= 0
+        # copy!(p0, randn32(rng, length(p0)))
+    end
+
     #==============#
     # evolve
     #==============#
 
-    linsolve = QRFactorization()
+    ### WORKS
+    # # device = Lux.cpu_device()
+    # linsolve = QRFactorization()
+    # autodiff = AutoForwardDiff()
+    # nlssolve = LevenbergMarquardt(;autodiff, linsolve)
+    # nlsmaxiters = 20
+
+    # optimizer
     autodiff = AutoForwardDiff()
-    linesearch = LineSearch() # TODO
+    linsolve = QRFactorization()
+    linesearch = LineSearch()
     nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
-    nlsmaxiters = 10
+    nlsmaxiters = 20
 
     Δt = isnothing(Δt) ? -(-(extrema(Tdata)...)) / 100.0f0 : Δt
 
@@ -429,15 +447,12 @@ function evolve_SNF(
         # scheme = LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, 1f-6, 1f-3, 1f-6)
     end
 
-    @time _, ps, Up = evolve_model(prob, model, timealg, scheme, data, p0, Δt;
+    @time _, ps, Up = evolve_model(
+        prob, model, timealg, scheme, data, p0, Δt;
         nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz,
         verbose, device,
     )
 
-    # #==============#
-    # mkpath(outdir)
-    # #==============#
-    #
     # Up = dropdims(Up; dims = 1)
     #
     # Ix_plt = 1:4:Nx
@@ -540,10 +555,9 @@ function postprocess_SNF(
 
     model  = NeuralEmbeddingModel(NN, st, md, _Icode)
     _Upred = eval_model(model, (_xdata, _Icode), p; device) |> cpu_device()
-
     _Upred = reshape(_Upred, out_dim, Nx, length(_Ib), length(_It))
 
-    @show mse(_Upred, _Udata) / sum(abs2, _Udata)
+    @show mse(_Upred, _Udata) / mse(_Udata, 0*_Udata)
 
     if makeplot
         for k in axes(_Ib, 1)
@@ -577,9 +591,9 @@ function postprocess_SNF(
                     It_data = LinRange(1, size(Ud, 2), 100) .|> Base.Fix1(round, Int)
                     It_pred = LinRange(1, size(Up, 2), 100) .|> Base.Fix1(round, Int)
 
-                    anim = animate1D(Ud[:, It_data], Up[:, It_pred], vec(Xdata), Tdata[It_data];
-                                     w = 2, xlabel, ylabel, title)
-                    gif(anim, joinpath(outdir, "train$(k).gif"); fps)
+                    # anim = animate1D(Ud[:, It_data], Up[:, It_pred], vec(Xdata), Tdata[It_data];
+                    #                  w = 2, xlabel, ylabel, title)
+                    # gif(anim, joinpath(outdir, "train$(k).gif"); fps)
 
                     display(plt)
 
@@ -625,43 +639,31 @@ function postprocess_SNF(
     end # makeplot
 
     #==============#
-    # inference (via data regression)
+    # infer with nonlinear solve
     #==============#
 
+    # # get decoder
     # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     #
+    # # make model
     # p0 = _code[2].weight[:, 1]
-    # Icode = ones(Int32, 1, Nx)
-    #
     # NN, p0, st = freeze_autodecoder(decoder, p0; rng)
-    # model = NeuralEmbeddingModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
+    # model = NeuralEmbeddingModel(NN, st, Xdata, md)
     #
-    # for k in axes(mu)[1]
-    #     Ud = Udata[:, k, :]
-    #     data = (Xdata, Ud, Tdata)
+    # # make data tuple
+    # case = 1
+    # Ud = Udata[:, :, case, :]
+    # data = (Xdata, Ud, Tdata)
     #
-    #     _, Up, _ = infer_autodecoder(model, data, p0; device, verbose)
+    # learn_init = false
+    # learn_init = true
+    # ps, Up, Ls = infer_SNF(model, data, p0; device, verbose, learn_init)
     #
-    #     if makeplot
-    #         xlabel = "x"
-    #         ylabel = "u(x, t)"
-    #
-    #         _mu   = mu[k]
-    #         title = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
-    #         _name = k in _Ib ? "infer_train$(k)" : "infer_test$(k)"
-    #
-    #         idx = LinRange(1, size(Ud, 2), 101) .|> Base.Fix1(round, Int)
-    #         plt = plot(;title, xlabel, ylabel, legend = false)
-    #         plot!(plt, Xdata, Up[:, idx], w = 2.0,  s = :solid)
-    #         plot!(plt, Xdata, Ud[:, idx], w = 4.0,  s = :dash)
-    #         png(plt, joinpath(outdir, _name))
-    #         display(plt)
-    #
-    #         anim = animate1D(Ud, Up, Xdata, Tdata;
-    #             w = 2, xlabel, ylabel, title)
-    #         gif(anim, joinpath(outdir, "$(_name).gif"); fps)
-    #     end
-    # end
+    # plt = plot(Xdata[1,:], Ud[1,:,begin], w = 4, c = :black, label = nothing)
+    # plot!(plt, Xdata[1,:], Up[1,:,begin], w = 4, c = :red  , label = nothing)
+    # plot!(plt, Xdata[1,:], Ud[1,:,end  ], w = 4, c = :black, label = "data")
+    # plot!(plt, Xdata[1,:], Up[1,:,end  ], w = 4, c = :red  , label = "pred")
+    # display(plt)
 
     #==============#
     # evolve
@@ -731,78 +733,79 @@ function postprocess_SNF(
     
         for i in idx
             p0 = _code[2].weight[:, i]
-
+    
             if in_dim == 1
-
+    
                 ###
                 # AutoFiniteDiff
                 ###
-
-                ϵ  = 1f-2
-
-                plt = plot_derivatives1D_autodecoder(
-                    decoder, vec(Xdata), p0, md;
-                    second_derv = false, third_derv = false, fourth_derv = false,
-                    autodiff = AutoFiniteDiff(), ϵ,
-                )
-                png(plt, joinpath(outdir, "dudx1_$(i)_FIN_AD"))
-
-                plt = plot_derivatives1D_autodecoder(
-                    decoder, vec(Xdata), p0, md;
-                    second_derv = true, third_derv = false, fourth_derv = false,
-                    autodiff = AutoFiniteDiff(), ϵ,
-                )
-                png(plt, joinpath(outdir, "dudx2_$(i)_FIN_AD"))
-
-                plt = plot_derivatives1D_autodecoder(
-                    decoder, vec(Xdata), p0, md;
-                    second_derv = false, third_derv = true, fourth_derv = false,
-                    autodiff = AutoFiniteDiff(), ϵ,
-                )
-                png(plt, joinpath(outdir, "dudx3_$(i)_FIN_AD"))
-
-                plt = plot_derivatives1D_autodecoder(
-                    decoder, vec(Xdata), p0, md;
-                    second_derv = false, third_derv = false, fourth_derv = true,
-                    autodiff = AutoFiniteDiff(), ϵ,
-                )
-                png(plt, joinpath(outdir, "dudx4_$(i)_FIN_AD"))
-
+    
+                # ϵ  = 1f-2
+                #
+                # plt = plot_derivatives1D_autodecoder(
+                #     decoder, vec(Xdata), p0, md;
+                #     second_derv = false, third_derv = false, fourth_derv = false,
+                #     autodiff = AutoFiniteDiff(), ϵ,
+                # )
+                # png(plt, joinpath(outdir, "dudx1_$(i)_FIN_AD"))
+                #
+                # plt = plot_derivatives1D_autodecoder(
+                #     decoder, vec(Xdata), p0, md;
+                #     second_derv = true, third_derv = false, fourth_derv = false,
+                #     autodiff = AutoFiniteDiff(), ϵ,
+                # )
+                # png(plt, joinpath(outdir, "dudx2_$(i)_FIN_AD"))
+                #
+                # plt = plot_derivatives1D_autodecoder(
+                #     decoder, vec(Xdata), p0, md;
+                #     second_derv = false, third_derv = true, fourth_derv = false,
+                #     autodiff = AutoFiniteDiff(), ϵ,
+                # )
+                # png(plt, joinpath(outdir, "dudx3_$(i)_FIN_AD"))
+                #
+                # plt = plot_derivatives1D_autodecoder(
+                #     decoder, vec(Xdata), p0, md;
+                #     second_derv = false, third_derv = false, fourth_derv = true,
+                #     autodiff = AutoFiniteDiff(), ϵ,
+                # )
+                # png(plt, joinpath(outdir, "dudx4_$(i)_FIN_AD"))
+    
                 ###
                 # AutoForwardDiff
                 ###
+    
                 plt = plot_derivatives1D_autodecoder(
                     decoder, vec(Xdata), p0, md;
                     second_derv = false, third_derv = false, fourth_derv = false,
                     autodiff = AutoForwardDiff(),
                 )
                 png(plt, joinpath(outdir, "dudx1_$(i)_FWD_AD"))
-
+    
                 plt = plot_derivatives1D_autodecoder(
                     decoder, vec(Xdata), p0, md;
                     second_derv = true, third_derv = false, fourth_derv = false,
                     autodiff = AutoForwardDiff(),
                 )
                 png(plt, joinpath(outdir, "dudx2_$(i)_FWD_AD"))
-
+    
                 plt = plot_derivatives1D_autodecoder(
                     decoder, vec(Xdata), p0, md;
                     second_derv = false, third_derv = true, fourth_derv = false,
                     autodiff = AutoForwardDiff(),
                 )
                 png(plt, joinpath(outdir, "dudx3_$(i)_FWD_AD"))
-
+    
                 plt = plot_derivatives1D_autodecoder(
                     decoder, vec(Xdata), p0, md;
                     second_derv = false, third_derv = false, fourth_derv = true,
                     autodiff = AutoForwardDiff(),
                 )
                 png(plt, joinpath(outdir, "dudx4_$(i)_FWD_AD"))
-
+    
             elseif in_dim == 2
-
+    
             end # in-dim
-
+    
         end
     end
 
@@ -820,7 +823,6 @@ function postprocess_SNF(
 end
 
 #======================================================#
-
 function displaymetadata(metadata::NamedTuple)
     println("METADATA:")
     println("ū, σu: $(metadata.ū), $(metadata.σu)")
@@ -883,5 +885,56 @@ function eval_model(
 
     hcat(y...)
 end
+
+#===========================================================#
+function p_axes(NN;
+    rng::Random.AbstractRNG = Random.default_rng(),
+)
+    p = Lux.setup(copy(rng), NN)[1]
+    p = ComponentArray(p)
+    getaxes(p)
+end
+
+function decoder_indices(NN;
+    rng::Random.AbstractRNG = Random.default_rng(),
+)
+    p = Lux.setup(copy(rng), NN)[1]
+    p = ComponentArray(p)
+    decoder_idx = only(getaxes(p))[:decoder].idx
+
+    println("[decoder_indices]: Passing $(length(decoder_idx)) / $(length(p)) decoder parameters to IdxWeightDecay")
+
+    decoder_idx
+end
+
+function decoder_W_indices(NN;
+    rng::Random.AbstractRNG = Random.default_rng(),
+)
+    p = Lux.setup(copy(rng), NN)[1]
+    p = ComponentArray(p)
+
+    idx = Int32[]
+
+    for lname in propertynames(p.decoder)
+        w = getproperty(p.decoder, lname).weight # reshaped array
+
+        @assert ndims(w) == 2
+
+        i = if w isa Base.ReshapedArray
+            only(w.parent.indices)
+        elseif w isa SubArray
+            w.indices
+        end
+
+        println("Grabbing weight indices from decoder layer $lname, size $(size(w))")
+
+        idx = vcat(idx, Int32.(i))
+    end
+
+    println("[decoder_W_indices]: Passing $(length(idx)) / $(length(p)) decoder parameters to IdxWeightDecay")
+
+    idx
+end
+
 #===========================================================#
 #

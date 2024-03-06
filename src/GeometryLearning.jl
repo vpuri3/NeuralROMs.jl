@@ -84,7 +84,7 @@ export
     HyperNet, get_hyperdecoder
 
 include("optimisers.jl")
-export PartWeightDecay
+export DecoderWeightDecay, IdxWeightDecay
 
 include("transform.jl")
 export FourierTransform, CosineTransform

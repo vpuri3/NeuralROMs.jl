@@ -108,7 +108,7 @@ function train_model(
     for iopt in 1:M
         time1 = time()
 
-        opt = opts[iopt]
+        opt = opts[iopt] |> device
         nepoch = nepochs[iopt]
         schedule = isnothing(schedules) ? nothing : schedules[iopt]
 
@@ -123,14 +123,16 @@ function train_model(
         weight_decay = weight_decays[iopt]
 
         if !iszero(weight_decay) & (opt isa OptimiserChain)
-            isWD = Base.Fix2(isa, Union{WeightDecay, PartWeightDecay})
+            isWD = Base.Fix2(isa, Union{WeightDecay, DecoderWeightDecay, IdxWeightDecay})
             iWD = findall(isWD, opt.opts)
 
-            if !isempty(iWD)
+            if isempty(iWD)
+                @error "weight_decay = $weight_decay, but no WeightDecay optimizer in $opt"
+            else
                 @assert length(iWD) == 1 """More than one WeightDecay() found
                     in optimiser chain $opt."""
-                iWD = iWD[1]
 
+                iWD = only(iWD)
                 @set! opt.opts[iWD].gamma = weight_decay
             end
         end
@@ -475,29 +477,29 @@ function callback(p, st;
     MSE_MIN = 5f-7
     ifbreak = false
 
-    # avoid over-fitting on training set
-    if !isnothing(_stats)
-        if haskey(_stats, :mse)
-            lmse = _stats[:mse]
-            if lmse < MSE_MIN
-                println("Ending optimization")
-                println("MSE = $lmse < 5f-7 reached on training set.")
-                ifbreak = true
-            end
-        end
-    end
-
-    # avoid over-fitting on test set
-    if !isnothing(stats_)
-        if haskey(stats_, :mse)
-            lmse = stats_[:mse]
-            if lmse < MSE_MIN
-                println("Ending optimization")
-                println("MSE = $lmse < 5f-7 reached on test set.")
-                ifbreak = true
-            end
-        end
-    end
+    # # avoid over-fitting on training set
+    # if !isnothing(_stats)
+    #     if haskey(_stats, :mse)
+    #         lmse = _stats[:mse]
+    #         if lmse < MSE_MIN
+    #             println("Ending optimization")
+    #             println("MSE = $lmse < 5f-7 reached on training set.")
+    #             ifbreak = true
+    #         end
+    #     end
+    # end
+    #
+    # # avoid over-fitting on test set
+    # if !isnothing(stats_)
+    #     if haskey(stats_, :mse)
+    #         lmse = stats_[:mse]
+    #         if lmse < MSE_MIN
+    #             println("Ending optimization")
+    #             println("MSE = $lmse < 5f-7 reached on test set.")
+    #             ifbreak = true
+    #         end
+    #     end
+    # end
 
     _l, l_, ifbreak
 end

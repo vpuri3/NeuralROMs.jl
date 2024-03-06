@@ -7,7 +7,6 @@ version = "0.0.1"
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 BSON = "fbb218c0-5317-5bc6-957e-2ee96dd4b1f0"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
-CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 CalculustCore = "d7326954-f021-11ed-2a08-d10e464848f1"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 Colors = "5ae59095-9a9b-59fe-a467-6f913c188581"
@@ -20,6 +19,7 @@ FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 FiniteDiff = "6a86dc24-6348-571c-b903-95158fe2bd41"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 FourierSpaces = "f3d7ce31-8807-4b9f-8144-4bd3ed8f0112"
+GPUArrays = "0c68f7d7-f131-5f86-a1c3-88cf8149b2d7"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
 IterTools = "c8e1da08-722c-5040-9ed9-7db0dc04731e"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
@@ -55,7 +55,6 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
 
 [compat]
-CUDA = "5"
 julia = "1.6"
 
 [extras]

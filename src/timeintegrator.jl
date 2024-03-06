@@ -290,6 +290,7 @@ function evolve_integrator!(
     ps = ()
     us = ()
 
+    # save initial condition
     begin
         t, p, u, _ = get_state(integrator)
         ts = (ts..., t)
@@ -338,7 +339,6 @@ function evolve_model(
     linsolve = QRFactorization(),
     nlssolve = nothing,
     nlsmaxiters = 10,
-    nlsabstol = 1f-7,
 
     autodiff_nls = AutoForwardDiff(),
     autodiff_jac = AutoForwardDiff(),
@@ -348,6 +348,9 @@ function evolve_model(
     ϵ_jac = nothing,
     ϵ_xyz = nothing,
 
+    IC_TOL::Real = 1f-5,
+    learn_ic::Bool = true,
+
     verbose::Bool = true,
     device = Lux.cpu_device(),
 )
@@ -355,14 +358,15 @@ function evolve_model(
     x, u0, tsave = data
 
     # move to device
-    (x, u0) = (x, u0) |> device
-    model = model |> device
     p0 = p0 |> device
+    model = model |> device
+    (x, u0) = (x, u0) |> device
+
     T = eltype(p0)
 
     # solvers
     nlssolve = if isnothing(nlssolve)
-        linesearch = LineSearch() # TODO
+        linesearch = LineSearch()
         GaussNewton(; linsolve, linesearch, autodiff = autodiff_nls)
     else
         nlssolve
@@ -371,20 +375,49 @@ function evolve_model(
     #============================#
     # learn IC
     #============================#
+
     if verbose
         println("#============================#")
         println("Time Step: $(0), Time: 0.0 - learn IC")
     end
 
-    p0, _ = nonlinleastsq(model, p0, (x, u0), nlssolve;
+
+    mse_ = mse(model(x, p0), u0)
+    println("Descent round 0: MSE: $mse_")
+
+    batch = (x, u0)
+
+    if learn_ic
+        p0, _ = nonlinleastsq(model, p0, batch, Optimisers.Descent(1f-3); verbose = false, maxiters = 100)
+        mse_ = mse(model(x, p0), u0)
+        println("Descent round 1: MSE: $mse_")
+
+        p0, _ = nonlinleastsq(model, p0, batch, Optimisers.Descent(1f-4); verbose = false, maxiters = 100)
+        mse_ = mse(model(x, p0), u0)
+        println("Descent round 2: MSE: $mse_")
+
+        p0, _ = nonlinleastsq(model, p0, batch, Optimisers.Descent(1f-5); verbose = false, maxiters = 100)
+        mse_ = mse(model(x, p0), u0)
+        println("Descent round 3: MSE: $mse_")
+    end
+
+    p0, _ = nonlinleastsq(model, p0, batch, nlssolve;
         residual = residual_learn,
         maxiters = nlsmaxiters * 5,
-        termination_condition = AbsTerminationMode(),
-        abstol = nlsabstol,
         verbose,
     )
 
-    u0 = model(x, p0)
+    mse_ = mse(model(x, p0), u0)
+    println("Gauss-Newton: MSE: $mse_")
+
+    if (mse_ > IC_TOL)
+        err = ErrorException("MSE ($mse_) > 1f-6.")
+        throw(err)
+    end
+
+    #============================#
+    # time-marching
+    #============================#
 
     Δt = isnothing(Δt) ? -(reverse(extrema(tsave))...) / 200 |> T : T(Δt)
 

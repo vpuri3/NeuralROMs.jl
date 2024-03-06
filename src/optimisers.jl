@@ -1,36 +1,66 @@
 #
 #======================================================#
-struct PartWeightDecay{Tg, Ta, Tn} <: Optimisers.AbstractRule
+struct DecoderWeightDecay{Tg, Ta} <: Optimisers.AbstractRule
     gamma::Tg
     ca_axes::Ta
-    name::Tn
 end
-
-PartWeightDecay(gamma, ca_axes) = PartWeightDecay(gamma, ca_axes, "")
-
-Optimisers.init(o::PartWeightDecay, x::AbstractArray) = nothing
+Optimisers.init(::DecoderWeightDecay, ::AbstractArray) = nothing
+Base.show(io::IO, ::DecoderWeightDecay) = print(io, "DecoderWeightDecay())")
 
 function Optimisers.apply!(
-    o::PartWeightDecay,
+    o::DecoderWeightDecay,
     state,
     x::AbstractArray{T},
     dx,
 ) where{T}
     γ = T(o.gamma)
 
+    ### Optimisers.WeightDecay
     # dx′ = @lazy dx + γ * x
     # return state, dx′
 
-    dx  = Base.materialize(dx)
-    dx′ = deepcopy(dx)
+    ### in place
+    dx = Base.materialize(dx)
+    x_ca  = ComponentArray(x , o.ca_axes)
+    dx_ca = ComponentArray(dx, o.ca_axes)
+    dx_ca.decoder += γ * x_ca.decoder
+    return state, dx
 
-    x_ca   = ComponentArray(x  , o.ca_axes)
-    dx′_ca = ComponentArray(dx′, o.ca_axes)
-
-    dx′_ca.decoder += γ * x_ca.decoder
-
-    return state, getdata(dx′)
+    ### out of place
+    # dx  = Base.materialize(dx)
+    # dx′ = deepcopy(dx)
+    # x_ca   = ComponentArray(x  , o.ca_axes)
+    # dx′_ca = ComponentArray(dx′, o.ca_axes)
+    # dx′_ca.decoder += γ * x_ca.decoder # in-place updates dx′
+    # return state, getdata(dx′)
 end
 
-Base.show(io::IO, o::PartWeightDecay) = print(io, "PartWeightDecay($(o.name)))")
+#======================================================#
+struct IdxWeightDecay{Tg, Ti} <: Optimisers.AbstractRule
+    gamma::Tg
+    index::Ti
+end
+Optimisers.init(::IdxWeightDecay, ::AbstractArray) = nothing
+Base.show(io::IO, o::IdxWeightDecay) = print(io, "IdxWeightDecay($(o.gamma), $(length(o.index)))")
+
+function Optimisers.apply!(
+    o::IdxWeightDecay,
+    state,
+    x::AbstractArray{T},
+    dx,
+) where{T}
+    γ = T(o.gamma)
+    i = o.index
+
+    ### in place
+    dx = Base.materialize(dx)
+    dx[i] += γ * x[i]
+    return state, dx
+
+    ### out of place
+    # dx  = Base.materialize(dx)
+    # dx′ = deepcopy(dx)
+    # dx′[i] += γ * x[i]
+    # return state, dx′ # getdata(dx′)
+end
 #======================================================#
