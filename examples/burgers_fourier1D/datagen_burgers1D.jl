@@ -28,8 +28,18 @@ odecb = begin
     DiscreteCallback((u,t,int) -> true, affect!, save_positions=(false,false))
 end
 
-function burgers_inviscid(N, mu = LinRange(0.6, 1.2, 7)', p = nothing;
-    tspan=(0.f0, 0.5f0),
+function uic(x, mu)
+    x = vec(x)
+    mu = reshape(mu, 1, :)
+
+    u = @. 1 + mu/2 * (sin(2_pi * x - _pi/2) + 1)
+    u[x .> 1f0, :] .= 1
+
+    reshape(u, length(x), length(mu))
+end
+
+function burgers_inviscid(N, mu, tspan;
+    p = nothing,
     ntsave=1000,
     odealg=SSPRK43(),
     odekw = (;),
@@ -46,11 +56,7 @@ function burgers_inviscid(N, mu = LinRange(0.6, 1.2, 7)', p = nothing;
     (x,) = points(V)
 
     """ IC """
-    u0 = begin
-        u = @. 1 + mu/2 * (sin(2_pi * x - _pi/2) + 1)
-        u[x .> 1f0, :] .= 1
-        u
-    end
+    u0 = uic(x, mu)
     V  = make_transform(V, u0; p=p)
 
     """ move to device """
@@ -104,11 +110,18 @@ function burgers_inviscid(N, mu = LinRange(0.6, 1.2, 7)', p = nothing;
     end
 
     if !isnothing(dir)
-        mkpath(dir)
-        metadata = (; ν, readme = "u [Nx, Nbatch, Nt]")
 
-        # filename = joinpath(dir, "data.bson")
-        # BSON.@save filename x u t mu metadata
+        if isdir(dir)
+            rm(dir; recursive = true)
+        end
+        mkdir(dir)
+
+        readme = joinpath(dir, "README")
+        readmeio = open(readme, "w")
+        write(readmeio, "N = $N, tspan = $tspan, mu = $mu")
+        close(readmeio)
+
+        metadata = (; ν, readme = "u [Nx, Nbatch, Nt]")
 
         filename = joinpath(dir, "data.jld2")
         jldsave(filename; x, u, udx, ud2x, t, mu, metadata)
@@ -133,13 +146,12 @@ function burgers_inviscid(N, mu = LinRange(0.6, 1.2, 7)', p = nothing;
     (sol, V), (x, u, t, mu)
 end
 
-N = 8192
-dir = joinpath(@__DIR__, "visc_burg_param_ic", "burg_visc_re10k")
+N = 1024
+mu = [0.500, 0.525, 0.550, 0.575, 0.600,]
+tspan = (0.f0, 0.5f0)
+dir = joinpath(@__DIR__, "data_burg1D-1")
 device = gpu_device()
-linsolve = KrylovJL_GMRES()
-# odealg = # ImplicitEuler(; linsolve) # Tsit5()
-odealg = SSPRK43()
-(sol, V), (x, u, t, mu) = burgers_inviscid(N; device, dir, odealg)
+(sol, V), (x, u, t, mu) = burgers_inviscid(N, mu, tspan; device, dir)
 
 nothing
 #
