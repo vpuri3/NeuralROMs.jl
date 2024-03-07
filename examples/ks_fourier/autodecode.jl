@@ -4,26 +4,24 @@ include(joinpath(pkgdir(GeometryLearning), "examples", "autodecoder.jl"))
 #======================================================#
 
 rng = Random.default_rng()
-Random.seed!(rng, 123)
+Random.seed!(rng, 213)
 
+prob = KuramotoSivashinsky1D(0.01f0)
 device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "data_ks/", "data.jld2")
 modeldir = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
 
-prob = KuramotoSivashinsky1D(0.01f0)
-
-E = 2100  # epochs
+E = 3500  # epochs
 l = 16    # latent
 h = 5     # num hidden
 w = 128   # width
 
-### WORKS
 λ1, λ2 = 0f0, 0f0
 σ2inv, α = 1f-1, 0f-0 # 1f-1, 1f-3
 weight_decays = 1f-2  # 1f-2
-WeightDecayOpt = DecoderWeightDecay
-weight_decay_ifunc = nothing
+WeightDecayOpt = IdxWeightDecay
+weight_decay_ifunc = decoder_W_indices
 
 ## train
 isdir(modeldir) && rm(modeldir, recursive = true)

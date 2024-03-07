@@ -191,7 +191,7 @@ function train_SNF(
     NN = AutoDecoder(decoder, metadata._Ns, l; init_weight = init_code)
 
     _batchsize = isnothing(_batchsize) ? numobs(_data) ÷ 100 : _batchsize
-    batchsize_ = isnothing(batchsize_) ? numobs(_data)       : batchsize_
+    batchsize_ = isnothing(batchsize_) ? numobs(_data) ÷ 1   : batchsize_
 
     lossfun = regularize_autodecoder(mse; σ2inv, α, λ1, λ2)
 
@@ -201,18 +201,19 @@ function train_SNF(
     lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
     Nlrs = length(lrs)
 
-    weightdecay = if isnothing(WeightDecayOpt) | (WeightDecayOpt === DecoderWeightDecay)
-        ca_axes = p_axes(NN; rng)
-        DecoderWeightDecay(0f0, ca_axes)
-    elseif WeightDecayOpt === IdxWeightDecay
-        decoder_idx = if isnothing(weight_decay_ifunc) | (weight_decay_ifunc === decoder_indices)
-            # decoder_W_indices(NN; rng) # WD on decoder weights
-            decoder_indices(NN; rng)   # WD on decoder weights and biases
+    weightdecay = if isnothing(WeightDecayOpt) | (WeightDecayOpt === IdxWeightDecay)
+
+        decoder_idx = if isnothing(weight_decay_ifunc) | (weight_decay_ifunc === decoder_W_indices)
+            decoder_W_indices(NN; rng)   # WD on decoder weights and biases
         else
             weight_decay_ifunc(NN; rng)
         end
 
         IdxWeightDecay(0f0, decoder_idx)
+
+    elseif WeightDecayOpt === DecoderWeightDecay
+        ca_axes = p_axes(NN; rng)
+        DecoderWeightDecay(0f0, ca_axes)
     else
         error("Unsupported weight decay algorithm")
     end
@@ -864,7 +865,7 @@ function eval_model(
     model::NeuralEmbeddingModel,
     x::Tuple,
     p::AbstractArray;
-    batchsize = numobs(x) ÷ 101,
+    batchsize = numobs(x) ÷ 100,
     device = Lux.cpu_device(),
 )
     loader = MLUtils.DataLoader(x; batchsize, shuffle = false, partial = true)

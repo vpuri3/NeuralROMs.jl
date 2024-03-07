@@ -39,8 +39,8 @@ function ks1d_train_SNFW(
     w = 128   # width
 
     λ1, λ2 = 0f0, 0f0     # L1 / L2 reg
-    σ2inv, α = 1f-2, 0f-0 # code / Lipschitz regularization
-    weight_decays = 1f-1  # AdamW weight decay
+    σ2inv, α = 1f-1, 0f-0 # code / Lipschitz regularization
+    weight_decays = 1f-2  # AdamW weight decay
 
     train_SNF(datafile, modeldir, l, h, w, E;
         rng, warmup = true,
@@ -57,8 +57,12 @@ function ks1d_train_SNFL(
     h = 5     # num hidden
     w = 128   # width
 
+    # λ1, λ2 = 0f0, 0f0     # L1 / L2 reg
+    # σ2inv, α = 1f-2, 5f-4 # code / Lipschitz regularization
+    # weight_decays = 0f-0  # AdamW weight decay
+
     λ1, λ2 = 0f0, 0f0     # L1 / L2 reg
-    σ2inv, α = 1f-2, 5f-4 # code / Lipschitz regularization
+    σ2inv, α = 1f-1, 1f-3 # code / Lipschitz regularization
     weight_decays = 0f-0  # AdamW weight decay
 
     train_SNF(
@@ -89,8 +93,8 @@ modeldir_SNFW = joinpath(@__DIR__, "model_SNFW_l_$(ll)")
 modeldir_SNFL = joinpath(@__DIR__, "model_SNFL_l_$(ll)")
 
 # ks1d_train_CINR(latent, modeldir_CINR; device)
-# ks1d_train_SNFW(latent, modeldir_SNFW; device)
-# ks1d_train_SNFL(latent, modeldir_SNFL; device)
+ks1d_train_SNFW(latent, modeldir_SNFW; device)
+ks1d_train_SNFL(latent, modeldir_SNFL; device)
 
 #==================#
 # evolve
