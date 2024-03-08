@@ -15,15 +15,35 @@ function dudx1_1D(
     @assert ndims(x) == 2 "TODO: implement reshapes to handle ND arrays"
 
     u = model(x, p)
-    du = model.Dx * vec(u)
+    du = model.D1x * vec(u)
     du = reshape(du, 1, :)
 
     u, du
 end
 
+function dudx2_1D(
+    model::AbstractNeuralGridModel,
+    x::AbstractArray,
+    p::AbstractVector;
+    autodiff::ADTypes.AbstractADType = AutoFiniteDiff(),
+    ϵ = nothing,
+)
+    @assert size(x, 1) == 1
+    @assert ndims(x) == 2 "TODO: implement reshapes to handle ND arrays"
+
+    u = model(x, p)
+    d1u = model.D1x * vec(u)
+    d2u = model.D2x * vec(u)
+
+    d1u = reshape(d1u, 1, :)
+    d2u = reshape(d2u, 1, :)
+
+    u, d1u, d2u
+end
+
 #===========================================================#
 
-function dx1dmat(x::AbstractArray)
+function d1x1dmat(x::AbstractArray)
     @assert size(x, 1) == 1
     @assert ndims(x) == 2
 
@@ -44,11 +64,32 @@ function dx1dmat(x::AbstractArray)
     sparse(Dx)
 end
 
+function d2x1dmat(x::AbstractArray)
+    @assert size(x, 1) == 1
+    @assert ndims(x) == 2
+
+    N = length(x)
+    T = eltype(x)
+
+    x = vec(x)
+    h = x[2] - x[1]
+
+    d = -2 * ones(T, N  ) ./ (h^2) # diagonal
+    b =  1 * ones(T, N-1) ./ (h^2) # off diagonal
+
+    Dx = Tridiagonal(b, d, b) |> Array
+    Dx[1, end] = 1 / (h^2)
+    Dx[end, 1] = 1 / (h^2)
+
+    sparse(Dx)
+end
+
 #===========================================================#
 export PCAModel
-@concrete mutable struct PCAModel{Tu} <: AbstractNeuralModel
+@concrete mutable struct PCAModel{Tu} <: AbstractNeuralGridModel
     P
-    Dx
+    D1x
+    D2x
 
     ū::Tu
     σu::Tu
@@ -63,18 +104,20 @@ function PCAModel(
     ū = metadata.ū
     σu = metadata.σu
 
-    Dx = dx1dmat(x)
+    D1x = d1x1dmat(x)
+    D2x = d2x1dmat(x)
 
-    PCAModel(P, Dx, ū, σu,)
+    PCAModel(P, D1x, D2x, ū, σu,)
 end
 
 function Adapt.adapt_structure(to, model::PCAModel)
-    P  = Adapt.adapt_structure(to, model.P )
-    Dx = Adapt.adapt_structure(to, model.Dx)
-    ū  = Adapt.adapt_structure(to, model.ū )
-    σu = Adapt.adapt_structure(to, model.σu)
+    P   = Adapt.adapt_structure(to, model.P)
+    D1x = Adapt.adapt_structure(to, model.D1x)
+    D2x = Adapt.adapt_structure(to, model.D2x)
+    ū   = Adapt.adapt_structure(to, model.ū)
+    σu  = Adapt.adapt_structure(to, model.σu)
 
-    PCAModel(P, Dx, ū, σu,)
+    PCAModel(P, D1x, D2x, ū, σu,)
 end
 
 function (model::PCAModel)(
@@ -89,7 +132,7 @@ end
 #===========================================================#
 
 export INRModel
-@concrete mutable struct INRModel{Tx, Tu} <: AbstractNeuralModel
+@concrete mutable struct INRModel{Tx, Tu} <: AbstractNeuralGridModel
     NN
     st
     Icode
@@ -100,7 +143,8 @@ export INRModel
     ū::Tu
     σu::Tu
 
-    Dx
+    D1x
+    D2x
 end
 
 function INRModel(
@@ -116,7 +160,8 @@ function INRModel(
         fill!(Icode, true)
     end
 
-    Dx = dx1dmat(x)
+    D1x = d1x1dmat(x)
+    D2x = d2x1dmat(x)
 
     x̄ = metadata.x̄
     ū = metadata.ū
@@ -124,7 +169,7 @@ function INRModel(
     σx = metadata.σx
     σu = metadata.σu
 
-    INRModel(NN, st, Icode, x̄, σx, ū, σu, Dx,)
+    INRModel(NN, st, Icode, x̄, σx, ū, σu, D1x, D2x,)
 end
 
 function Adapt.adapt_structure(to, model::INRModel)
@@ -134,10 +179,11 @@ function Adapt.adapt_structure(to, model::INRModel)
     ū  = Adapt.adapt_structure(to, model.ū )
     σx = Adapt.adapt_structure(to, model.σx)
     σu = Adapt.adapt_structure(to, model.σu)
-    Dx = Adapt.adapt_structure(to, model.Dx)
+    D1x = Adapt.adapt_structure(to, model.D1x)
+    D2x = Adapt.adapt_structure(to, model.D2x)
 
     INRModel(
-        model.NN, st, Icode, x̄, σx, ū, σu, Dx,
+        model.NN, st, Icode, x̄, σx, ū, σu, D1x, D2x,
     )
 end
 
@@ -178,7 +224,8 @@ export CAEModel
     ū::Tu
     σu::Tu
 
-    Dx
+    D1x
+    D2x
 end
 
 function CAEModel(
@@ -189,12 +236,13 @@ function CAEModel(
     metadata::NamedTuple,
 ) where{T<:Number}
 
-    Dx = dx1dmat(x)
+    D1x = d1x1dmat(x)
+    D2x = d2x1dmat(x)
 
     ū  = metadata.ū
     σu = metadata.σu
 
-    CAEModel(NN, p, st, ū, σu, Dx,)
+    CAEModel(NN, p, st, ū, σu, D1x, D2x,)
 end
 
 function Adapt.adapt_structure(to, model::CAEModel)
@@ -202,16 +250,17 @@ function Adapt.adapt_structure(to, model::CAEModel)
     st = Adapt.adapt_structure(to, model.st)
     ū  = Adapt.adapt_structure(to, model.ū )
     σu = Adapt.adapt_structure(to, model.σu)
-    Dx = Adapt.adapt_structure(to, model.Dx)
+    D1x = Adapt.adapt_structure(to, model.D1x)
+    D2x = Adapt.adapt_structure(to, model.D2x)
 
-    CAEModel(model.NN, p, st, ū, σu, Dx,)
+    CAEModel(model.NN, p, st, ū, σu, D1x, D2x,)
 end
 
 function (model::CAEModel)(
     x::AbstractArray,
     p::AbstractVector,
 )
-    p_resh = reshape(getdata(p), 1, :)
+    p_resh = reshape(getdata(p), :, 1)
     u_norm = model.NN(p_resh, model.p, model.st)[1]
     u = unnormalizedata(u_norm, model.ū, model.σu)
     reshape(u, 1, :)

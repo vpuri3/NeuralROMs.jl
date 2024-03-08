@@ -28,7 +28,6 @@ function cae_network(
 )
 
     if prob isa Advection1D # 128 -> l -> 128
-
         encoder = Chain(
             Conv((8,), 1 => w, act; stride = 4, pad = 2), # /4
             Conv((8,), w => w, act; stride = 4, pad = 2), # /4
@@ -71,7 +70,6 @@ function cae_network(
 
         Chain(;encoder, decoder)
     end
-
 
     ###################
 
@@ -193,7 +191,7 @@ function train_CAE(
     NN::Lux.AbstractExplicitLayer,
     E::Int; # num epochs
     rng::Random.AbstractRNG = Random.default_rng(),
-    warmup::Bool = true,
+    warmup::Bool = false,
     _batchsize = nothing,
     batchsize_ = nothing,
     makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :,),
