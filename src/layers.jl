@@ -147,8 +147,28 @@ function freeze_autodecoder(
 end
 
 #======================================================#
-# Split Decoder
+# FrozenDecoderModel
 #======================================================#
+
+# function FrozenDecoderModel(
+#     decoder::NTuple{3, Any},
+#     p0::AbstractVector;
+#     rng::Random.AbstractRNG = Random.default_rng(),
+# )
+#     noop = NoOpLayer()
+#     decoder_frozen = Lux.Experimental.freeze(decoder...)
+#     parallel = Parallel(vcat, noop, noop)
+#
+#     NN = Chain(; parallel, decoder_frozen,)
+#     p, st = Lux.setup(rng, NN)
+#     st = Lux.testmode(st)
+#     p = ComponentArray(p)
+#    
+#     copy!(p, p0)
+#     @set! st.decoder_frozen.frozen_params = decoder[2]
+#
+#     NN, p, st
+# end
 
 #======================================================#
 struct OneEmbedding{F} <: Lux.AbstractExplicitLayer

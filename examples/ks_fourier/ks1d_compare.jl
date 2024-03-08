@@ -11,6 +11,12 @@ begin
     include(inrpath)
 end
 #======================================================#
+_Ib, Ib_ = [1,], [1,]
+Ix  = Colon()
+_It = Colon()
+makedata_kws = (; Ix, _Ib, Ib_, _It, It_ = :)
+case = 1
+#======================================================#
 
 function ks1d_train_CINR(
     l::Integer, 
@@ -26,7 +32,8 @@ function ks1d_train_CINR(
     NN = convINR_network(prob, l, h, we, wd, act)
 
     isdir(modeldir) && rm(modeldir, recursive = true)
-    train_CINR(datafile, modeldir, NN, E; rng, warmup = true, device)
+    train_CINR(datafile, modeldir, NN, E; rng,
+        warmup = true, makedata_kws, device)
 end
 
 function ks1d_train_SNFW(
@@ -43,7 +50,7 @@ function ks1d_train_SNFW(
     weight_decays = 1f-2  # AdamW weight decay
 
     train_SNF(datafile, modeldir, l, h, w, E;
-        rng, warmup = true,
+        rng, warmup = true, makedata_kws,
         λ1, λ2, σ2inv, α, weight_decays, device,
     )
 end
@@ -56,10 +63,6 @@ function ks1d_train_SNFL(
     E = 7000  # epochs
     h = 5     # num hidden
     w = 128   # width
-
-    # λ1, λ2 = 0f0, 0f0     # L1 / L2 reg
-    # σ2inv, α = 1f-2, 5f-4 # code / Lipschitz regularization
-    # weight_decays = 0f-0  # AdamW weight decay
 
     λ1, λ2 = 0f0, 0f0     # L1 / L2 reg
     σ2inv, α = 1f-1, 1f-3 # code / Lipschitz regularization
@@ -74,7 +77,7 @@ end
 #======================================================#
 
 rng = Random.default_rng()
-Random.seed!(rng, 200)
+Random.seed!(rng, 213)
 
 prob = KuramotoSivashinsky1D(0.01f0)
 datafile = joinpath(@__DIR__, "data_ks/", "data.jld2")
@@ -93,8 +96,8 @@ modeldir_SNFW = joinpath(@__DIR__, "model_SNFW_l_$(ll)")
 modeldir_SNFL = joinpath(@__DIR__, "model_SNFL_l_$(ll)")
 
 # ks1d_train_CINR(latent, modeldir_CINR; device)
-ks1d_train_SNFW(latent, modeldir_SNFW; device)
-ks1d_train_SNFL(latent, modeldir_SNFL; device)
+# ks1d_train_SNFW(latent, modeldir_SNFW; device)
+# ks1d_train_SNFL(latent, modeldir_SNFL; device)
 
 #==================#
 # evolve
@@ -128,21 +131,10 @@ ud3, up3 = dropdims.((ud3, up3); dims = 1)
 filename = joinpath(@__DIR__, "ks1d.npz")
 
 dict = Dict(
-    "xdata" => x1,
-    "tdata" => t1,
-    "udata" => ud1,
-
-    "xCROM" => x1,
-    "tCROM" => t1,
-    "uCROM" => up1,
-
-    "xSNFW" => x2,
-    "tSNFW" => t2,
-    "uSNFW" => up2,
-
-    "xSNFL" => x3,
-    "tSNFL" => t3,
-    "uSNFL" => up3,
+    "xdata" => x1, "tdata" => t1, "udata" => ud1,
+    "xCROM" => x1, "tCROM" => t1, "uCROM" => up1,
+    "xSNFW" => x2, "tSNFW" => t2, "uSNFW" => up2,
+    "xSNFL" => x3, "tSNFL" => t3, "uSNFL" => up3,
 )
 
 npzwrite(filename, dict)

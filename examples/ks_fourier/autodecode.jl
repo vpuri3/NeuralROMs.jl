@@ -12,7 +12,7 @@ datafile = joinpath(@__DIR__, "data_ks/", "data.jld2")
 modeldir = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
 
-E = 3500  # epochs
+E = 7000  # epochs
 l = 16    # latent
 h = 5     # num hidden
 w = 128   # width

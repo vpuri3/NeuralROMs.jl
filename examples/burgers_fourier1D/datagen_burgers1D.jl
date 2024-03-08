@@ -118,7 +118,7 @@ function burgers_inviscid(N, mu, tspan;
 
         readme = joinpath(dir, "README")
         readmeio = open(readme, "w")
-        write(readmeio, "N = $N, tspan = $tspan, mu = $mu")
+        write(readmeio, "N = $N, tspan = $tspan, mu = $mu.")
         close(readmeio)
 
         metadata = (; ν, readme = "u [Nx, Nbatch, Nt]")
@@ -149,7 +149,7 @@ end
 N = 1024
 mu = [0.500, 0.525, 0.550, 0.575, 0.600,]
 tspan = (0.f0, 0.5f0)
-dir = joinpath(@__DIR__, "data_burg1D-1")
+dir = joinpath(@__DIR__, "data_burg1D")
 device = gpu_device()
 (sol, V), (x, u, t, mu) = burgers_inviscid(N, mu, tspan; device, dir)
 

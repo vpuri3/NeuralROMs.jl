@@ -1,4 +1,4 @@
-
+#
 #===========================================================#
 @concrete mutable struct NeuralModel{Tx, Tu} <: AbstractNeuralModel
     NN
@@ -132,56 +132,9 @@ function (model::NeuralEmbeddingModel)(
 end
 
 #===========================================================#
-@concrete mutable struct ConvModel{Tx, Tu} <: AbstractNeuralModel
-    x
-    ū::Tu
-    σu::Tu
-end
-
 #===========================================================#
-@concrete mutable struct PCAModel{Tx, Tu} <: AbstractNeuralModel
-    P
-    x
-    Dx
-    ū::Tu
-    σu::Tu
-end
-
-function PCAModel(
-    P::AbstractMatrix,
-    metadata::NamedTuple,
-)
-    PCAModel(P, metadata.ū, metadata.σu)
-end
-
-function (model::PCAModel)(
-    x::AbstractArray,  # evaluation points
-    p::AbstractVector, # coefficients
-)
-    u_norm = model.P * p
-    unnormalizedata(u_norm, model.ū, model.σu)
-end
-
-function dudx_1D(
-    model::PCAModel,
-    x::AbstractArray,
-    p::AbstractVector;
-    autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
-    ϵ = nothing,
-)
-    model.Dx * model.P
-end
-
-function dudp(
-    model::PCAModel,
-    x::AbstractArray,
-    p::AbstractVector;
-    autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
-    ϵ = nothing,
-)
-    model.P .* model.σu
-end
-
+#### NEURAL MODEL GRADIENTS, JACOBIAN
+#===========================================================#
 #===========================================================#
 
 const DUDX_1D_FUNCS = (:dudx1_1D, :dudx2_1D, :dudx3_1D, :dudx4_1D,)
@@ -195,6 +148,8 @@ for (dudx_f, do_ad_f) in zip(DUDX_1D_FUNCS, DO_AD_FUNCS)
         autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
         ϵ = nothing,
     )
+        @assert size(x, 1) == 1
+
         function dudx_1D_internal(x)
             model(x, p)
         end

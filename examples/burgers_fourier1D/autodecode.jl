@@ -8,7 +8,7 @@ Random.seed!(rng, 460)
 
 prob = BurgersViscous1D(1f-4)
 device = Lux.gpu_device()
-datafile = joinpath(@__DIR__, "burg_visc_re10k", "data.jld2")
+datafile = joinpath(@__DIR__, "data_burg1D", "data.jld2")
 modeldir = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
 
@@ -23,8 +23,8 @@ weight_decays = 1f-2  # 1f-2
 WeightDecayOpt = IdxWeightDecay
 weight_decay_ifunc = decoder_W_indices
 
-_Ib, Ib_ = [5,], [5,] # 1, 2 work
-Ix  = LinRange(1, 8192, 1024) .|> Base.Fix1(round, Int)
+_Ib, Ib_ = [1,3,], [2,]
+Ix  = Colon() # LinRange(1, 8192, 1024) .|> Base.Fix1(round, Int)
 _It = Colon() # LinRange(1, 1000, 200 ) .|> Base.Fix1(round, Int)
 makedata_kws = (; Ix, _Ib, Ib_, _It = _It, It_ = :)
 

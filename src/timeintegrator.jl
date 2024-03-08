@@ -334,7 +334,9 @@ function evolve_model(
     p0::AbstractVector,
 
     Δt::Union{Real,Nothing} = nothing;
+
     adaptive::Bool = true,
+    learn_ic::Bool = true,
 
     linsolve = QRFactorization(),
     nlssolve = nothing,
@@ -349,7 +351,6 @@ function evolve_model(
     ϵ_xyz = nothing,
 
     IC_TOL::Real = 1f-5,
-    learn_ic::Bool = true,
 
     verbose::Bool = true,
     device = Lux.cpu_device(),
@@ -376,18 +377,17 @@ function evolve_model(
     # learn IC
     #============================#
 
-    if verbose
-        println("#============================#")
-        println("Time Step: $(0), Time: 0.0 - learn IC")
-    end
-
-
     mse_ = mse(model(x, p0), u0)
-    println("Descent round 0: MSE: $mse_")
-
-    batch = (x, u0)
+    println("Initial Condition MSE: $mse_")
 
     if learn_ic
+        if verbose
+            println("#============================#")
+            println("Time Step: $(0), Time: 0.0 - learn IC")
+        end
+
+        batch = (x, u0)
+
         p0, _ = nonlinleastsq(model, p0, batch, Optimisers.Descent(1f-3); verbose = false, maxiters = 100)
         mse_ = mse(model(x, p0), u0)
         println("Descent round 1: MSE: $mse_")
@@ -399,20 +399,20 @@ function evolve_model(
         p0, _ = nonlinleastsq(model, p0, batch, Optimisers.Descent(1f-5); verbose = false, maxiters = 100)
         mse_ = mse(model(x, p0), u0)
         println("Descent round 3: MSE: $mse_")
-    end
 
-    p0, _ = nonlinleastsq(model, p0, batch, nlssolve;
-        residual = residual_learn,
-        maxiters = nlsmaxiters * 5,
-        verbose,
-    )
+        p0, _ = nonlinleastsq(model, p0, batch, nlssolve;
+                              residual = residual_learn,
+                              maxiters = nlsmaxiters * 5,
+                              verbose,
+                              )
 
-    mse_ = mse(model(x, p0), u0)
-    println("Gauss-Newton: MSE: $mse_")
+        mse_ = mse(model(x, p0), u0)
+        println("Gauss-Newton: MSE: $mse_")
 
-    if (mse_ > IC_TOL)
-        err = ErrorException("MSE ($mse_) > 1f-6.")
-        throw(err)
+        if (mse_ > IC_TOL)
+            err = ErrorException("MSE ($mse_) > 1f-6.")
+            throw(err)
+        end
     end
 
     #============================#

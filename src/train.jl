@@ -19,7 +19,7 @@ $SIGNATURES
 function train_model(
     NN::Lux.AbstractExplicitLayer,
     _data::NTuple{2, Any},
-    data_::NTuple{2, Any} = _data;
+    data_::Union{Nothing,NTuple{2, Any}} = nothing;
 #
     rng::Random.AbstractRNG = Random.default_rng(),
 #
@@ -48,6 +48,13 @@ function train_model(
     cb_epoch = nothing, # (NN, p, st) -> nothing
 ) where{M}
 
+    notestdata = isnothing(data_)
+
+    if notestdata
+        data_ = _data
+        println("[train_model] No test dataset provided.")
+    end
+
     # create data loaders
     _loader  = DataLoader(_data; batchsize = _batchsize , rng, shuffle = true)
     loader_  = DataLoader(data_; batchsize = batchsize_ , rng, shuffle = true)
@@ -62,8 +69,8 @@ function train_model(
     # callback functions
     STATS = Int[], Float32[], Float32[] # EPOCH, _LOSS, LOSS_
 
-    cb = makecallback(NN, __loader, loader_, lossfun; io, STATS, cb_epoch)
-    cb_stats = makecallback(NN, __loader, loader_, lossfun; io, stats = true)
+    cb = makecallback(NN, __loader, loader_, lossfun; io, STATS, cb_epoch, notestdata)
+    cb_stats = makecallback(NN, __loader, loader_, lossfun; io, stats = true, notestdata)
 
     # parameters
     _p, _st = Lux.setup(rng, NN)
@@ -360,11 +367,12 @@ function makecallback(
     stats::Bool = false,
     io::IO = stdout,
     cb_epoch = nothing, # (NN, p, st) -> nothing
+    notestdata::Bool = false,
 )
     _loss = (p, st) -> fullbatch_metric(NN, p, st, _loader, lossfun)
     loss_ = (p, st) -> fullbatch_metric(NN, p, st, loader_, lossfun)
 
-    kwargs = (; _loss, loss_,)
+    kwargs = (; _loss, loss_, notestdata)
 
     if stats
         _printstatistics = (p, st; io = io) -> printstatistics(NN, p, st, _loader; io)
@@ -400,6 +408,8 @@ function callback(p, st;
     #
     epoch  = nothing,
     nepoch = 0,
+    #
+    notestdata::Bool = false,
 )
     EPOCH, _LOSS, LOSS_ = isnothing(STATS) ? ntuple(Returns(nothing), 3) : STATS
 
@@ -420,20 +430,25 @@ function callback(p, st;
     # log training loss
     _l, _stats = if !isnothing(_loss)
         _l, _stats = _loss(p, st)
-        !isnothing(_LOSS) && push!(_LOSS, _l)
         _l, _stats
     else
         nothing, nothing
     end
 
     # log test loss
-    l_, stats_ = if !isnothing(loss_)
-        l_, stats_ = loss_(p, st)
-        !isnothing(LOSS_) && push!(LOSS_, l_)
-        l_, stats_
+    l_, stats_ = if notestdata
+        _l, _stats
     else
-        nothing, nothing
+        if !isnothing(loss_)
+            l_, stats_ = loss_(p, st)
+            l_, stats_
+        else
+            nothing, nothing
+        end
     end
+
+    !isnothing(_LOSS) && !isnothing(_l) && push!(_LOSS, _l)
+    !isnothing(LOSS_) && !isnothing(l_) && push!(LOSS_, l_)
 
     isnothing(io) && return
 
@@ -454,7 +469,7 @@ function callback(p, st;
     # if !isnothing(_stats)
     #     println(io, "TRAIN STATS:", _stats)
     # end
-    #
+
     # if isnothing(stats_)
     #     println(io, "TRAIN STATS:", stats_)
     # end
@@ -596,19 +611,13 @@ function optimize(
             opt_st, p = Optimisers.update!(opt_st, p, g)
 
             if isnan(l)
-                e = ErrorException("Loss in NaN")
-                throw(e)
+                throw(ErrorException("Loss in NaN"))
             end
 
             # progress bar
-            ProgressMeter.next!(
-                prog;
-                showvalues = [
-                    (:LOSS, round(l; sigdigits = 8)),
-                    (:INFO, stats),
-                ],
-                valuecolor = :magenta,
-            )
+            showvalues = Any[(:LOSS, round(l; sigdigits = 8)),]
+            !isempty(stats) && push!(showvalues, (:INFO, stats))
+            ProgressMeter.next!(prog; showvalues, valuecolor = :magenta)
         end
 
         ProgressMeter.finish!(prog)

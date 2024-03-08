@@ -251,11 +251,6 @@ function train_SNF(
 
     displaymetadata(metadata)
 
-    # p, st = Lux.setup(rng, NN)
-    # P = ComponentArray(p)
-    # @show eltype(P)
-    # @show st
-
     @time model, ST = train_model(NN, _data; rng,
         _batchsize, batchsize_, weight_decays,
         opts, nepochs, schedules, early_stoppings,

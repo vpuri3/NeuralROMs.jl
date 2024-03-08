@@ -231,7 +231,7 @@ function makedata_INR(
     X_[:, in_dim+1:end, :] = uperm_
 
     _U = reshape(_u, out_dim, Nx, _Ns)
-    U_ = reshape(u_, out_dim, Nx, _Ns)
+    U_ = reshape(u_, out_dim, Nx, Ns_)
 
     readme = "Train/test on 0.0-0.5."
     makedata_kws = (; Ix, _Ib, Ib_, _It, It_,)
@@ -266,7 +266,7 @@ function train_CINR(
         y, st = NN(x, p, st)
         loss = sum(abs2, ŷ - y) / length(ŷ)
 
-        loss, st, ()
+        loss, st, (;)
     end
 
     _batchsize = isnothing(_batchsize) ? numobs(_data) ÷ 50 : _batchsize
@@ -381,9 +381,6 @@ function evolve_CINR(
     Tdata = @view Tdata[data_kws.It]
     Nx = size(Xdata, 2)
 
-    k  = 1
-    It = LinRange(1, length(Tdata), 10) .|> Base.Fix1(round, Int)
-
     Ud = Udata[:, :, case, :]
     U0 = Ud[:, :, 1]
 
@@ -405,22 +402,6 @@ function evolve_CINR(
     p0 = encoder[1](U0_resh, encoder[2], encoder[3])[1]
     p0 = dropdims(p0; dims = 2)
 
-    ### debuggin
-    # Xnorm = normalizedata(Xdata, md.x̄, md.σx)
-    #
-    # ## decoder
-    # tmp1 = vcat(Xnorm, p0 * ones(1, size(Xnorm, 2)))
-    # tmp1 = decoder[1](tmp1, decoder[2], decoder[3])[1]
-    #
-    # ## conv-INR
-    # tmp2 = hcat(reshape(Xnorm, (Nx, 1, 1)), U0_resh) # [x, u]
-    # tmp2 = NN(tmp2, p, st)[1]
-    #
-    # plt = plot(vec(U0_norm), w = 2, label = "data")
-    # plot!(plt, vec(tmp1   ), w = 2, label = "decoder  [ũ, x]") 
-    # plot!(plt, vec(tmp2   ), w = 2, label = "conv-INR [ũ, x]") 
-    # display(plt)
-
     #==============#
     # freeze decoder weights
     #==============#
@@ -430,14 +411,14 @@ function evolve_CINR(
     #==============#
     # make model
     #==============#
-    model = NeuralEmbeddingModel(decoder[1], decoder[3], Xdata, md)
+    model = INRModel(decoder[1], decoder[3], Xdata, md)
 
     #==============#
     # evolve
     #==============#
     linsolve = QRFactorization()
     autodiff = AutoForwardDiff()
-    linesearch = LineSearch() # TODO
+    linesearch = LineSearch()
     nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
     nlsmaxiters = 10
 
@@ -445,7 +426,6 @@ function evolve_CINR(
 
     if isnothing(scheme)
         scheme  = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
-        # scheme = LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, 1f-6, 1f-3, 1f-6)
     end
 
     @time _, ps, Up = evolve_model(prob, model, timealg, scheme, data, p0, Δt;
@@ -455,6 +435,4 @@ function evolve_CINR(
 
     Xdata, Tdata, Ud, Up, ps
 end
-
 #======================================================#
-

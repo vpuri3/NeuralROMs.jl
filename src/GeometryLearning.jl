@@ -100,6 +100,8 @@ export
     dudx1_2D, dudx2_2D # , dudx4_2D,
     dudp
 
+include("neuralgridmodel.jl")
+
 include("problems.jl")
 export dudtRHS
 export

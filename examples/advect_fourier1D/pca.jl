@@ -19,6 +19,16 @@ begin
 end
 
 #======================================================#
+function pca_basis(
+    R::Integer,
+    u::AbstractMatrix;
+    device = Lux.cpu_device(),
+)
+    F = svd(u |> device)
+    F.U[:, 1:R] |> Lux.cpu_device()
+end
+
+#======================================================#
 function makedata_PCA(
     datafile::String;
     Ix = Colon(), # subsample in space
@@ -109,18 +119,21 @@ function makedata_PCA(
 end
 
 #======================================================#
-function pca_project(
+function train_PCA(
     datafile::String,
     modeldir::String,
     R::Int;
-    makeplot = true,
     rng::Random.AbstractRNG = Random.default_rng(),
+    makeplot::Bool = true,
     makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :,),
     device = Lux.cpu_device(),
 )
     _data, data_, md = makedata_PCA(datafile; makedata_kws...)
 
+    #==============================#
     # load data
+    #==============================#
+
     _x, _u, _t = _data
     x_, u_, t_ = _data
 
@@ -134,87 +147,208 @@ function pca_project(
     _It = isa(makedata_kws._It, Colon) ? (1:size(_u, 4)) : makedata_kws._It
     It_ = isa(makedata_kws.It_, Colon) ? (1:size(u_, 4)) : makedata_kws.It_
 
-    #################
     # misc
-    #################
     @assert out_dim == 1 "work on Burgers 2D later"
     _u = reshape(_u, Nx, _Nb, _Nt)
     u_ = reshape(u_, Nx, Nb_, Nt_)
 
-    _x = vec(_x)
-    x_ = vec(x_)
-
-    #################
+    #==============================#
     # SVD
-    #################
+    #==============================#
 
-    _udata = reshape(_u, Nx, :)
+    _udata = reshape(_u, Nx, :) |> copy
     udata_ = reshape(u_, Nx, :)
 
-    F = svd(_udata)
-    U = F.U[:, 1:R]
+    P = pca_basis(R, copy(_udata); device)
 
-    # project data
-    _a = U' * _udata
-    _upred = U  * _a
-
-    a_ = U' * udata_
-    upred_ = U  * a_
-
-    _v = reshape(_upred, Nx, _Nb, _Nt)
-    v_ = reshape(upred_, Nx, Nb_, Nt_)
-    #################
+    #==============================#
 
     mkpath(modeldir)
 
-    for k in 1:length(_Ib)
-        u = @view _u[:, k, :]
-        v = @view _v[:, k, :]
-        @show md
+    # save model
+    modelfile = joinpath(modeldir, "model.jld2")
+    jldsave(modelfile; Pmatrix = P, metadata = md)
 
-        _mu = md.mu[_Ib[k]]
-        title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+    #==============================#
+    # visualize
+    #==============================#
 
-        anim = animate1D(u, v, _x, _t; linewidth=2, xlabel="x",
-            ylabel="u(x,t)", title)
-        gif(anim, joinpath(modeldir, "train$(k).gif"), fps=30)
-    end
+    if makeplot
 
-    for k in 1:length(Ib_)
-        u = @view u_[:, k, :]
-        v = @view v_[:, k, :]
+        _a = P' * _udata
+        _upred = P  * _a
 
-        _mu = md.mu[_Ib[k]]
-        title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+        a_ = P' * udata_
+        upred_ = P  * a_
 
-        anim = animate1D(u, v, x_, t_; linewidth=2, xlabel="x",
-            ylabel="u(x,t)", title)
-        gif(anim, joinpath(modeldir, "test$(k).gif"), fps=30)
+        _v = reshape(_upred, Nx, _Nb, _Nt)
+        v_ = reshape(upred_, Nx, Nb_, Nt_)
+
+        xlabel = "x"
+        ylabel = "u(x, t)"
+
+
+        for k in 1:length(_Ib)
+            u = @view _u[:, k, :]
+            v = @view _v[:, k, :]
+
+            _mu = md.mu[_Ib[k]]
+            title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+
+            it = LinRange(1, size(u, 2), 4) .|> Base.Fix1(round, Int)
+
+            plt = plot(; title, xlabel, ylabel)
+            plot!(plt, _x[1,:], u[:, it], linewidth=3, c = :black)
+            plot!(plt, _x[1,:], v[:, it], linewidth=3, c = :red)
+            png(plt, joinpath(modeldir, "train_$k"))
+            display(plt)
+
+            # anim = animate1D(u, v, _x[1,:], _t; linewidth=2, xlabel, ylabel, title)
+            # gif(anim, joinpath(modeldir, "train$(k).gif"), fps=30)
+        end
+
+        for k in 1:length(Ib_)
+            u = @view u_[:, k, :]
+            v = @view v_[:, k, :]
+
+            _mu = md.mu[_Ib[k]]
+            title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+
+            # it = LinRange(1, size(u, 2), 4) .|> Base.Fix1(round, Int)
+            #
+            # plt = plot(; title, xlabel, ylabel)
+            # plot!(png, _x[1,:], u[:, it], linewidth=3, c = :black)
+            # plot!(png, _x[1,:], v[:, it], linewidth=3, c = :red)
+            # # png(plt, joinpath(modeldir, "test_$k"))
+
+            # anim = animate1D(u, v, x_[1,:], t_; linewidth=2, xlabel, ylabel, title)
+            # gif(anim, joinpath(modeldir, "test$(k).gif"), fps=30)
+        end
     end
 
     nothing
 end
 #======================================================#
 
-function pca_basis(
-    R::Integer,
-    u::AbstractMatrix;
+function evolve_PCA(
+    prob::AbstractPDEProblem,
+    datafile::String,
+    modelfile::String,
+    case::Integer;
+    rng::Random.AbstractRNG = Random.default_rng(),
+
+    data_kws = (; Ix = :, It = :),
+
+    Δt::Union{Real, Nothing} = nothing,
+    timealg::GeometryLearning.AbstractTimeAlg = EulerForward(),
+    adaptive::Bool = false,
+    scheme::Union{Nothing, GeometryLearning.AbstractSolveScheme} = nothing,
+
+    autodiff_xyz::ADTypes.AbstractADType = AutoFiniteDiff(),
+    ϵ_xyz::Union{Real, Nothing} = 1f-2,
+
+    verbose::Bool = true,
     device = Lux.cpu_device(),
 )
-    F = svd(u |> device)
-    U = F.U[:, 1:R]
+    
+    #==============#
+    # load data
+    #==============#
+    data = jldopen(datafile)
+    Tdata = data["t"]
+    Xdata = data["x"]
+    Udata = data["u"]
+    mu = data["mu"]
+
+    close(data)
+
+    @assert ndims(Udata) ∈ (3,4,)
+    @assert Xdata isa AbstractVecOrMat
+    Xdata = Xdata isa AbstractVector ? reshape(Xdata, 1, :) : Xdata # (Dim, Npoints)
+
+    if ndims(Udata) == 3 # [Nx, Nb, Nt]
+        Udata = reshape(Udata, 1, size(Udata)...) # [out_dim, Nx, Nb, Nt]
+    end
+
+    in_dim  = size(Xdata, 1)
+    out_dim = size(Udata, 1)
+
+    mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
+    mu = isa(mu, AbstractArray) ? vec(mu) : mu
+
+    #==============#
+    # load model
+    #==============#
+    model = jldopen(modelfile)
+    P  = model["Pmatrix"]
+    md = model["metadata"]
+    close(model)
+
+    #==============#
+    # subsample in space
+    #==============#
+    Udata = @view Udata[:, data_kws.Ix, :, data_kws.It]
+    Xdata = @view Xdata[:, data_kws.Ix]
+    Tdata = @view Tdata[data_kws.It]
+    Nx = size(Xdata, 2)
+
+    Ud = Udata[:, :, case, :]
+    U0 = Ud[:, :, 1]
+
+    data = (Xdata, U0, Tdata)
+    data = copy.(data) # ensure no SubArrays
+
+    #==============#
+    # get initial state
+    #==============#
+    U0_norm = normalizedata(U0, md.ū, md.σu)
+    p0 = P' * vec(U0_norm)
+
+    #==============#
+    # get model
+    #==============#
+    model = PCAModel(P, Xdata, md)
+
+    #==============#
+    # evolve
+    #==============#
+    linsolve = QRFactorization()
+    autodiff = AutoForwardDiff()
+    linesearch = LineSearch()
+    nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
+    nlsmaxiters = 10
+
+    Δt = isnothing(Δt) ? -(-(extrema(Tdata)...)) / 100.0f0 : Δt
+
+    if isnothing(scheme)
+        scheme  = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
+    end
+
+    learn_ic = false
+
+    @time _, ps, Up = evolve_model(prob, model, timealg, scheme, data, p0, Δt;
+        learn_ic, nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz,
+        verbose, device,
+    )
+
+    Xdata, Tdata, Ud, Up, ps
 end
 
 #======================================================#
-device = Lux.gpu_device()
+rng = Random.default_rng()
+Random.seed!(rng, 199)
+
+R = 32
+prob = Advection1D(0.25f0)
 datafile = joinpath(@__DIR__, "data_advect/", "data.jld2")
-makeplot = false
+modeldir = joinpath(@__DIR__, "PCA$(R)")
+modelfile = joinpath(modeldir, "model.jld2")
+device = Lux.gpu_device()
 
-basedir = joinpath(@__DIR__, "PCA")
-mkpath(basedir)
+makedata_kws = (; Ix = :, _Ib = [1], Ib_ = [1], _It = :, It_ = :)
 
-for R in (4, 8, 16, 32)
-    modeldir = joinpath(basedir, "PCA$(R)")
-    pca_project(datafile, modeldir, R; makeplot, device)
-end
+train_PCA(datafile, modeldir, R; makedata_kws, device,)
+# x, t, ud, up, _ = evolve_PCA(prob, datafile, modelfile, 1; rng)
+# plt = plot(vec(x), up[1,:, [1,end]]) |> display
 #======================================================#
+nothing
