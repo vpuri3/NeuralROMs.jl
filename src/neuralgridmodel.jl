@@ -1,8 +1,7 @@
 #
 #===========================================================#
-using SparseArrays: sparse
-
 abstract type AbstractNeuralGridModel <: AbstractNeuralModel end
+#===========================================================#
 
 function dudx1_1D(
     model::AbstractNeuralGridModel,
@@ -14,9 +13,8 @@ function dudx1_1D(
     @assert size(x, 1) == 1
     @assert ndims(x) == 2 "TODO: implement reshapes to handle ND arrays"
 
-    u = model(x, p)
-    du = model.D1x * vec(u)
-    du = reshape(du, 1, :)
+    u  = model(x, p)
+    du = apply_matrix(u, model.grid, model.Dx[1])
 
     u, du
 end
@@ -32,64 +30,126 @@ function dudx2_1D(
     @assert ndims(x) == 2 "TODO: implement reshapes to handle ND arrays"
 
     u = model(x, p)
-    d1u = model.D1x * vec(u)
-    d2u = model.D2x * vec(u)
-
-    d1u = reshape(d1u, 1, :)
-    d2u = reshape(d2u, 1, :)
+    d1u = apply_matrix(u, model.grid, model.Dx[1])
+    d2u = apply_matrix(u, model.grid, model.Dx[2])
 
     u, d1u, d2u
 end
 
-#===========================================================#
-
-function d1x1dmat(x::AbstractArray)
+function dudx4_1D(
+    model::AbstractNeuralGridModel,
+    x::AbstractArray,
+    p::AbstractVector;
+    autodiff::ADTypes.AbstractADType = AutoFiniteDiff(),
+    ϵ = nothing,
+)
     @assert size(x, 1) == 1
-    @assert ndims(x) == 2
+    @assert ndims(x) == 2 "TODO: implement reshapes to handle ND arrays"
 
-    N = length(x)
-    T = eltype(x)
+    u = model(x, p)
+    d1u = apply_matrix(u, model.grid, model.Dx[1])
+    d2u = apply_matrix(u, model.grid, model.Dx[2])
+    d3u = apply_matrix(u, model.grid, model.Dx[3])
+    d4u = apply_matrix(u, model.grid, model.Dx[4])
 
-    x = vec(x)
-    h = x[2] - x[1]
-
-    u = zeros(T, N-1) .+ 1/(2h)
-    d = zeros(T, N  )
-    l = zeros(T, N-1) .- 1/(2h)
-
-    Dx = Tridiagonal(l, d, u) |> Array
-    Dx[1, end] = -1/(2h)
-    Dx[end, 1] =  1/(2h)
-
-    sparse(Dx)
+    u, d1u, d2u, d3u, d4u
 end
 
-function d2x1dmat(x::AbstractArray)
-    @assert size(x, 1) == 1
-    @assert ndims(x) == 2
+#===========================================================#
 
-    N = length(x)
-    T = eltype(x)
+function dudx1_2D(
+    model::AbstractNeuralGridModel,
+    x::AbstractArray,
+    p::AbstractVector;
+    autodiff::ADTypes.AbstractADType = AutoFiniteDiff(),
+    ϵ = nothing,
+)
+    @assert size(x, 1) == 2
+    @assert ndims(x) == 2 "TODO: implement reshapes to handle ND arrays"
 
-    x = vec(x)
-    h = x[2] - x[1]
+    u  = model(x, p)
+    udx = apply_matrix(u, model.grid, model.Dx[1], I)
+    udy = apply_matrix(u, model.grid, I, model.Dy[1])
 
-    d = -2 * ones(T, N  ) ./ (h^2) # diagonal
-    b =  1 * ones(T, N-1) ./ (h^2) # off diagonal
+    u, (udx, udy,)
+end
 
-    Dx = Tridiagonal(b, d, b) |> Array
-    Dx[1, end] = 1 / (h^2)
-    Dx[end, 1] = 1 / (h^2)
+function dudx2_2D(
+    model::AbstractNeuralGridModel,
+    x::AbstractArray,
+    p::AbstractVector;
+    autodiff::ADTypes.AbstractADType = AutoFiniteDiff(),
+    ϵ = nothing,
+)
+    @assert size(x, 1) == 2
+    @assert ndims(x) == 2 "TODO: implement reshapes to handle ND arrays"
 
-    sparse(Dx)
+    u = model(x, p)
+
+    udx = apply_matrix(u, model.grid, model.Dx[1], I)
+    udy = apply_matrix(u, model.grid, I, model.Dy[1])
+
+    udxx = apply_matrix(u, model.grid, model.Dx[2], I)
+    udyy = apply_matrix(u, model.grid, I, model.Dy[2])
+
+    u, (udx, udy,), (udxx, udyy,)
+end
+
+#===========================================================#
+
+# TODO: differentiate multiple fields in the same function call
+
+function make_dx_mats(
+    xy::AbstractArray,
+    grid::NTuple{D, Integer},
+) where{D}
+
+    in_dim, N = size(xy)
+
+    if D == 1
+        x_vec = vec(xy)
+        dxmats(x_vec), (I, I, I, I)
+    elseif D == 2
+        xy_re = reshape(xy, in_dim, grid...)
+        x_vec = vec(xy_re[1, :, 1])
+        y_vec = vec(xy_re[2, 1, :])
+        dxmats(x_vec), dxmats(y_vec)
+    else
+        throw(ErrorException("Only support 1D/2D periodic grids"))
+    end
+end
+
+function apply_matrix(u, grid, Dx)
+    out_dim, N = size(u)
+    @assert out_dim == 1 "We apply Dx mats to individual fields."
+    @assert prod(grid) == N "grid size $grid doesn't match with field size $out_dim x $N."
+
+    u_re = reshape(u, grid...)
+
+    du = Dx * u_re
+    
+    reshape(du, out_dim, N)
+end
+
+function apply_matrix(u, grid, Dx, Dy)
+    out_dim, N = size(u)
+    @assert out_dim == 1 "We apply Dx mats to individual fields."
+    @assert prod(grid) == N "grid size $grid doesn't match with field size $out_dim x $N."
+
+    u_re = reshape(u, grid...)
+
+    du = Dx * u_re * Dy'
+    
+    reshape(du, out_dim, N)
 end
 
 #===========================================================#
 export PCAModel
 @concrete mutable struct PCAModel{Tu} <: AbstractNeuralGridModel
     P
-    D1x
-    D2x
+    Dx
+    Dy
+    grid
 
     ū::Tu
     σu::Tu
@@ -98,26 +158,26 @@ end
 function PCAModel(
     P::AbstractMatrix,
     x::AbstractArray,
+    grid::NTuple{D, Integer},
     metadata::NamedTuple,
-)
+) where{D}
 
     ū = metadata.ū
     σu = metadata.σu
 
-    D1x = d1x1dmat(x)
-    D2x = d2x1dmat(x)
+    Dx, Dy = make_dx_mats(x, grid)
 
-    PCAModel(P, D1x, D2x, ū, σu,)
+    PCAModel(P, Dx, Dy, grid, ū, σu,)
 end
 
 function Adapt.adapt_structure(to, model::PCAModel)
-    P   = Adapt.adapt_structure(to, model.P)
-    D1x = Adapt.adapt_structure(to, model.D1x)
-    D2x = Adapt.adapt_structure(to, model.D2x)
-    ū   = Adapt.adapt_structure(to, model.ū)
-    σu  = Adapt.adapt_structure(to, model.σu)
+    P  = Adapt.adapt_structure(to, model.P)
+    Dx = Adapt.adapt_structure(to, model.Dx)
+    Dy = Adapt.adapt_structure(to, model.Dy)
+    ū  = Adapt.adapt_structure(to, model.ū)
+    σu = Adapt.adapt_structure(to, model.σu)
 
-    PCAModel(P, D1x, D2x, ū, σu,)
+    PCAModel(P, Dx, Dy, model.grid, ū, σu,)
 end
 
 function (model::PCAModel)(
@@ -143,16 +203,18 @@ export INRModel
     ū::Tu
     σu::Tu
 
-    D1x
-    D2x
+    Dx
+    Dy
+    grid
 end
 
 function INRModel(
     NN::Lux.AbstractExplicitLayer,
     st::NamedTuple,
     x::AbstractArray{T},
+    grid::NTuple{D, Integer}, # (Nx, Ny)
     metadata::NamedTuple,
-) where{T<:Number}
+) where{T<:Number, D}
 
     Icode = begin
         sz = (1, size(x)[2:end]...,)
@@ -160,8 +222,7 @@ function INRModel(
         fill!(Icode, true)
     end
 
-    D1x = d1x1dmat(x)
-    D2x = d2x1dmat(x)
+    Dx, Dy = make_dx_mats(x, grid)
 
     x̄ = metadata.x̄
     ū = metadata.ū
@@ -169,7 +230,7 @@ function INRModel(
     σx = metadata.σx
     σu = metadata.σu
 
-    INRModel(NN, st, Icode, x̄, σx, ū, σu, D1x, D2x,)
+    INRModel(NN, st, Icode, x̄, σx, ū, σu, Dx, Dy, grid)
 end
 
 function Adapt.adapt_structure(to, model::INRModel)
@@ -179,11 +240,11 @@ function Adapt.adapt_structure(to, model::INRModel)
     ū  = Adapt.adapt_structure(to, model.ū )
     σx = Adapt.adapt_structure(to, model.σx)
     σu = Adapt.adapt_structure(to, model.σu)
-    D1x = Adapt.adapt_structure(to, model.D1x)
-    D2x = Adapt.adapt_structure(to, model.D2x)
+    Dx = Adapt.adapt_structure(to, model.Dx)
+    Dy = Adapt.adapt_structure(to, model.Dy)
 
     INRModel(
-        model.NN, st, Icode, x̄, σx, ū, σu, D1x, D2x,
+        model.NN, st, Icode, x̄, σx, ū, σu, Dx, Dy, model.grid,
     )
 end
 
@@ -224,8 +285,9 @@ export CAEModel
     ū::Tu
     σu::Tu
 
-    D1x
-    D2x
+    Dx
+    Dy
+    grid
 end
 
 function CAEModel(
@@ -233,16 +295,16 @@ function CAEModel(
     p::Union{NamedTuple, ComponentVector},
     st::NamedTuple,
     x::AbstractArray{T},
+    grid::NTuple{D, Integer},
     metadata::NamedTuple,
-) where{T<:Number}
+) where{T<:Number, D}
 
-    D1x = d1x1dmat(x)
-    D2x = d2x1dmat(x)
+    Dx, Dy = make_dx_mats(x, grid)
 
     ū  = metadata.ū
     σu = metadata.σu
 
-    CAEModel(NN, p, st, ū, σu, D1x, D2x,)
+    CAEModel(NN, p, st, ū, σu, Dx, Dy, grid)
 end
 
 function Adapt.adapt_structure(to, model::CAEModel)
@@ -250,10 +312,10 @@ function Adapt.adapt_structure(to, model::CAEModel)
     st = Adapt.adapt_structure(to, model.st)
     ū  = Adapt.adapt_structure(to, model.ū )
     σu = Adapt.adapt_structure(to, model.σu)
-    D1x = Adapt.adapt_structure(to, model.D1x)
-    D2x = Adapt.adapt_structure(to, model.D2x)
+    Dx = Adapt.adapt_structure(to, model.Dx)
+    Dy = Adapt.adapt_structure(to, model.Dy)
 
-    CAEModel(model.NN, p, st, ū, σu, D1x, D2x,)
+    CAEModel(model.NN, p, st, ū, σu, Dx, Dy, model.grid)
 end
 
 function (model::CAEModel)(

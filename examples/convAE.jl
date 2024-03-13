@@ -18,86 +18,8 @@ begin
     # FFTW.set_num_threads(nt)
 end
 
-#======================================================#
+include(joinpath(pkgdir(GeometryLearning), "examples", "problems.jl"))
 
-function cae_network(
-    prob::GeometryLearning.AbstractPDEProblem,
-    l::Integer,
-    w::Integer,
-    act,
-)
-
-    if prob isa Advection1D # 128 -> l -> 128
-        encoder = Chain(
-            Conv((8,), 1 => w, act; stride = 4, pad = 2), # /4
-            Conv((8,), w => w, act; stride = 4, pad = 2), # /4
-            Conv((8,), w => w, act; stride = 4, pad = 2), # /4
-            Conv((2,), w => w, act; stride = 1, pad = 0), # /2
-            flatten,
-            Dense(w, l),
-        )
-
-        decoder = Chain(
-            Dense(l, w, act),
-            ReshapeLayer((1, w)),
-            ConvTranspose((4,), w => w, act; stride = 1, pad = 0), # *4
-            ConvTranspose((8,), w => w, act; stride = 4, pad = 2), # *4
-            ConvTranspose((8,), w => w, act; stride = 4, pad = 2), # *4
-            ConvTranspose((8,), w => 1     ; stride = 2, pad = 3), # *2
-        )
-
-        Chain(;encoder, decoder)
-
-    elseif prob isa Burgers1D # 1024 -> l -> 1024
-
-        encoder = Chain(
-            Conv((8,), 1 => w, act; stride = 4, pad = 2), # /4
-            Conv((8,), w => w, act; stride = 4, pad = 2), # /4
-            Conv((8,), w => w, act; stride = 4, pad = 2), # /4
-            Conv((2,), w => w, act; stride = 1, pad = 0), # /2
-            flatten,
-            Dense(w, l),
-        )
-
-        decoder = Chain(
-            Dense(l, w, act),
-            ReshapeLayer((1, w)),
-            ConvTranspose((4,), w => w, act; stride = 1, pad = 0), # *4
-            ConvTranspose((8,), w => w, act; stride = 4, pad = 2), # *4
-            ConvTranspose((8,), w => w, act; stride = 4, pad = 2), # *4
-            ConvTranspose((8,), w => 1     ; stride = 2, pad = 3), # *2
-        )
-
-        Chain(;encoder, decoder)
-    end
-
-    ###################
-
-    # encoder = Chain(
-    #     Conv((4,), 1 => w, act; stride = 4, pad = 0), # /4
-    #     Conv((4,), w => w, act; stride = 4, pad = 0), # /4
-    #     Conv((2,), w => w, act; stride = 2, pad = 0), # /2
-    #     Conv((2,), w => w, act; stride = 2, pad = 0), # /2
-    #     Conv((2,), w => w, act; stride = 2, pad = 0), # /2
-    #     flatten,
-    #     Dense(w, l),
-    # )
-    #
-    # decoder = Chain(
-    #     Dense(l, w, act),
-    #     ReshapeLayer((1, w)),
-    #     ConvTranspose((4,), w => w, act; stride = 1, pad = 0), # 1 -> 4
-    #     ConvTranspose((4,), w => w, act; stride = 4, pad = 0), # *4
-    #     ConvTranspose((2,), w => w, act; stride = 2, pad = 0), # *2
-    #     ConvTranspose((2,), w => w, act; stride = 2, pad = 0), # *2
-    #     ConvTranspose((2,), w => 1, act; stride = 2, pad = 0), # *2
-    # )
-    #
-    # Chain(;encoder, decoder)
-
-    ###################
-
-end
 #======================================================#
 function makedata_CAE(
     datafile::String;
@@ -129,7 +51,7 @@ function makedata_CAE(
     
     in_dim  = size(x, 1)
     out_dim = size(u, 1)
-    
+
     println("input size $in_dim with $(size(x, 2)) points per trajectory.")
     println("output size $out_dim.")
     
@@ -162,7 +84,7 @@ function makedata_CAE(
 
     println("Using $Nx sample points per trajectory.")
 
-    _u = permutedims(_u, (2, 1, 3, 4))
+    _u = permutedims(_u, (2, 1, 3, 4)) # [Nx, out_dim, Nbatch, Ntime]
     u_ = permutedims(_u, (2, 1, 3, 4))
 
     _Ns = size(_u, 3) * size(_u, 4)
@@ -170,8 +92,14 @@ function makedata_CAE(
 
     println("$_Ns / $Ns_ trajectories in train/test sets.")
 
-    _u = reshape(_u, Nx, out_dim, _Ns)
-    u_ = reshape(u_, Nx, out_dim, Ns_)
+    grid = if in_dim == 1
+        (Nx,)
+    elseif in_dim == 2
+        md_data.grid
+    end
+
+    _u = reshape(_u, grid..., out_dim, _Ns)
+    u_ = reshape(u_, grid..., out_dim, Ns_)
 
     readme = "Train/test on 0.0-0.5."
     makedata_kws = (; Ix, _Ib, Ib_, _It, It_,)
@@ -340,9 +268,11 @@ function evolve_CAE(
     #==============#
     # get initial state
     #==============#
+    grid = get_prob_grid(prob)
+
     U0_norm = normalizedata(U0, md.ū, md.σu)
     U0_perm = permutedims(U0_norm, (2, 1))
-    U0_resh = reshape(U0_perm, size(U0_perm)..., 1)
+    U0_resh = reshape(U0_perm, grid..., out_dim, 1) # [Nx, Ny, O, 1]
 
     p0 = encoder[1](U0_resh, encoder[2], encoder[3])[1]
     p0 = dropdims(p0; dims = 2)
@@ -350,7 +280,7 @@ function evolve_CAE(
     #==============#
     # make model
     #==============#
-    model = CAEModel(decoder..., Xdata, md)
+    model = CAEModel(decoder..., Xdata, grid, md)
 
     #==============#
     # evolve

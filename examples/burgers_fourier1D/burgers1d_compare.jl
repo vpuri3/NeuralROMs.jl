@@ -3,10 +3,11 @@ using GeometryLearning
 using Plots, LaTeXStrings
 using NPZ
 
-joinpath(pkgdir(GeometryLearning), "examples", "PCA.jl")         |> include
-joinpath(pkgdir(GeometryLearning), "examples", "convAE.jl")      |> include
-joinpath(pkgdir(GeometryLearning), "examples", "convINR.jl")     |> include
-joinpath(pkgdir(GeometryLearning), "examples", "autodecoder.jl") |> include
+joinpath(pkgdir(GeometryLearning), "examples", "PCA.jl")      |> include
+joinpath(pkgdir(GeometryLearning), "examples", "convAE.jl")   |> include
+joinpath(pkgdir(GeometryLearning), "examples", "convINR.jl")  |> include
+joinpath(pkgdir(GeometryLearning), "examples", "smoothNF.jl") |> include
+joinpath(pkgdir(GeometryLearning), "examples", "problems.jl") |> include
 
 #======================================================#
 rng = Random.default_rng()
@@ -159,7 +160,6 @@ x4, t4, ud4, up4, _ = evolve_PCA( prob, datafile, modelfile_PCA0, case; rng, dev
 x5, t5, ud5, up5, _ = evolve_PCA( prob, datafile, modelfile_PCA1, case; rng, device)
 x6, t6, ud6, up6, _ = evolve_PCA( prob, datafile, modelfile_PCA2, case; rng, device)
 
-
 #==================#
 # clean data
 #==================#
@@ -203,9 +203,40 @@ dict = Dict(
 npzwrite(filename, dict)
 
 #==================#
+# compute errors
+#==================#
+
+# normalizer
+n0 = sum(abs2, ud0) / length(ud0)
+# n1 = sum(abs2, ud1) / length(ud1)
+n2 = sum(abs2, ud2) / length(ud2)
+n3 = sum(abs2, ud3) / length(ud3)
+n4 = sum(abs2, ud4) / length(ud4)
+n5 = sum(abs2, ud5) / length(ud5)
+n6 = sum(abs2, ud6) / length(ud6)
+
+# error field
+e0 = (up0 - ud0) / n0 # (X, T)
+# e1 = (up1 - ud1) / n1
+e2 = (up2 - ud2) / n2
+e3 = (up3 - ud3) / n3
+e4 = (up4 - ud4) / n4
+e5 = (up5 - ud5) / n5
+e6 = (up6 - ud6) / n6
+
+# error vs time
+et0 = sum(abs2, e0; dims = 1) / size(e0, 1) |> vec
+# et1 = sum(abs2, e1; dims = 1) / size(e1, 1) |> vec
+et2 = sum(abs2, e2; dims = 1) / size(e2, 1) |> vec
+et3 = sum(abs2, e3; dims = 1) / size(e3, 1) |> vec
+et4 = sum(abs2, e4; dims = 1) / size(e4, 1) |> vec
+et5 = sum(abs2, e5; dims = 1) / size(e5, 1) |> vec
+et6 = sum(abs2, e6; dims = 1) / size(e6, 1) |> vec
+
+#==================#
 # figure
 #==================#
-plt = plot(;
+p1 = plot(;
     xlabel = L"x",
     ylabel = L"u(x, t)",
 
@@ -218,23 +249,40 @@ plt = plot(;
 i1, i2 = 1, length(t4)
 
 # data
-plot!(plt, x4, ud4[:, i1], w = 4, s = :solid, c = :black, label = "Ground truth")
-plot!(plt, x4, ud4[:, i2], w = 4, s = :solid, c = :black, label = nothing)
+plot!(p1, x4, ud4[:, i1], w = 4, s = :solid, c = :black, label = "Ground truth")
+plot!(p1, x4, ud4[:, i2], w = 4, s = :solid, c = :black, label = nothing)
 
 # models
-plot!(plt, x0, up0[:, i2], w = 4, s = :solid, c = :yellow, label = "Deep CAE")
-# plot!(plt, x1, up1[:, i2], w = 4, s = :solid, c = :green, label = "C-ROM")
-plot!(plt, x2, up2[:, i2], w = 4, s = :solid, c = :red  , label = "Smooth-NFW (ours)")
-plot!(plt, x3, up3[:, i2], w = 4, s = :solid, c = :blue , label = "Smooth-NFL (ours)")
+plot!(p1, x0, up0[:, i2], w = 4, s = :solid, c = :yellow, label = "Deep CAE")
+# plot!(p1, x1, up1[:, i2], w = 4, s = :solid, c = :green, label = "C-ROM")
+plot!(p1, x2, up2[:, i2], w = 4, s = :solid, c = :red  , label = "Smooth-NFW (ours)")
+plot!(p1, x3, up3[:, i2], w = 4, s = :solid, c = :blue , label = "Smooth-NFL (ours)")
 
 # PCA
-plot!(plt, x4, up4[:, i2], w = 4, s = :solid, c = :orange , label = "PCA R=$(l0)")
-plot!(plt, x5, up5[:, i2], w = 4, s = :solid, c = :brown  , label = "PCA R=$(l1)")
-plot!(plt, x6, up6[:, i2], w = 4, s = :solid, c = :magenta, label = "PCA R=$(l2)")
+plot!(p1, x4, up4[:, i2], w = 4, s = :solid, c = :orange , label = "PCA R=$(l0)")
+plot!(p1, x5, up5[:, i2], w = 4, s = :solid, c = :brown  , label = "PCA R=$(l1)")
+plot!(p1, x6, up6[:, i2], w = 4, s = :solid, c = :magenta, label = "PCA R=$(l2)")
 
 pltname = joinpath(@__DIR__, "compare_l_$(latent)")
-png(plt, pltname)
-display(plt)
+png(p1, pltname)
+display(p1)
 
+p2 = plot(;
+    xlabel = L"Time (t)",
+    yaxis = :log,
+    ylims = (10^-9, 1.0),
+)
+
+# model
+plot!(p2, t0, et0, w = 4, label = "Deep CAE")
+# plot!(p2, t1, et1, w = 4, label = "C-ROM")
+plot!(p2, t2, et2, w = 4, label = "Smooth-NFW (ours)")
+plot!(p2, t3, et3, w = 4, label = "Smooth-NFL (ours)")
+
+plot!(p2, t4, et4, w = 4, label = "PCA R=$(l0)")
+plot!(p2, t5, et5, w = 4, label = "PCA R=$(l1)")
+plot!(p2, t6, et6, w = 4, label = "PCA R=$(l2)")
+
+plot(p1, p2) |> display
 #======================================================#
 nothing

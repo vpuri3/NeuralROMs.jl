@@ -1,11 +1,8 @@
 #
 using GeometryLearning
 
-begin
-    path = joinpath(pkgdir(GeometryLearning), "examples", "autodecoder.jl")
-    include(path)
-end
-
+include(joinpath(pkgdir(GeometryLearning), "examples", "smoothNF.jl"))
+include(joinpath(pkgdir(GeometryLearning), "examples", "problems.jl"))
 #======================================================#
 
 rng = Random.default_rng()

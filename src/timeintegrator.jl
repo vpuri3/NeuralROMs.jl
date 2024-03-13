@@ -350,7 +350,7 @@ function evolve_model(
     ϵ_jac = nothing,
     ϵ_xyz = nothing,
 
-    IC_TOL::Real = 1f-5,
+    IC_TOL::Real = 5f-5,
 
     verbose::Bool = true,
     device = Lux.cpu_device(),

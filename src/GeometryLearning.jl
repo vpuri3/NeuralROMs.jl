@@ -24,6 +24,7 @@ using ForwardDiff: Dual, Partials, value, partials
 
 using Random
 using LinearAlgebra
+using SparseArrays: sparse
 
 # visualization
 using Plots

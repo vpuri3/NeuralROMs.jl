@@ -18,123 +18,7 @@ begin
     # FFTW.set_num_threads(nt)
 end
 
-#======================================================#
-
-function inr_decoder(l, h, w, in_dim, out_dim)
-    init_wt_in = scaled_siren_init(3f1)
-    init_wt_hd = scaled_siren_init(1f0)
-    init_wt_fn = glorot_uniform
-
-    init_bias = rand32 # zeros32
-    use_bias_fn = false
-
-    act = sin
-
-    wi = l + in_dim
-    wo = out_dim
-
-    in_layer = Dense(wi, w , act; init_weight = init_wt_in, init_bias)
-    hd_layer = Dense(w , w , act; init_weight = init_wt_hd, init_bias)
-    fn_layer = Dense(w , wo     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
-
-    Chain(in_layer, fill(hd_layer, h)..., fn_layer)
-end
-
-function convINR_network(
-    prob::GeometryLearning.AbstractPDEProblem,
-    l::Integer,
-    h::Integer,
-    we::Integer,
-    wd::Integer,
-    act,
-)
-
-    if prob isa Advection1D
-        Ns = (128,)
-        in_dim  = 1
-        out_dim = 1
-
-        wi = in_dim
-
-        encoder = Chain(
-            Conv((8,), wi  => we, act; stride = 4, pad = 2), # /4
-            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4
-            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4
-            Conv((2,), we  => we, act; stride = 1, pad = 0), # /2
-            flatten,
-            Dense(we, l),
-        )
-
-        decoder = inr_decoder(l, h, wd, in_dim, out_dim)
-        
-        ImplicitEncoderDecoder(encoder, decoder, Ns, out_dim)
-
-    elseif prob isa KuramotoSivashinsky1D
-
-        Ns = (256,)
-        in_dim  = 1
-        out_dim = 1
-
-        wi = in_dim
-
-        encoder = Chain(
-            Conv((8,), wi  => we, act; stride = 4, pad = 2), # /4
-            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4
-            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4
-            Conv((4,), we  => we, act; stride = 1, pad = 0), # /4
-            flatten,
-            Dense(we, l),
-        )
-
-        decoder = inr_decoder(l, h, wd, in_dim, out_dim)
-        
-        ImplicitEncoderDecoder(encoder, decoder, Ns, out_dim)
-
-    elseif prob isa BurgersViscous1D
-
-        Ns = (1024,)
-        in_dim  = 1
-        out_dim = 1
-
-        wi = in_dim
-
-        encoder = Chain(
-            Conv((8,), wi  => we, act; stride = 4, pad = 2), # /4 = 256
-            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4 = 64
-            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4 = 16
-            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4 = 4
-            Conv((4,), we  => we, act; stride = 1, pad = 0), # /4 = 1
-            flatten,
-            Dense(we, l),
-        )
-
-        decoder = inr_decoder(l, h, wd, in_dim, out_dim)
-        
-        ImplicitEncoderDecoder(encoder, decoder, Ns, out_dim)
-
-    elseif prob isa BurgersViscous2D
-
-        Ns = (512, 512,)
-        in_dim  = 1
-        out_dim = 1
-
-        wi = in_dim
-
-        encoder = Chain(
-            Conv((8,8), wi  => we, act; stride = 4, pad = 2), # /4 = 128
-            Conv((8,8), we  => we, act; stride = 4, pad = 2), # /4 = 32
-            Conv((8,8), we  => we, act; stride = 4, pad = 2), # /4 = 8
-            Conv((8,8), we  => we, act; stride = 1, pad = 0), # /8 = 1
-            flatten,
-            Dense(we, l),
-        )
-
-        decoder = inr_decoder(l, h, wd, in_dim, out_dim)
-        
-        ImplicitEncoderDecoder(encoder, decoder, Ns, out_dim)
-
-    end
-end
+include(joinpath(pkgdir(GeometryLearning), "examples", "problems.jl"))
 
 #======================================================#
 function makedata_INR(
@@ -230,8 +114,14 @@ function makedata_INR(
     _X[:, in_dim+1:end, :] = _uperm
     X_[:, in_dim+1:end, :] = uperm_
 
-    _U = reshape(_u, out_dim, Nx, _Ns)
-    U_ = reshape(u_, out_dim, Nx, Ns_)
+    grid = if in_dim == 1
+        (Nx,)
+    elseif in_dim == 2
+        md_data.grid
+    end
+
+    _U = reshape(_u, out_dim, grid..., _Ns)
+    U_ = reshape(u_, out_dim, grid..., Ns_)
 
     readme = "Train/test on 0.0-0.5."
     makedata_kws = (; Ix, _Ib, Ib_, _It, It_,)
@@ -395,9 +285,11 @@ function evolve_CINR(
     #==============#
     # get initial state
     #==============#
+    grid = md.md_data.grid
+
     U0_norm = normalizedata(U0, md.ū, md.σu)
     U0_perm = permutedims(U0_norm, (2, 1))
-    U0_resh = reshape(U0_perm, size(U0_perm)..., 1)
+    U0_resh = reshape(U0_perm, grid..., out_dim, 1)
 
     p0 = encoder[1](U0_resh, encoder[2], encoder[3])[1]
     p0 = dropdims(p0; dims = 2)
@@ -411,7 +303,8 @@ function evolve_CINR(
     #==============#
     # make model
     #==============#
-    model = INRModel(decoder[1], decoder[3], Xdata, md)
+    grid = get_prob_grid(prob)
+    model = INRModel(decoder[1], decoder[3], Xdata, grid, md)
 
     #==============#
     # evolve

@@ -3,17 +3,26 @@ using GeometryLearning
 using Plots, LaTeXStrings
 using NPZ
 
-joinpath(pkgdir(GeometryLearning), "examples", "PCA.jl")         |> include
-joinpath(pkgdir(GeometryLearning), "examples", "convAE.jl")      |> include
-joinpath(pkgdir(GeometryLearning), "examples", "convINR.jl")     |> include
-joinpath(pkgdir(GeometryLearning), "examples", "autodecoder.jl") |> include
+joinpath(pkgdir(GeometryLearning), "examples", "PCA.jl")      |> include
+joinpath(pkgdir(GeometryLearning), "examples", "convAE.jl")   |> include
+joinpath(pkgdir(GeometryLearning), "examples", "convINR.jl")  |> include
+joinpath(pkgdir(GeometryLearning), "examples", "smoothNF.jl") |> include
+joinpath(pkgdir(GeometryLearning), "examples", "problems.jl") |> include
 
 #======================================================#
+rng = Random.default_rng()
+Random.seed!(rng, 199)
+
+latent = 2
+device = Lux.gpu_device()
+prob = Advection1D(0.25f0)
+datafile = joinpath(@__DIR__, "data_advect/", "data.jld2")
+
 _Ib, Ib_ = [1,], [1,]
 Ix  = Colon()
 _It = Colon()
 makedata_kws = (; Ix, _Ib, Ib_, _It, It_ = :)
-case = 1
+case = makedata_kws.Ib_[1]
 #======================================================#
 
 function advect1d_train_DCAE(
@@ -36,7 +45,7 @@ function advect1d_train_CINR(
     modeldir::String;
     device = Lux.cpu_device(),
 )
-    E   = 50000  # epochs
+    E   = 100_000  # epochs
     h   = 5      # num decoder hidden
     we  = 32     # encoder width
     wd  = 64     # decoder width
@@ -90,14 +99,6 @@ end
 # main
 #======================================================#
 
-rng = Random.default_rng()
-Random.seed!(rng, 199)
-
-prob = Advection1D(0.25f0)
-datafile = joinpath(@__DIR__, "data_advect/", "data.jld2")
-
-latent = 2
-
 l0 = latent * 2^0
 l1 = latent * 2^1
 l2 = latent * 2^2
@@ -105,8 +106,6 @@ l2 = latent * 2^2
 ll0 = lpad(latent * 2^0, 2, "0")
 ll1 = lpad(latent * 2^1, 2, "0")
 ll2 = lpad(latent * 2^2, 2, "0")
-
-device = Lux.gpu_device()
 
 #==================#
 # train
@@ -137,7 +136,7 @@ modelfile_DCAE = joinpath(modeldir_DCAE, "model_07.jld2")
 modelfile_CINR = joinpath(modeldir_CINR, "model_08.jld2")
 modelfile_SNFW = joinpath(modeldir_SNFW, "model_08.jld2")
 modelfile_SNFL = joinpath(modeldir_SNFL, "model_08.jld2")
-
+#
 modelfile_PCA0 = joinpath(modeldir_PCA0, "model.jld2")
 modelfile_PCA1 = joinpath(modeldir_PCA1, "model.jld2")
 modelfile_PCA2 = joinpath(modeldir_PCA2, "model.jld2")
@@ -220,9 +219,9 @@ plot!(plt, x2, up2[:, i2], w = 4, s = :solid, c = :red  , label = "Smooth-NFW (o
 plot!(plt, x3, up3[:, i2], w = 4, s = :solid, c = :blue , label = "Smooth-NFL (ours)")
 
 # PCA
-plot!(plt, x4, up4[:, i2], w = 4, s = :solid, c = :orange , label = "PCA R=2")
-plot!(plt, x5, up5[:, i2], w = 4, s = :solid, c = :brown  , label = "PCA R=4")
-plot!(plt, x6, up6[:, i2], w = 4, s = :solid, c = :magenta, label = "PCA R=8")
+plot!(plt, x4, up4[:, i2], w = 4, s = :solid, c = :orange , label = "PCA R=$(l0)")
+plot!(plt, x5, up5[:, i2], w = 4, s = :solid, c = :brown  , label = "PCA R=$(l1)")
+plot!(plt, x6, up6[:, i2], w = 4, s = :solid, c = :magenta, label = "PCA R=$(l2)")
 
 pltname = joinpath(@__DIR__, "compare_l_$(latent)")
 png(plt, pltname)

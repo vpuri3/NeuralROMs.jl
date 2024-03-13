@@ -1,11 +1,7 @@
 #
-"""
-Train an autoencoder on 1D advection data
-"""
-
 using GeometryLearning
-
-include(joinpath(pkgdir(GeometryLearning), "examples", "autodecoder.jl"))
+include(joinpath(pkgdir(GeometryLearning), "examples", "smoothNF.jl"))
+include(joinpath(pkgdir(GeometryLearning), "examples", "problems.jl"))
 
 #======================================================#
 function test_autodecoder(
@@ -122,35 +118,45 @@ end
 rng = Random.default_rng()
 Random.seed!(rng, 460)
 
-prob = Advection2D(0.25f0, 0.00f0)
-
-device = Lux.gpu_device()
+prob = Advection2D(0.25f0, 0.25f0)
 datafile = joinpath(@__DIR__, "data_advect/", "data.jld2")
-
-modeldir = joinpath(@__DIR__, "model1")
+modeldir = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
-cb_epoch = nothing
+device = Lux.gpu_device()
+
+E = 1400  # epochs
+l = 4     # latent
+h = 5     # num hidden
+w = 128   # width
+
+λ1, λ2 = 0f0, 0f0
+σ2inv, α = 1f-2, 0f-0
+weight_decays = 1f-2
+WeightDecayOpt = IdxWeightDecay
+weight_decay_ifunc = decoder_W_indices
+
+Ix  = Colon()
+_It = Colon()
+_Ib, Ib_ = [1,], [1,]
+makedata_kws = (; Ix, _Ib, Ib_, _It = _It, It_ = :)
+
+batchsize_ = (96 * 96) * 500 ÷ 4
 
 ## train
-E = 700
-_batchsize = 4096
-l, h, w = 8, 4, 64
-λ1, λ2, σ2inv = 0f-0, 0f-0, 1f-2 # 1f-2
-weight_decays = 1f-2             # 1f-2
-
-# isdir(modeldir) && rm(modeldir, recursive = true)
-# makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :)
-# model, STATS = train_autodecoder(datafile, modeldir, l, h, w, E;
-#     λ1, λ2, σ2inv, weight_decays, cb_epoch, device, makedata_kws,
-#     _batchsize,
-# )
+isdir(modeldir) && rm(modeldir, recursive = true)
+train_SNF(datafile, modeldir, l, h, w, E;
+    rng, warmup = true, makedata_kws,
+    λ1, λ2, σ2inv, α, weight_decays, device,
+    WeightDecayOpt, weight_decay_ifunc,
+    batchsize_
+)
 
 ## process
-outdir = joinpath(modeldir, "results")
-postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-    makeplot = true, verbose = true)
-test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-    makeplot = true, verbose = true)
+# outdir = joinpath(modeldir, "results")
+# postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+#     makeplot = true, verbose = true)
+# test_autodecoder(prob, datafile, modelfile, outdir; rng, device,
+#     makeplot = true, verbose = true)
 #======================================================#
 nothing
 #

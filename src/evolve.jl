@@ -393,7 +393,13 @@ function print_resid_stats(r::AbstractArray, abstolMSE, abstolInf)
     color_inf = inf_r <= abstolInf ? :green : :red
 
     printstyled("MSE: $(round(mse_r, sigdigits = 8)) ", color = color_mse)
-    printstyled("||∞: $(round(inf_r, sigdigits = 8))", color = color_inf)
+    printstyled("||∞: $(round(inf_r, sigdigits = 8)) ", color = color_inf)
+
+    if isnan(mse_r) | isnan(inf_r)
+        println()
+        throw(ErrorException("Residual has NaN"))
+    end
+
     return
 end
 

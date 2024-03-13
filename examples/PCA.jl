@@ -19,6 +19,7 @@ begin
 end
 
 #======================================================#
+
 function pca_basis(
     R::Integer,
     u::AbstractMatrix;
@@ -214,12 +215,13 @@ function train_PCA(
             _mu = md.mu[_Ib[k]]
             title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
 
-            # it = LinRange(1, size(u, 2), 4) .|> Base.Fix1(round, Int)
-            #
-            # plt = plot(; title, xlabel, ylabel)
-            # plot!(png, _x[1,:], u[:, it], linewidth=3, c = :black)
-            # plot!(png, _x[1,:], v[:, it], linewidth=3, c = :red)
-            # # png(plt, joinpath(modeldir, "test_$k"))
+            it = LinRange(1, size(u, 2), 4) .|> Base.Fix1(round, Int)
+            
+            plt = plot(; title, xlabel, ylabel)
+            plot!(plt, _x[1,:], u[:, it], linewidth=3, c = :black)
+            plot!(plt, _x[1,:], v[:, it], linewidth=3, c = :red)
+            png(plt, joinpath(modeldir, "test_$k"))
+            display(plt)
 
             # anim = animate1D(u, v, x_[1,:], t_; linewidth=2, xlabel, ylabel, title)
             # gif(anim, joinpath(modeldir, "test$(k).gif"), fps=30)
@@ -307,7 +309,8 @@ function evolve_PCA(
     #==============#
     # get model
     #==============#
-    model = PCAModel(P, Xdata, md)
+    grid = get_prob_grid(prob)
+    model = PCAModel(P, Xdata, grid, md)
 
     #==============#
     # evolve

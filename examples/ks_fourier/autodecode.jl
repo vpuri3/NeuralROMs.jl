@@ -1,6 +1,7 @@
 #
 using GeometryLearning
-include(joinpath(pkgdir(GeometryLearning), "examples", "autodecoder.jl"))
+include(joinpath(pkgdir(GeometryLearning), "examples", "smoothNF.jl"))
+include(joinpath(pkgdir(GeometryLearning), "examples", "problems.jl"))
 #======================================================#
 
 rng = Random.default_rng()
@@ -12,14 +13,14 @@ datafile = joinpath(@__DIR__, "data_ks/", "data.jld2")
 modeldir = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
 
-E = 7000  # epochs
-l = 16    # latent
+E = 3500  # epochs
+l = 2     # latent
 h = 5     # num hidden
 w = 128   # width
 
 λ1, λ2 = 0f0, 0f0
-σ2inv, α = 1f-1, 0f-0 # 1f-1, 1f-3
-weight_decays = 1f-2  # 1f-2
+σ2inv, α = 1f-2, 0f-0
+weight_decays = 5f-3
 WeightDecayOpt = IdxWeightDecay
 weight_decay_ifunc = decoder_W_indices
 

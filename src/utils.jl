@@ -120,6 +120,77 @@ function unnormalizedata(
 )
     (u .* σ) .+ μ
 end
+#===========================================================#
+# periodic differentiation matrices
+# 2nd order central finite difference
+# https://www.mech.kth.se/~ardeshir/courses/literature/fd.pdf
+#===========================================================#
+
+dxmats(x) = d1xmat(x), d2xmat(x), d3xmat(x), d4xmat(x)
+
+function d1xmat(x::AbstractVector{T}) where{T}
+    N = length(x)
+    h = x[2] - x[1]
+
+    u = zeros(T, N-1) .+ 1/(2h)
+    d = zeros(T, N  )
+    l = zeros(T, N-1) .- 1/(2h)
+
+    Dx = Tridiagonal(l, d, u) |> Array
+    Dx[1, end] = -1/(2h) # periodic
+    Dx[end, 1] =  1/(2h)
+
+    sparse(Dx)
+end
+
+function d2xmat(x::AbstractVector{T}) where{T}
+    N = length(x)
+    h = x[2] - x[1]
+
+    d = -2 * ones(T, N  ) ./ (h^2) # diagonal
+    b =  1 * ones(T, N-1) ./ (h^2) # off diagonal
+
+    D2x = Tridiagonal(b, d, b) |> Array
+    D2x[1, end] = 1 / (h^2) # periodic
+    D2x[end, 1] = 1 / (h^2)
+
+    sparse(D2x)
+end
+
+function d3xmat(x::AbstractVector{T}) where{T}
+    d1xmat(x) * d2xmat(x)
+end
+
+function d4xmat(x::AbstractVector{T}) where{T}
+    N = length(x)
+    x = vec(x)
+    h = x[2] - x[1]
+
+    D4x = zeros(T, N, N)
+
+    for i in 1:N
+        ip1 = _mod(i + 1, N)
+        ip2 = _mod(i + 2, N)
+        im1 = _mod(i - 1, N)
+        im2 = _mod(i - 2, N)
+
+        D4x[i, i  ] =  6
+        D4x[i, ip1] = -4
+        D4x[i, ip2] =  1
+        D4x[i, im1] = -4
+        D4x[i, im2] =  1
+    end
+
+    D4x = D4x / (h^4)
+
+    sparse(D4x)
+end
+
+# periodic index
+function _mod(a::Integer, b::Integer)
+    c = mod(a, b)
+    iszero(c) ? b : c
+end
 
 #===========================================================#
 #

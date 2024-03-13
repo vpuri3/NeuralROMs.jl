@@ -148,7 +148,7 @@ for (dudx_f, do_ad_f) in zip(DUDX_1D_FUNCS, DO_AD_FUNCS)
         autodiff::ADTypes.AbstractADType = AutoForwardDiff(),
         ϵ = nothing,
     )
-        @assert size(x, 1) == 1
+        @assert size(x, 1) == 1 "input grid must be 1D. Got size(x) = $(size(x))"
 
         function dudx_1D_internal(x)
             model(x, p)

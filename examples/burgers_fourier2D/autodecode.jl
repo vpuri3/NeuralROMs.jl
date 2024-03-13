@@ -1,12 +1,8 @@
 #
-"""
-Train an autoencoder on 1D advection data
-"""
-
 using GeometryLearning
 
-include(joinpath(pkgdir(GeometryLearning), "examples", "autodecoder.jl"))
-
+joinpath(pkgdir(GeometryLearning), "examples", "smoothNF.jl") |> include
+joinpath(pkgdir(GeometryLearning), "examples", "problems.jl") |> include
 #======================================================#
 function test_autodecoder(
     prob::AbstractPDEProblem,

@@ -161,34 +161,48 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
 
             V1D = FourierSpace(Nx; domain = interval)
 
-            anim = animate(vx_slice1, V1D, t; w = 2.0, title = "vx(y=0.5)")
-            filename = joinpath(dir, "burgers_slice1" * ".gif")
-            gif(anim, filename, fps = 100)
-
-            anim = animate(vx_slice2, V1D, t; w = 2.0, title = "vx(x=0.5)")
-            filename = joinpath(dir, "burgers_slice2" * ".gif")
-            gif(anim, filename, fps = 100)
+            # anim = animate(vx_slice1, V1D, t; w = 2.0, title = "vx(y=0.5)")
+            # filename = joinpath(dir, "burgers_slice1" * ".gif")
+            # gif(anim, filename, fps = 100)
+            #
+            # anim = animate(vx_slice2, V1D, t; w = 2.0, title = "vx(x=0.5)")
+            # filename = joinpath(dir, "burgers_slice2" * ".gif")
+            # gif(anim, filename, fps = 100)
 
             ############
 
-            anim = animate(reshape(vx_re, N, :), V, sol.t)
-            filename = joinpath(dir, "burgers_vx" * ".gif")
-            gif(anim, filename, fps=100)
-
-            anim = animate(reshape(vy_re, N, :), V, sol.t)
-            filename = joinpath(dir, "burgers_vy" * ".gif")
-            gif(anim, filename, fps=100)
+            # anim = animate(reshape(vx_re, N, :), V, sol.t)
+            # filename = joinpath(dir, "burgers_vx" * ".gif")
+            # gif(anim, filename, fps=100)
+            #
+            # anim = animate(reshape(vy_re, N, :), V, sol.t)
+            # filename = joinpath(dir, "burgers_vy" * ".gif")
+            # gif(anim, filename, fps=100)
 
             # d = 1:32:nx
-            # plt = meshplt(x_re[d,d], y_re[d,d], u_re[d,d,100]; a = 45, b = 30)
+            # plt = heatmap(u_re[d,d,100]; a = 45, b = 30)
             # display(plt)
+
+            idx = LinRange(1, ntsave, 6) .|> Base.Fix1(round, Int)
+
+            for (i, id) in enumerate(idx)
+                _u_re = reshape(_u, Nx, Ny, :)
+
+                p1 = heatmap(_x, _y, _u_re[:, :, id]';
+                    title = "Advection 2D Data", xlabel, ylabel)
+
+                p2 = meshplt(x_re, y_re, _u_re[:, :, id])
+
+                png(p1, joinpath(dir, "heatmap_$i"))
+                png(p2, joinpath(dir, "meshplt_$i"))
+            end
         end
     end
 
     (sol, V), (x, u, t, mu)
 end
 
-Nx = Ny = 512
+Nx = Ny = 256
 ν = 1f-3
 dir = joinpath(@__DIR__, "data_burgers2D")
 device = gpu_device()
