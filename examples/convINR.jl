@@ -285,7 +285,11 @@ function evolve_CINR(
     #==============#
     # get initial state
     #==============#
-    grid = md.md_data.grid
+    grid = if in_dim == 1
+        (Nx,)
+    elseif in_dim == 2
+        md_data.grid
+    end
 
     U0_norm = normalizedata(U0, md.ū, md.σu)
     U0_perm = permutedims(U0_norm, (2, 1))

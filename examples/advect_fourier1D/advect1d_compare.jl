@@ -45,7 +45,7 @@ function advect1d_train_CINR(
     modeldir::String;
     device = Lux.cpu_device(),
 )
-    E   = 100_000  # epochs
+    E   = 210_000  # epochs
     h   = 5      # num decoder hidden
     we  = 32     # encoder width
     wd  = 64     # decoder width
@@ -54,7 +54,7 @@ function advect1d_train_CINR(
     NN = convINR_network(prob, l, h, we, wd, act)
 
     isdir(modeldir) && rm(modeldir, recursive = true)
-    train_CINR(datafile, modeldir, NN, E; rng, warmup = true, device)
+    train_CINR(datafile, modeldir, NN, E; rng, warmup = false, device)
 end
 
 function advect1d_train_SNFW(
@@ -121,7 +121,7 @@ modeldir_PCA1 = joinpath(@__DIR__, "model_PCA_l_$(ll1)")
 modeldir_PCA2 = joinpath(@__DIR__, "model_PCA_l_$(ll2)")
 
 # advect1d_train_DCAE(latent, modeldir_DCAE; device)
-advect1d_train_CINR(latent, modeldir_CINR; device)
+# advect1d_train_CINR(latent, modeldir_CINR; device)
 # advect1d_train_SNFW(latent, modeldir_SNFW; device)
 # advect1d_train_SNFL(latent, modeldir_SNFL; device)
 # train_PCA(datafile, modeldir_PCA0, l0; makedata_kws, device)
@@ -133,7 +133,7 @@ advect1d_train_CINR(latent, modeldir_CINR; device)
 #==================#
 
 modelfile_DCAE = joinpath(modeldir_DCAE, "model_07.jld2")
-modelfile_CINR = joinpath(modeldir_CINR, "model_08.jld2")
+modelfile_CINR = joinpath(modeldir_CINR, "model_07.jld2")
 modelfile_SNFW = joinpath(modeldir_SNFW, "model_08.jld2")
 modelfile_SNFL = joinpath(modeldir_SNFL, "model_08.jld2")
 #

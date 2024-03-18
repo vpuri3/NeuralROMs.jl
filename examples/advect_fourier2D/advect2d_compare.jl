@@ -291,6 +291,6 @@ plot!(p2, t4, et4, w = 4, label = "PCA R=$(l0)")
 plot!(p2, t5, et5, w = 4, label = "PCA R=$(l1)")
 plot!(p2, t6, et6, w = 4, label = "PCA R=$(l2)")
 
-plot(p1, p2) |> display
+plot(p2) |> display
 #======================================================#
 nothing
