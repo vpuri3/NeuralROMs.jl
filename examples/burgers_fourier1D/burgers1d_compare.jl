@@ -22,7 +22,7 @@ _Ib, Ib_ = [1,3,], [2,]
 Ix  = Colon()
 _It = Colon()
 makedata_kws = (; Ix, _Ib, Ib_, _It = _It, It_ = :)
-case = 1 #makedata_kws.Ib_[1]
+case = 3 #makedata_kws.Ib_[1]
 #======================================================#
 
 function burgers1d_train_DCAE(

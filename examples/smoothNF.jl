@@ -519,14 +519,16 @@ function evolve_SNF(
     # parameter scatter plot
     ###
 
-    plt = plot(; title = "Parameter scatter plot, case = $case", legend = false)
+    plt = plot(; title = "Parameter scatter plot, case = $case")
+
+    kw_scatter = (; zcolor = ts, markerstrokewidth = 0, label = nothing,)
 
     if size(ps, 1) == 1
-        scatter!(plt, vec(ps); zcolor = ts, label = nothing)
+        scatter!(plt, vec(ps); kw_scatter...)
     elseif size(ps, 1) == 2
-        scatter!(plt, ps[1,:], ps[2,:]; zcolor = ts)
+        scatter!(plt, ps[1,:], ps[2,:]; kw_scatter...)
     elseif size(ps, 1) == 3
-        scatter!(plt, ps[1,:], ps[2,:], ps[3,:]; zcolor = ts)
+        scatter!(plt, ps[1,:], ps[2,:], ps[3,:]; kw_scatter...)
     else
         # TSNE plot
     end
