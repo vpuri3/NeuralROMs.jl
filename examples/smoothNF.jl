@@ -478,7 +478,7 @@ function evolve_SNF(
         Ixplt = LinRange(1, Nx, 32) .|> Base.Fix1(round, Int)
         Itplt = LinRange(1, Nt,  4) .|> Base.Fix1(round, Int)
 
-        p1 = plot(; title = "Ambient space evolution",
+        p1 = plot(; title = "Ambient space evolution, case = $(case)",
             xlabel = L"x", ylabel = L"u(x,t)", legend = false)
         plot!(p1, xd, up[:, Itplt]; linewidth, palette)
         scatter!(p1, xd[Ixplt], ud[Ixplt, Itplt]; w = 1, palette)
@@ -489,13 +489,13 @@ function evolve_SNF(
         throw(ErrorException("in_dim = $in_dim not supported."))
     end
 
-    p2 = plot(; title = "Parameter evolution",
+    p2 = plot(; title = "Parameter evolution, case $(case)",
               xlabel = L"Time (s)$$", ylabel = L"\tilde{u}(t)", legend = false)
     plot!(p2, ts, ps'; linewidth, palette)
     png(p2, joinpath(outdir, "evolve_p$(od)_case$(case)"))
 
     # parameter scatter plot
-    p3 = plot(; title = "Parameter scatter plot", legend = false)
+    p3 = plot(; title = "Parameter scatter plot, case = $case", legend = false)
 
     if size(ps, 1) == 1
         scatter!(vec(ps); zcolor = ts, label = nothing)
