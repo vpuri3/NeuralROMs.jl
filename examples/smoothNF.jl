@@ -462,57 +462,86 @@ function evolve_SNF(
     outdir = joinpath(modeldir, "results")
     mkpath(outdir)
 
-    # loop over out_dim
-    od = 1
-    # for od in 1:out_dim
-    # end
+    ###
+    # visualization
+    ###
 
-    if in_dim == 1
-        linewidth = 2.0
-        palette = :tab10
+    linewidth = 2.0
+    palette = :tab10
 
-        xd = vec(Xdata)
+    for od in 1:out_dim
         up = Up[od, :, :]
         ud = Ud[od, :, :]
+        nr = sum(abs2, ud) / length(ud)
+        er = (up - ud) / nr
+        er = sum(abs2, er; dims = 1) / size(ud, 1) |> vec
 
-        Ixplt = LinRange(1, Nx, 32) .|> Base.Fix1(round, Int)
-        Itplt = LinRange(1, Nt,  4) .|> Base.Fix1(round, Int)
+        if in_dim == 1
+            xd = vec(Xdata)
 
-        p1 = plot(; title = "Ambient space evolution, case = $(case)",
-            xlabel = L"x", ylabel = L"u(x,t)", legend = false)
-        plot!(p1, xd, up[:, Itplt]; linewidth, palette)
-        scatter!(p1, xd[Ixplt], ud[Ixplt, Itplt]; w = 1, palette)
-        png(p1, joinpath(outdir, "evolve_u$(od)_case$(case)"))
+            Ixplt = LinRange(1, Nx, 32) .|> Base.Fix1(round, Int)
+            Itplt = LinRange(1, Nt,  4) .|> Base.Fix1(round, Int)
 
-    elseif in_dim == 2
-    else
-        throw(ErrorException("in_dim = $in_dim not supported."))
+            plt = plot(;
+                title = "Ambient space evolution, case = $(case)",
+                xlabel = L"x", ylabel = L"u(x,t)", legend = false,
+            )
+            plot!(plt, xd, up[:, Itplt]; linewidth, palette)
+            scatter!(plt, xd[Ixplt], ud[Ixplt, Itplt]; w = 1, palette)
+            png(plt, joinpath(outdir, "evolve_u$(od)_case$(case)"))
+
+            plt = plot(;
+                title = "Error evolution, case = $(case)",
+                xlabel = L"Time ($s$)", ylabel = L"ε(t)", legend = false,
+                yaxis = :log, ylims = (10^-9, 1.0),
+            )
+            plot!(plt, ts, er; linewidth, palette,)
+            png(plt, joinpath(outdir, "evolve_e$(od)_case$(case)"))
+
+        elseif in_dim == 2
+        else
+            throw(ErrorException("in_dim = $in_dim not supported."))
+        end
+
+        ###
+        # parameter evolution
+        ###
+        plt = plot(;
+                   title = "Parameter evolution, case $(case)",
+                   xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false
+                   )
+        plot!(plt, ts, ps'; linewidth, palette)
+        png(plt, joinpath(outdir, "evolve_p$(od)_case$(case)"))
+
     end
 
-    p2 = plot(; title = "Parameter evolution, case $(case)",
-              xlabel = L"Time (s)$$", ylabel = L"\tilde{u}(t)", legend = false)
-    plot!(p2, ts, ps'; linewidth, palette)
-    png(p2, joinpath(outdir, "evolve_p$(od)_case$(case)"))
-
+    ###
     # parameter scatter plot
-    p3 = plot(; title = "Parameter scatter plot, case = $case", legend = false)
+    ###
+
+    plt = plot(; title = "Parameter scatter plot, case = $case", legend = false)
 
     if size(ps, 1) == 1
-        scatter!(vec(ps); zcolor = ts, label = nothing)
+        scatter!(plt, vec(ps); zcolor = ts, label = nothing)
     elseif size(ps, 1) == 2
-        scatter!(ps[1,:], ps[2,:]; zcolor = ts)
+        scatter!(plt, ps[1,:], ps[2,:]; zcolor = ts)
+    elseif size(ps, 1) == 3
+        scatter!(plt, ps[1,:], ps[2,:], ps[3,:]; zcolor = ts)
     else
         # TSNE plot
     end
 
-    png(p3, joinpath(outdir, "p_scatter_case$(case)"))
+    png(plt, joinpath(outdir, "p_scatter_case$(case)"))
+
+    filename = joinpath(outdir, "evolve$case.jld2")
+    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps)
 
     # denom  = sum(abs2, Ud) / length(Ud) |> sqrt
     # _max  = norm(Up - Ud, Inf) / sqrt(denom)
     # _mean = sqrt(sum(abs2, Up - Ud) / length(Ud)) / denom
     # println("Max error  (normalized): $(_max * 100 )%")
     # println("Mean error (normalized): $(_mean * 100)%")
-    #
+
     # png(plt, joinpath(outdir, "evolve_$k"))
     # display(plt)
 
