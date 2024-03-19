@@ -7,6 +7,7 @@ using LinearSolve, NonlinearSolve, LineSearches   # num
 using Plots, JLD2                                 # vis / save
 using CUDA, LuxCUDA, KernelAbstractions           # GPU
 using LaTeXStrings
+using TSne
 
 CUDA.allowscalar(false)
 
@@ -521,7 +522,12 @@ function evolve_SNF(
 
     plt = plot(; title = "Parameter scatter plot, case = $case")
 
-    kw_scatter = (; zcolor = ts, markerstrokewidth = 0, label = nothing,)
+    kw_scatter = (;
+        color = :blues,
+        zcolor = ts,
+        label = nothing,
+        markerstrokewidth = 0,
+    )
 
     if size(ps, 1) == 1
         scatter!(plt, vec(ps); kw_scatter...)
@@ -530,7 +536,8 @@ function evolve_SNF(
     elseif size(ps, 1) == 3
         scatter!(plt, ps[1,:], ps[2,:], ps[3,:]; kw_scatter...)
     else
-        # TSNE plot
+        _ps = tsne(ps', 2)'
+        scatter!(plt, _ps[1,:], _ps[2,:]; kw_scatter...)
     end
 
     png(plt, joinpath(outdir, "p_scatter_case$(case)"))
