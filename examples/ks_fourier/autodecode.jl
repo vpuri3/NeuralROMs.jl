@@ -14,7 +14,7 @@ modeldir = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
 
 E = 3500  # epochs
-l = 2     # latent
+l = 1     # latent
 h = 5     # num hidden
 w = 128   # width
 
@@ -32,9 +32,9 @@ train_SNF(datafile, modeldir, l, h, w, E;
     WeightDecayOpt, weight_decay_ifunc,
 )
 
-outdir = joinpath(modeldir, "results")
-postprocess_SNF(prob, datafile, modelfile, outdir; rng, device,
-    makeplot = true, verbose = true)
+# outdir = joinpath(modeldir, "results")
+# postprocess_SNF(prob, datafile, modelfile, outdir; rng, device,
+    # makeplot = true, verbose = true)
 x, t, ud, up, _ = evolve_SNF(prob, datafile, modelfile, 1; rng, device, verbose = true)
 plt = plot(x[1,:], ud[1,:,begin], w = 4, c = :black, label = nothing)
 plot!(plt, x[1,:], ud[1,:,end  ], w = 4, c = :black, label = "data")

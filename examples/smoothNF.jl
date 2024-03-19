@@ -483,6 +483,7 @@ function evolve_SNF(
             Ixplt = LinRange(1, Nx, 32) .|> Base.Fix1(round, Int)
             Itplt = LinRange(1, Nt,  4) .|> Base.Fix1(round, Int)
 
+            # u(x, t)
             plt = plot(;
                 title = "Ambient space evolution, case = $(case)",
                 xlabel = L"x", ylabel = L"u(x,t)", legend = false,
@@ -491,6 +492,7 @@ function evolve_SNF(
             scatter!(plt, xd[Ixplt], ud[Ixplt, Itplt]; w = 1, palette)
             png(plt, joinpath(outdir, "evolve_u$(od)_case$(case)"))
 
+            # e(t)
             plt = plot(;
                 title = "Error evolution, case = $(case)",
                 xlabel = L"Time ($s$)", ylabel = L"ε(t)", legend = false,
@@ -513,7 +515,6 @@ function evolve_SNF(
                    )
         plot!(plt, ts, ps'; linewidth, palette)
         png(plt, joinpath(outdir, "evolve_p$(od)_case$(case)"))
-
     end
 
     ###
@@ -544,15 +545,6 @@ function evolve_SNF(
 
     filename = joinpath(outdir, "evolve$case.jld2")
     jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps)
-
-    # denom  = sum(abs2, Ud) / length(Ud) |> sqrt
-    # _max  = norm(Up - Ud, Inf) / sqrt(denom)
-    # _mean = sqrt(sum(abs2, Up - Ud) / length(Ud)) / denom
-    # println("Max error  (normalized): $(_max * 100 )%")
-    # println("Mean error (normalized): $(_mean * 100)%")
-
-    # png(plt, joinpath(outdir, "evolve_$k"))
-    # display(plt)
 
     Xdata, Tdata, Ud, Up, ps
 end
