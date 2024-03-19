@@ -6,6 +6,7 @@ using OptimizationOptimJL, OptimizationOptimisers # opt
 using LinearSolve, NonlinearSolve, LineSearches   # num
 using Plots, JLD2                                 # vis / save
 using CUDA, LuxCUDA, KernelAbstractions           # GPU
+using LaTeXStrings
 
 CUDA.allowscalar(false)
 
@@ -31,6 +32,7 @@ function makedata_SNF(
 )
 
     # TODO makedata_SNF: allow for _Ix, Ix_ for testing
+    # TODO makedata_SNF: rm _Ib, Ib_, _It, It_. makes no sense for autodecode
 
     #==============#
     # load data
@@ -394,6 +396,7 @@ function evolve_SNF(
     Tdata = @view Tdata[data_kws.It]
 
     Nx = size(Xdata, 2)
+    Nt = size(Udata, 4)
 
     Ud = Udata[:, :, case, :]
     U0 = Ud[:, :, 1]
@@ -445,19 +448,65 @@ function evolve_SNF(
         # scheme = LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, 1f-6, 1f-3, 1f-6)
     end
 
-    @time _, ps, Up = evolve_model(
+    @time ts, ps, Up = evolve_model(
         prob, model, timealg, scheme, data, p0, Δt;
         nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz,
         verbose, device,
     )
 
-    # Up = dropdims(Up; dims = 1)
-    #
-    # Ix_plt = 1:4:Nx
-    # plt = plot(xlabel = "x", ylabel = "u(x, t)", legend = false)
-    # plot!(plt, Xdata, Up, w = 2, palette = :tab10)
-    # scatter!(plt, Xdata[Ix_plt], Ud[Ix_plt, :], w = 1, palette = :tab10)
-    #
+    #==============#
+    # save directory
+    #==============#
+
+    modeldir = dirname(modelfile)
+    outdir = joinpath(modeldir, "results")
+    mkpath(outdir)
+
+    # loop over out_dim
+    od = 1
+    # for od in 1:out_dim
+    # end
+
+    if in_dim == 1
+        linewidth = 2.0
+        palette = :tab10
+
+        xd = vec(Xdata)
+        up = Up[od, :, :]
+        ud = Ud[od, :, :]
+
+        Ixplt = LinRange(1, Nx, 32) .|> Base.Fix1(round, Int)
+        Itplt = LinRange(1, Nt,  4) .|> Base.Fix1(round, Int)
+
+        p1 = plot(; title = "Ambient space evolution",
+            xlabel = L"x", ylabel = L"u(x,t)", legend = false)
+        plot!(p1, xd, up[:, Itplt]; linewidth, palette)
+        scatter!(p1, xd[Ixplt], ud[Ixplt, Itplt]; w = 1, palette)
+        png(p1, joinpath(outdir, "evolve_u$(od)_case$(case)"))
+
+    elseif in_dim == 2
+    else
+        throw(ErrorException("in_dim = $in_dim not supported."))
+    end
+
+    p2 = plot(; title = "Parameter evolution",
+              xlabel = L"Time (s)$$", ylabel = L"\tilde{u}(t)", legend = false)
+    plot!(p2, ts, ps'; linewidth, palette)
+    png(p2, joinpath(outdir, "evolve_p$(od)_case$(case)"))
+
+    # parameter scatter plot
+    p3 = plot(; title = "Parameter scatter plot", legend = false)
+
+    if size(ps, 1) == 1
+        scatter!(vec(ps); zcolor = ts, label = nothing)
+    elseif size(ps, 1) == 2
+        scatter!(ps[1,:], ps[2,:]; zcolor = ts)
+    else
+        # TSNE plot
+    end
+
+    png(p3, joinpath(outdir, "p_scatter_case$(case)"))
+
     # denom  = sum(abs2, Ud) / length(Ud) |> sqrt
     # _max  = norm(Up - Ud, Inf) / sqrt(denom)
     # _mean = sqrt(sum(abs2, Up - Ud) / length(Ud)) / denom
@@ -466,7 +515,6 @@ function evolve_SNF(
     #
     # png(plt, joinpath(outdir, "evolve_$k"))
     # display(plt)
-    #
 
     Xdata, Tdata, Ud, Up, ps
 end
@@ -581,7 +629,7 @@ function postprocess_SNF(
                     xdata = vec(Xdata)
                     Iplot = 1:8:Nx
 
-                    plt = plot(xlabel = "x", ylabel = "u$(od)(x, t)", legend = false)
+                    plt = plot(; xlabel, ylabel, legend = false)
                     plot!(plt, xdata, upred, w = 2, palette = :tab10)
                     scatter!(plt, xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
                     png(plt, joinpath(outdir, "train_u$(od)_k$(k)"))

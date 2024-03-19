@@ -10,27 +10,28 @@ Random.seed!(rng, 199)
 
 prob = Advection1D(0.25f0)
 datafile  = joinpath(@__DIR__, "data_advect/", "data.jld2")
-modeldir  = joinpath(@__DIR__, "dump")
+# modeldir  = joinpath(@__DIR__, "dump")
+modeldir  = joinpath(@__DIR__, "model_SNFL_l_02/")
 modelfile = joinpath(modeldir, "model_08.jld2")
 device = Lux.gpu_device()
 
 case = 1
 
-## train
-E = 1400
-_It = Colon()
-_batchsize = 1280
-l, h, w = 4, 5, 64 # (2, 4), 5, 32
-λ1, λ2 = 0f0, 0f0
-σ2inv, α = 1f-3, 0f0
-weight_decays = 0f-3
-
-isdir(modeldir) && rm(modeldir, recursive = true)
-makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
-model, STATS, metadata = train_SNF(datafile, modeldir, l, h, w, E;
-    rng, warmup = true, _batchsize,
-    λ1, λ2, σ2inv, α, weight_decays, makedata_kws, device,
-)
+# ## train
+# E = 1400
+# _It = Colon()
+# _batchsize = 1280
+# l, h, w = 4, 5, 64 # (2, 4), 5, 32
+# λ1, λ2 = 0f0, 0f0
+# σ2inv, α = 1f-3, 0f0
+# weight_decays = 0f-3
+#
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = _It, It_ = :)
+# model, STATS, metadata = train_SNF(datafile, modeldir, l, h, w, E;
+#     rng, warmup = true, _batchsize,
+#     λ1, λ2, σ2inv, α, weight_decays, makedata_kws, device,
+# )
 
 ## process
 # outdir = joinpath(modeldir, "results")
