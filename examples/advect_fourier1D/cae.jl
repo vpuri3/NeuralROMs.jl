@@ -30,11 +30,11 @@ device = Lux.gpu_device()
 
 ## evolve (Jacobian fails on GPU)
 case = 1
+postprocess_CAE(prob, datafile, modelfile)
 x, t, ud, up, ps = evolve_CAE(prob, datafile, modelfile, case; rng,)
-plt = plot(vec(x), ud[1, :, [1, 100, 200, 300, 400, 500]]; w = 4, c = :black, label = "Data")
-plot!(plt, vec(x), up[1, :, [1, 100, 200, 300, 400, 500]]; w = 4, label = "Lee, Carlberg")
-
-display(plt)
+# plt = plot(vec(x), ud[1, :, [1, 100, 200, 300, 400, 500]]; w = 4, c = :black, label = "Data")
+# plot!(plt, vec(x), up[1, :, [1, 100, 200, 300, 400, 500]]; w = 4, label = "Lee, Carlberg")
+# display(plt)
 #======================================================#
 nothing
 #

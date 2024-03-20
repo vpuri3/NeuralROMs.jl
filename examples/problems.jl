@@ -1,6 +1,7 @@
 #
-using Plots
-using TSne
+using GeometryLearning
+using Plots, TSne, LaTeXStrings
+
 #======================================================#
 function get_prob_grid(prob::GeometryLearning.AbstractPDEProblem)
     if prob isa Advection1D
@@ -256,6 +257,211 @@ function convINR_network(
 end
 
 #======================================================#
+function displaymetadata(metadata::NamedTuple)
+    println("METADATA:")
+    println("ū, σu: $(metadata.ū), $(metadata.σu)")
+    println("x̄, σx: $(metadata.x̄), $(metadata.σx)")
+    println("Model README: ", metadata.readme)
+    println("Data-metadata: ", metadata.md_data)
+    println("train_args: ", metadata.train_args)
+    println("Nx, _Ncodes, Ncodes_: $(metadata.Nx), $(metadata._Ns), $(metadata.Ns_)")
+    nothing
+end
+
+#===========================================================#
+function eval_model(
+    model::GeometryLearning.AbstractNeuralModel,
+    x::AbstractArray,
+    p::AbstractArray;
+    batchsize = numobs(x) ÷ 100,
+    device = Lux.cpu_device(),
+)
+    loader = MLUtils.DataLoader(x; batchsize, shuffle = false, partial = true)
+
+    p = p |> device
+    model = model |> device
+
+    if device isa Lux.LuxCUDADevice
+        loader = CuIterator(loader)
+    end
+
+    y = ()
+    for batch in loader
+        yy = model(batch, p)
+        y = (y..., yy)
+    end
+
+    hcat(y...)
+end
+
+function eval_model(
+    model::NeuralEmbeddingModel,
+    x::Tuple,
+    p::AbstractArray;
+    batchsize = numobs(x) ÷ 100,
+    device = Lux.cpu_device(),
+)
+    loader = MLUtils.DataLoader(x; batchsize, shuffle = false, partial = true)
+
+    p = p |> device
+    model = model |> device
+
+    if device isa Lux.LuxCUDADevice
+        loader = CuIterator(loader)
+    end
+
+    y = ()
+    for batch in loader
+        yy = model(batch[1], p, batch[2])
+        yy = reshape(yy, size(yy, 1), :)
+        y = (y..., yy)
+    end
+
+    hcat(y...)
+end
+
+#======================================================#
+function p_axes(NN;
+    rng::Random.AbstractRNG = Random.default_rng(),
+)
+    p = Lux.setup(copy(rng), NN)[1]
+    p = ComponentArray(p)
+    getaxes(p)
+end
+
+#===================================================#
+function fieldplot(
+    Xdata::AbstractArray,
+    Tdata::AbstractArray,
+    Udata::AbstractArray,
+    Upred::AbstractArray, 
+    grid::Tuple,
+    outdir::String,
+    prefix::String,
+    case::Integer,
+)
+    in_dim  = size(Xdata, 1)
+    out_dim = size(Udata, 1)
+
+    linewidth = 2.0
+    palette = :tab10
+
+    for od in 1:out_dim
+        up = Upred[od, :, :]
+        ud = Udata[od, :, :]
+        nr = sum(abs2, ud) / length(ud)
+        er = (up - ud) / nr
+        er = sum(abs2, er; dims = 1) / size(ud, 1) |> vec
+
+        Nx, Nt = length(Xdata), length(Tdata)
+
+        if in_dim == 1
+            xd = vec(Xdata)
+
+            Ixplt = LinRange(1, Nx, 32) .|> Base.Fix1(round, Int)
+            Itplt = LinRange(1, Nt,  4) .|> Base.Fix1(round, Int)
+
+            # u(x, t)
+            plt = plot(;
+                title = "Ambient space evolution, case = $(case)",
+                xlabel = L"x", ylabel = L"u(x,t)", legend = false,
+            )
+            plot!(plt, xd, up[:, Itplt]; linewidth, palette)
+            scatter!(plt, xd[Ixplt], ud[Ixplt, Itplt]; w = 1, palette)
+            png(plt, joinpath(outdir, "$(prefix)_u$(od)_case$(case)"))
+
+            # e(t)
+            plt = plot(;
+                title = "Error evolution, case = $(case)",
+                xlabel = L"Time ($s$)", ylabel = L"ε(t)", legend = false,
+                yaxis = :log, ylims = (10^-9, 1.0),
+            )
+            plot!(plt, Tdata, er; linewidth, palette,)
+            png(plt, joinpath(outdir, "$(prefix)_$(od)_case$(case)"))
+
+            # anim = animate1D(Ud[:, It_data], Up[:, It_pred], vec(Xdata), Tdata[It_data];
+            #                  w = 2, xlabel, ylabel, title)
+            # gif(anim, joinpath(outdir, "train$(k).gif"); fps)
+
+        elseif in_dim == 2
+            xlabel = "x"
+            ylabel = "y"
+            zlabel = "u$(od)(x, t)"
+
+            kw = (; xlabel, ylabel, zlabel,)
+
+            x_re = reshape(Xdata[1, :], grid)
+            y_re = reshape(Xdata[2, :], grid)
+
+            upred_re = reshape(upred, out_dim, grid..., :)
+            udata_re = reshape(udata, out_dim, grid..., :)
+
+            Itplt = LinRange(1, Nt,  4) .|> Base.Fix1(round, Int)
+
+            for i in eachindex(idx_pred)
+                up_re = upred_re[:, :, i]
+                ud_re = udata_re[:, :, i]
+
+                # p1 = plot()
+                # p1 = meshplt(x_re, y_re, up_re; plt = p1, c=:black, w = 1.0, kw...,)
+                # p1 = meshplt(x_re, y_re, up_re - ud_re; plt = p1, c=:red  , w = 0.2, kw...,)
+                #
+                # p2 = meshplt(x_re, y_re, ud_re - up_re; title = "error", kw...,)
+                #
+                # png(p1, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)"))
+                # png(p2, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)_error"))
+
+                p3 = heatmap(up_re; title = "u$(od)(x, y)")
+                p4 = heatmap(up_re - ud_re; title = "u$(od)(x, y)")
+
+                png(p3, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)"))
+                png(p4, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)_error"))
+            end
+        else
+            throw(ErrorException("in_dim = $in_dim not supported."))
+        end
+
+    end
+    
+end
+
+#======================================================#
+function paramplot(
+    Tdata::AbstractArray,
+    _p::AbstractArray,
+    ps::AbstractArray, 
+    outdir::String,
+    prefix::String,
+    case::Integer,
+)
+    linewidth = 2.0
+    palette = :tab10
+
+    # parameter evolution
+
+    plt = plot(;
+        title = "Parameter evolution, case $(case)",
+        xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false,
+    )
+    plot!(plt, Tdata, ps'; linewidth, palette)
+    png(plt, joinpath(outdir, "$(prefix)_p_case$(case)"))
+
+    # parameter scatter plot
+
+    plt = plot(; title = "Parameter scatter plot, case = $case")
+    plt = make_param_scatterplot(ps, Tdata; plt,
+        color = :blues, label = "Evolution" , markerstrokewidth = 0, cbar = false)
+
+    png(plt, joinpath(outdir, "$(prefix)_p_scatter_case$(case)"))
+
+    plt = make_param_scatterplot(_p, Tdata; plt,
+        color = :reds , label = "Train data", markerstrokewidth = 0, cbar = false)
+
+    png(plt, joinpath(outdir, "$(prefix)_p_scatter_case$(case)_"))
+    
+end
+
+#======================================================#
 function make_param_scatterplot(
     p::AbstractMatrix,
     t::AbstractVector,
@@ -278,4 +484,5 @@ function make_param_scatterplot(
 
     plt
 end
+
 #======================================================#

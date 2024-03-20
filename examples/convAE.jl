@@ -1,3 +1,4 @@
+using CUDA: FUNC_ATTRIBUTE_PTX_VERSION
 #
 using GeometryLearning
 using LinearAlgebra, ComponentArrays              # arrays
@@ -188,6 +189,170 @@ function train_CAE(
 end
 
 #======================================================#
+function postprocess_CAE(
+    prob::AbstractPDEProblem,
+    datafile::String,
+    modelfile::String;
+    rng::Random.AbstractRNG = Random.default_rng(),
+    makeplot::Bool = true,
+    verbose::Bool = true,
+    fps::Int = 300,
+    device = Lux.cpu_device(),
+)
+    
+    #==============#
+    # load data
+    #==============#
+    data = jldopen(datafile)
+    Tdata = data["t"]
+    Xdata = data["x"]
+    Udata = data["u"]
+    mu = data["mu"]
+
+    close(data)
+
+    @assert ndims(Udata) ∈ (3,4,)
+    @assert Xdata isa AbstractVecOrMat
+    Xdata = Xdata isa AbstractVector ? reshape(Xdata, 1, :) : Xdata # (Dim, Npoints)
+
+    if ndims(Udata) == 3 # [Nx, Nb, Nt]
+        Udata = reshape(Udata, 1, size(Udata)...) # [out_dim, Nx, Nb, Nt]
+    end
+
+    in_dim  = size(Xdata, 1)
+    out_dim = size(Udata, 1)
+
+    mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
+    mu = isa(mu, AbstractArray) ? vec(mu) : mu
+
+    #==============#
+    # load model
+    #==============#
+    model = jldopen(modelfile)
+    NN, p, st = model["model"]
+    md = model["metadata"] # (; ū, σu, _Ib, Ib_, _It, It_, readme)
+    close(model)
+
+    #==============#
+    # train/test split
+    #==============#
+    _Udata = @view Udata[:, :, md.makedata_kws._Ib, md.makedata_kws._It] # un-normalized
+    Udata_ = @view Udata[:, :, md.makedata_kws.Ib_, md.makedata_kws.It_]
+
+    #==============#
+    # from training data
+    #==============#
+    _Ib = isa(md.makedata_kws._Ib, Colon) ? (1:size(Udata, 3)) : md.makedata_kws._Ib
+    Ib_ = isa(md.makedata_kws.Ib_, Colon) ? (1:size(Udata, 3)) : md.makedata_kws.Ib_
+
+    _It = isa(md.makedata_kws._It, Colon) ? (1:size(Udata, 4)) : md.makedata_kws._It
+    It_ = isa(md.makedata_kws.It_, Colon) ? (1:size(Udata, 4)) : md.makedata_kws.It_
+
+    displaymetadata(md)
+
+    #==============#
+    # get encoder / decoer
+    #==============#
+    encoder = NN.layers.encoder, p.encoder, st.encoder
+    encoder = GeometryLearning.remake_ca_in_model(encoder...)
+
+    decoder = NN.layers.decoder, p.decoder, st.decoder
+    decoder = GeometryLearning.remake_ca_in_model(decoder...)
+
+    grid = get_prob_grid(prob)
+
+    #==============#
+    # get _code, mse
+    #==============#
+    _udata = normalizedata(_Udata, md.ū, md.σu)
+    udata_ = normalizedata(Udata_, md.ū, md.σu)
+
+    _udataperm = permutedims(_udata, (2, 1, 3, 4))
+    udataperm_ = permutedims(udata_, (2, 1, 3, 4))
+
+    _udataresh = reshape(_udataperm, grid..., out_dim, :)
+    udataresh_ = reshape(udataperm_, grid..., out_dim, :)
+
+    _code = encoder[1](_udataresh, encoder[2], encoder[3])[1]
+    code_ = encoder[1](udataresh_, encoder[2], encoder[3])[1]
+
+    _upredresh = decoder[1](_code, decoder[2], decoder[3])[1]
+    upredresh_ = decoder[1](code_, decoder[2], decoder[3])[1]
+
+    _upredperm = reshape(_upredresh, prod(grid), out_dim, length(_Ib), length(_It))
+    upredperm_ = reshape(upredresh_, prod(grid), out_dim, length(Ib_), length(It_))
+
+    _upred = permutedims(_upredperm, (2, 1, 3, 4))
+    upred_ = permutedims(upredperm_, (2, 1, 3, 4))
+
+    _Upred = unnormalizedata(_upred, md.ū, md.σu)
+    Upred_ = unnormalizedata(upred_, md.ū, md.σu)
+
+    @show mse(_Upred, _Udata) / mse(_Udata, 0*_Udata)
+    @show mse(Upred_, Udata_) / mse(Udata_, 0*_Udata)
+
+    modeldir = dirname(modelfile)
+    jldsave(joinpath(modeldir, "train_codes"); _code, code_)
+
+    if makeplot
+        modeldir = dirname(modelfile)
+        outdir = joinpath(modeldir, "results")
+        mkpath(outdir)
+
+        # field plots
+        for case in axes(_Ib, 1)
+            Ud = _Udata[:, :, case, :]
+            Up = _Upred[:, :, case, :]
+            fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "train", case)
+        end
+
+        # parameter plots
+        _ps = reshape(_code, size(_code, 1), length(_Ib), length(_It))
+        ps_ = reshape(code_, size(code_, 1), length(Ib_), length(It_))
+
+        linewidth = 2.0
+        palette = :tab10
+        colors = (:reds, :greens, :blues,)
+        shapes = (:circle, :square, :star,)
+
+        plt = plot(; title = "Parameter scatter plot")
+
+        for case in axes(_Ib, 1)
+            _p = _ps[:, case, :]
+            plt = make_param_scatterplot(_p, Tdata; plt,
+                label = "Case $(case) (Training)", color = colors[case])
+
+            # parameter evolution plot
+            p2 = plot(;
+                title = "Trained parameter evolution, case $(case)",
+                xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false
+            )
+            plot!(p2, Tdata, _p'; linewidth, palette)
+            png(p2, joinpath(outdir, "train_p_case$(case)"))
+        end
+
+        for case in axes(Ib_, 1)
+            if case ∉ _Ib
+                _p = _ps[:, case, :]
+                plt = make_param_scatterplot(_p, Tdata; plt,
+                    label = "Case $(case) (Testing)", color = colors[case], shape = :star)
+
+                # parameter evolution plot
+                p2 = plot(;
+                    title = "Trained parameter evolution, case $(case)",
+                    xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false
+                )
+                plot!(p2, Tdata, _p'; linewidth, palette)
+                png(p2, joinpath(outdir, "test_p_case$(case)"))
+            end
+        end
+
+        png(plt, joinpath(outdir, "train_p_scatter"))
+
+    end # makeplot
+end
+
+#======================================================#
 function evolve_CAE(
     prob::AbstractPDEProblem,
     datafile::String,
@@ -301,6 +466,29 @@ function evolve_CAE(
         nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz,
         verbose, device,
     )
+
+    #==============#
+    # visualization
+    #==============#
+
+    modeldir = dirname(modelfile)
+    outdir = joinpath(modeldir, "results")
+    mkpath(outdir)
+
+    # field visualizations
+    grid = get_prob_grid(prob)
+    fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "evolve", case)
+
+    # parameter plots
+    codes = jldopen(joinpath(modeldir, "train_codes"))
+    _code = codes["_code"]
+    code_ = codes["code_"]
+    _ps = reshape(_code, size(_code, 1), :)
+    paramplot(Tdata, _ps, ps, outdir, "evolve", case)
+
+    # save files
+    filename = joinpath(outdir, "evolve$case.jld2")
+    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps)
 
     Xdata, Tdata, Ud, Up, ps
 end

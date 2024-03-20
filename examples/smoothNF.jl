@@ -458,85 +458,23 @@ function evolve_SNF(
     )
 
     #==============#
-    # save directory
+    # visualization
     #==============#
 
     modeldir = dirname(modelfile)
     outdir = joinpath(modeldir, "results")
     mkpath(outdir)
 
-    ###
-    # visualization
-    ###
+    # field visualizations
+    grid = get_prob_grid(prob)
+    fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "evolve", case)
 
-    linewidth = 2.0
-    palette = :tab10
+    # parameter plots
+    _ps = _code[2].weight # [code_len, _Nb * Nt]
+    _ps = reshape(_ps, size(_ps, 1), :)
+    paramplot(Tdata, _ps, ps, outdir, "evolve", case)
 
-    for od in 1:out_dim
-        up = Up[od, :, :]
-        ud = Ud[od, :, :]
-        nr = sum(abs2, ud) / length(ud)
-        er = (up - ud) / nr
-        er = sum(abs2, er; dims = 1) / size(ud, 1) |> vec
-
-        if in_dim == 1
-            xd = vec(Xdata)
-
-            Ixplt = LinRange(1, Nx, 32) .|> Base.Fix1(round, Int)
-            Itplt = LinRange(1, Nt,  4) .|> Base.Fix1(round, Int)
-
-            # u(x, t)
-            plt = plot(;
-                title = "Ambient space evolution, case = $(case)",
-                xlabel = L"x", ylabel = L"u(x,t)", legend = false,
-            )
-            plot!(plt, xd, up[:, Itplt]; linewidth, palette)
-            scatter!(plt, xd[Ixplt], ud[Ixplt, Itplt]; w = 1, palette)
-            png(plt, joinpath(outdir, "evolve_u$(od)_case$(case)"))
-
-            # e(t)
-            plt = plot(;
-                title = "Error evolution, case = $(case)",
-                xlabel = L"Time ($s$)", ylabel = L"ε(t)", legend = false,
-                yaxis = :log, ylims = (10^-9, 1.0),
-            )
-            plot!(plt, ts, er; linewidth, palette,)
-            png(plt, joinpath(outdir, "evolve_e$(od)_case$(case)"))
-
-        elseif in_dim == 2
-        else
-            throw(ErrorException("in_dim = $in_dim not supported."))
-        end
-
-    end
-
-    ###
-    # parameter evolution
-    ###
-    plt = plot(;
-        title = "Parameter evolution, case $(case)",
-        xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false,
-    )
-    plot!(plt, ts, ps'; linewidth, palette)
-    png(plt, joinpath(outdir, "evolve_p_case$(case)"))
-
-    ###
-    # parameter scatter plot
-    ###
-
-    _p = _code[2].weight # [code_len, K]
-
-    plt = plot(; title = "Parameter scatter plot, case = $case")
-    plt = make_param_scatterplot(ps, ts; plt,
-        color = :blues, label = "Evolution" , markerstrokewidth = 0, cbar = false)
-
-    png(plt, joinpath(outdir, "evolve_p_scatter_case$(case)"))
-
-    plt = make_param_scatterplot(_p, Tdata; plt,
-        color = :reds , label = "Train data", markerstrokewidth = 0, cbar = false)
-
-    png(plt, joinpath(outdir, "evolve_p_scatter_case$(case)_"))
-
+    # save files
     filename = joinpath(outdir, "evolve$case.jld2")
     jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps)
 
@@ -630,87 +568,18 @@ function postprocess_SNF(
 
     @show mse(_Upred, _Udata) / mse(_Udata, 0*_Udata)
 
+    grid = get_prob_grid(prob)
+
     if makeplot
 
-        for k in axes(_Ib, 1)
-            _mu = mu[_Ib[k]]
-            title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+        # field plots
+        for case in axes(_Ib, 1)
+            Ud = _Udata[:, :, case, :]
+            Up = _Upred[:, :, case, :]
+            fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "train", case)
+        end
 
-            Ud = @view _Udata[:, :, k, :]
-            Up = @view _Upred[:, :, k, :]
-
-            # time-indices
-            idx_data = LinRange(1, size(Ud, 3), 4) .|> Base.Fix1(round, Int)
-            idx_pred = LinRange(1, size(Up, 3), 4) .|> Base.Fix1(round, Int)
-
-            for od in 1:out_dim
-                upred = Up[od, :, idx_pred]
-                udata = Ud[od, :, idx_data]
-
-                if in_dim == 1
-                    xlabel = "x"
-                    ylabel = "u$(od)(x, t)"
-
-                    xdata = vec(Xdata)
-                    Iplot = 1:8:Nx
-
-                    plt = plot(; xlabel, ylabel, legend = false)
-                    plot!(plt, xdata, upred, w = 2, palette = :tab10)
-                    scatter!(plt, xdata[Iplot], udata[Iplot, :], w = 1, palette = :tab10)
-                    png(plt, joinpath(outdir, "train_u$(od)_k$(k)"))
-
-                    It_data = LinRange(1, size(Ud, 2), 100) .|> Base.Fix1(round, Int)
-                    It_pred = LinRange(1, size(Up, 2), 100) .|> Base.Fix1(round, Int)
-
-                    # anim = animate1D(Ud[:, It_data], Up[:, It_pred], vec(Xdata), Tdata[It_data];
-                    #                  w = 2, xlabel, ylabel, title)
-                    # gif(anim, joinpath(outdir, "train$(k).gif"); fps)
-
-                    display(plt)
-
-                elseif in_dim == 2
-                    xlabel = "x"
-                    ylabel = "y"
-                    zlabel = "u$(od)(x, t)"
-
-                    kw = (; xlabel, ylabel, zlabel,)
-
-                    x_re = reshape(Xdata[1, :], md_data.Nx, md_data.Ny)
-                    y_re = reshape(Xdata[2, :], md_data.Nx, md_data.Ny)
-
-                    upred_re = reshape(upred, md_data.Nx, md_data.Ny, :)
-                    udata_re = reshape(udata, md_data.Nx, md_data.Ny, :)
-
-                    for i in eachindex(idx_pred)
-                        up_re = upred_re[:, :, i]
-                        ud_re = udata_re[:, :, i]
-
-                        # p1 = plot()
-                        # p1 = meshplt(x_re, y_re, up_re; plt = p1, c=:black, w = 1.0, kw...,)
-                        # p1 = meshplt(x_re, y_re, up_re - ud_re; plt = p1, c=:red  , w = 0.2, kw...,)
-                        #
-                        # p2 = meshplt(x_re, y_re, ud_re - up_re; title = "error", kw...,)
-                        #
-                        # png(p1, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)"))
-                        # png(p2, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)_error"))
-
-                        p3 = heatmap(up_re; title = "u$(od)(x, y)")
-                        p4 = heatmap(up_re - ud_re; title = "u$(od)(x, y)")
-
-                        png(p3, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)"))
-                        png(p4, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)_error"))
-                    end
-
-                    # anim = animate2D(udata_re, upred_re, x_re, y_re, Tdata[idx_data])
-                    # gif(anim, joinpath(outdir, "train_u$(od)_$(k).gif"); fps)
-
-                end # in_dim
-            end # out_dim
-        end # k ∈ _Ib
-
-        ###
-        # parameter evolution, scatter plots
-        ###
+        # parameter plots
         decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
         _ps = _code[2].weight # [code_len, _Nb * Nt]
         _ps = reshape(_ps, size(_ps, 1), length(_Ib), length(_It))
@@ -873,79 +742,7 @@ function postprocess_SNF(
     nothing
 end
 
-#======================================================#
-function displaymetadata(metadata::NamedTuple)
-    println("METADATA:")
-    println("ū, σu: $(metadata.ū), $(metadata.σu)")
-    println("x̄, σx: $(metadata.x̄), $(metadata.σx)")
-    println("Model README: ", metadata.readme)
-    println("Data-metadata: ", metadata.md_data)
-    println("train_args: ", metadata.train_args)
-    println("Nx, _Ncodes, Ncodes_: $(metadata.Nx), $(metadata._Ns), $(metadata.Ns_)")
-    nothing
-end
-
 #===========================================================#
-function eval_model(
-    model::GeometryLearning.AbstractNeuralModel,
-    x::AbstractArray,
-    p::AbstractArray;
-    batchsize = numobs(x) ÷ 100,
-    device = Lux.cpu_device(),
-)
-    loader = MLUtils.DataLoader(x; batchsize, shuffle = false, partial = true)
-
-    p = p |> device
-    model = model |> device
-
-    if device isa Lux.LuxCUDADevice
-        loader = CuIterator(loader)
-    end
-
-    y = ()
-    for batch in loader
-        yy = model(batch, p)
-        y = (y..., yy)
-    end
-
-    hcat(y...)
-end
-
-function eval_model(
-    model::NeuralEmbeddingModel,
-    x::Tuple,
-    p::AbstractArray;
-    batchsize = numobs(x) ÷ 100,
-    device = Lux.cpu_device(),
-)
-    loader = MLUtils.DataLoader(x; batchsize, shuffle = false, partial = true)
-
-    p = p |> device
-    model = model |> device
-
-    if device isa Lux.LuxCUDADevice
-        loader = CuIterator(loader)
-    end
-
-    y = ()
-    for batch in loader
-        yy = model(batch[1], p, batch[2])
-        yy = reshape(yy, size(yy, 1), :)
-        y = (y..., yy)
-    end
-
-    hcat(y...)
-end
-
-#===========================================================#
-function p_axes(NN;
-    rng::Random.AbstractRNG = Random.default_rng(),
-)
-    p = Lux.setup(copy(rng), NN)[1]
-    p = ComponentArray(p)
-    getaxes(p)
-end
-
 function decoder_indices(NN;
     rng::Random.AbstractRNG = Random.default_rng(),
 )
