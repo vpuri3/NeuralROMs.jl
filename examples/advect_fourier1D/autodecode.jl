@@ -34,10 +34,13 @@ case = 1
 # )
 
 ## process
-# outdir = joinpath(modeldir, "results")
-# postprocess_autodecoder(prob, datafile, modelfile, outdir; rng, device,
-#     makeplot = true, verbose = true)
-x, t, up, ud, _ = evolve_SNF(prob, datafile, modelfile, case; rng, device)
+postprocess_SNF(prob, datafile, modelfile; rng, device)
+x, t, up, ud, _ = evolve_SNF(prob, datafile, modelfile, case;
+    rng, device, zeroinit = false, learn_ic = false,
+)
+
+@show sqrt(mse(up, ud) / mse(ud, 0 * ud))
+@show norm(up - ud, Inf) / sqrt(mse(ud, 0 * ud))
 #======================================================#
 # ## train (5x less snapshots)
 # E = 1400

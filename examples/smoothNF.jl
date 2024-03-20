@@ -7,7 +7,6 @@ using LinearSolve, NonlinearSolve, LineSearches   # num
 using Plots, JLD2                                 # vis / save
 using CUDA, LuxCUDA, KernelAbstractions           # GPU
 using LaTeXStrings
-using TSne
 
 CUDA.allowscalar(false)
 
@@ -351,7 +350,9 @@ function evolve_SNF(
     autodiff_xyz::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ_xyz::Union{Real, Nothing} = nothing,
 
+    learn_ic::Bool = true,
     zeroinit::Bool = false,
+
     verbose::Bool = true,
     device = Lux.cpu_device(),
 )
@@ -452,6 +453,7 @@ function evolve_SNF(
     @time ts, ps, Up = evolve_model(
         prob, model, timealg, scheme, data, p0, Δt;
         nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz,
+        learn_ic,
         verbose, device,
     )
 
@@ -506,42 +508,34 @@ function evolve_SNF(
             throw(ErrorException("in_dim = $in_dim not supported."))
         end
 
-        ###
-        # parameter evolution
-        ###
-        plt = plot(;
-                   title = "Parameter evolution, case $(case)",
-                   xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false
-                   )
-        plot!(plt, ts, ps'; linewidth, palette)
-        png(plt, joinpath(outdir, "evolve_p$(od)_case$(case)"))
     end
+
+    ###
+    # parameter evolution
+    ###
+    plt = plot(;
+        title = "Parameter evolution, case $(case)",
+        xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false,
+    )
+    plot!(plt, ts, ps'; linewidth, palette)
+    png(plt, joinpath(outdir, "evolve_p_case$(case)"))
 
     ###
     # parameter scatter plot
     ###
 
+    _p = _code[2].weight # [code_len, K]
+
     plt = plot(; title = "Parameter scatter plot, case = $case")
+    plt = make_param_scatterplot(ps, ts; plt,
+        color = :blues, label = "Evolution" , markerstrokewidth = 0, cbar = false)
 
-    kw_scatter = (;
-        color = :blues,
-        zcolor = ts,
-        label = nothing,
-        markerstrokewidth = 0,
-    )
+    png(plt, joinpath(outdir, "evolve_p_scatter_case$(case)"))
 
-    if size(ps, 1) == 1
-        scatter!(plt, vec(ps); kw_scatter...)
-    elseif size(ps, 1) == 2
-        scatter!(plt, ps[1,:], ps[2,:]; kw_scatter...)
-    elseif size(ps, 1) == 3
-        scatter!(plt, ps[1,:], ps[2,:], ps[3,:]; kw_scatter...)
-    else
-        _ps = tsne(ps', 2)'
-        scatter!(plt, _ps[1,:], _ps[2,:]; kw_scatter...)
-    end
+    plt = make_param_scatterplot(_p, Tdata; plt,
+        color = :reds , label = "Train data", markerstrokewidth = 0, cbar = false)
 
-    png(plt, joinpath(outdir, "p_scatter_case$(case)"))
+    png(plt, joinpath(outdir, "evolve_p_scatter_case$(case)_"))
 
     filename = joinpath(outdir, "evolve$case.jld2")
     jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps)
@@ -553,13 +547,12 @@ end
 function postprocess_SNF(
     prob::AbstractPDEProblem,
     datafile::String,
-    modelfile::String,
-    outdir::String;
+    modelfile::String;
     rng::Random.AbstractRNG = Random.default_rng(),
-    device = Lux.cpu_device(),
     makeplot::Bool = true,
     verbose::Bool = true,
     fps::Int = 300,
+    device = Lux.cpu_device(),
 )
 
     #==============#
@@ -597,6 +590,8 @@ function postprocess_SNF(
     close(model)
 
     #==============#
+    modeldir = dirname(modelfile)
+    outdir = joinpath(modeldir, "results")
     mkpath(outdir)
     #==============#
 
@@ -636,8 +631,8 @@ function postprocess_SNF(
     @show mse(_Upred, _Udata) / mse(_Udata, 0*_Udata)
 
     if makeplot
-        for k in axes(_Ib, 1)
 
+        for k in axes(_Ib, 1)
             _mu = mu[_Ib[k]]
             title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
 
@@ -712,6 +707,37 @@ function postprocess_SNF(
                 end # in_dim
             end # out_dim
         end # k ∈ _Ib
+
+        ###
+        # parameter evolution, scatter plots
+        ###
+        decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+        _ps = _code[2].weight # [code_len, _Nb * Nt]
+        _ps = reshape(_ps, size(_ps, 1), length(_Ib), length(_It))
+
+        linewidth = 2.0
+        palette = :tab10
+        colors = (:reds, :greens, :blues,)
+        shapes = (:circle, :square, :star,)
+
+        plt = plot(; title = "Parameter scatter plot")
+
+        for case in axes(_Ib, 1)
+            _p = _ps[:, case, :]
+            plt = make_param_scatterplot(_p, Tdata; plt,
+                label = "Case $(case)", color = colors[case])
+
+            # parameter evolution plot
+            p2 = plot(;
+                title = "Trained parameter evolution, case $(case)",
+                xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false
+            )
+            plot!(p2, Tdata, _p'; linewidth, palette)
+            png(p2, joinpath(outdir, "train_p_case$(case)"))
+        end
+
+        png(plt, joinpath(outdir, "train_p_scatter"))
+
     end # makeplot
 
     #==============#
@@ -720,12 +746,12 @@ function postprocess_SNF(
 
     # # get decoder
     # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-    #
+
     # # make model
     # p0 = _code[2].weight[:, 1]
     # NN, p0, st = freeze_autodecoder(decoder, p0; rng)
     # model = NeuralEmbeddingModel(NN, st, Xdata, md)
-    #
+
     # # make data tuple
     # case = 1
     # Ud = Udata[:, :, case, :]
@@ -734,7 +760,7 @@ function postprocess_SNF(
     # learn_init = false
     # learn_init = true
     # ps, Up, Ls = infer_SNF(model, data, p0; device, verbose, learn_init)
-    #
+
     # plt = plot(Xdata[1,:], Ud[1,:,begin], w = 4, c = :black, label = nothing)
     # plot!(plt, Xdata[1,:], Up[1,:,begin], w = 4, c = :red  , label = nothing)
     # plot!(plt, Xdata[1,:], Ud[1,:,end  ], w = 4, c = :black, label = "data")
@@ -747,143 +773,92 @@ function postprocess_SNF(
     
     # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     # p0 = _code[2].weight[:, 1]
-    #
-    # for k in axes(mu)[1]
-    #     Ud = Udata[:, k, :]
-    #     data = (Xdata, Ud, Tdata)
-    #     @time _, Up, Tpred = evolve_autodecoder(prob, decoder, md, data, p0;
-    #         rng, device, verbose)
-    #
-    #     if makeplot
-    #         if in_dim == 1
-    #             xlabel = "x"
-    #             ylabel = "u(x, t)"
-    #
-    #             _mu   = mu[k]
-    #             title = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
-    #             _name = k in _Ib ? "evolve_train$(k)" : "evolve_test$(k)"
-    #
-    #             plt = plot(; title, xlabel, ylabel, legend = false)
-    #             plot!(plt, Xdata, Up[:, idx], w = 2.0,  s = :solid)
-    #             plot!(plt, Xdata, Ud[:, idx], w = 4.0,  s = :dash)
-    #             png(plt, joinpath(outdir, _name))
-    #             display(plt)
-    #
-    #             anim = animate1D(Ud, Up, Xdata, Tdata;
-    #                              w = 2, xlabel, ylabel, title)
-    #             gif(anim, joinpath(outdir, "$(_name).gif"); fps)
-    #
-    #         elseif in_dim == 2
-    #             xlabel = "x"
-    #             ylabel = "y"
-    #             zlabel = "u(x, t)"
-    #
-    #             kw = (; xlabel, ylabel, zlabel,)
-    #
-    #             x_re = reshape(Xdata[1, :], md_data.Nx, md_data.Ny)
-    #             y_re = reshape(Xdata[2, :], md_data.Nx, md_data.Ny)
-    #
-    #             for i in eachindex(idx_pred)
-    #                 upred_re = reshape(upred[:, i], md_data.Nx, md_data.Ny)
-    #                 udata_re = reshape(udata[:, i], md_data.Nx, md_data.Ny)
-    #
-    #                 p1 = meshplt(x_re, y_re, upred_re;
-    #                     title, kw...,)
-    #                 png(p1, joinpath(outdir, "train_$(k)_time_$(i)"))
-    #
-    #                 p2 = meshplt(x_re, y_re, upred_re - udata_re;
-    #                     title = "error", kw...,)
-    #                 png(p2, joinpath(outdir, "train_$(k)_time_$(i)_error"))
-    #             end
-    #         end
-    #     end
-    # end
 
     #==============#
     # check derivative
     #==============#
-    begin
-        decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-        ncodes = size(_code[2].weight, 2)
-        idx = LinRange(1, ncodes, 4) .|> Base.Fix1(round, Int)
-    
-        for i in idx
-            p0 = _code[2].weight[:, i]
-    
-            if in_dim == 1
-    
-                ###
-                # AutoFiniteDiff
-                ###
-    
-                # ϵ  = 1f-2
-                #
-                # plt = plot_derivatives1D_autodecoder(
-                #     decoder, vec(Xdata), p0, md;
-                #     second_derv = false, third_derv = false, fourth_derv = false,
-                #     autodiff = AutoFiniteDiff(), ϵ,
-                # )
-                # png(plt, joinpath(outdir, "dudx1_$(i)_FIN_AD"))
-                #
-                # plt = plot_derivatives1D_autodecoder(
-                #     decoder, vec(Xdata), p0, md;
-                #     second_derv = true, third_derv = false, fourth_derv = false,
-                #     autodiff = AutoFiniteDiff(), ϵ,
-                # )
-                # png(plt, joinpath(outdir, "dudx2_$(i)_FIN_AD"))
-                #
-                # plt = plot_derivatives1D_autodecoder(
-                #     decoder, vec(Xdata), p0, md;
-                #     second_derv = false, third_derv = true, fourth_derv = false,
-                #     autodiff = AutoFiniteDiff(), ϵ,
-                # )
-                # png(plt, joinpath(outdir, "dudx3_$(i)_FIN_AD"))
-                #
-                # plt = plot_derivatives1D_autodecoder(
-                #     decoder, vec(Xdata), p0, md;
-                #     second_derv = false, third_derv = false, fourth_derv = true,
-                #     autodiff = AutoFiniteDiff(), ϵ,
-                # )
-                # png(plt, joinpath(outdir, "dudx4_$(i)_FIN_AD"))
-    
-                ###
-                # AutoForwardDiff
-                ###
-    
-                plt = plot_derivatives1D_autodecoder(
-                    decoder, vec(Xdata), p0, md;
-                    second_derv = false, third_derv = false, fourth_derv = false,
-                    autodiff = AutoForwardDiff(),
-                )
-                png(plt, joinpath(outdir, "dudx1_$(i)_FWD_AD"))
-    
-                plt = plot_derivatives1D_autodecoder(
-                    decoder, vec(Xdata), p0, md;
-                    second_derv = true, third_derv = false, fourth_derv = false,
-                    autodiff = AutoForwardDiff(),
-                )
-                png(plt, joinpath(outdir, "dudx2_$(i)_FWD_AD"))
-    
-                plt = plot_derivatives1D_autodecoder(
-                    decoder, vec(Xdata), p0, md;
-                    second_derv = false, third_derv = true, fourth_derv = false,
-                    autodiff = AutoForwardDiff(),
-                )
-                png(plt, joinpath(outdir, "dudx3_$(i)_FWD_AD"))
-    
-                plt = plot_derivatives1D_autodecoder(
-                    decoder, vec(Xdata), p0, md;
-                    second_derv = false, third_derv = false, fourth_derv = true,
-                    autodiff = AutoForwardDiff(),
-                )
-                png(plt, joinpath(outdir, "dudx4_$(i)_FWD_AD"))
-    
-            elseif in_dim == 2
-    
-            end # in-dim
-    
-        end
-    end
+    # begin
+    #     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    #     ncodes = size(_code[2].weight, 2)
+    #     idx = LinRange(1, ncodes, 4) .|> Base.Fix1(round, Int)
+    #
+    #     for i in idx
+    #         p0 = _code[2].weight[:, i]
+    #
+    #         if in_dim == 1
+    #
+    #             ###
+    #             # AutoFiniteDiff
+    #             ###
+    #
+    #             # ϵ  = 1f-2
+    #             #
+    #             # plt = plot_derivatives1D_autodecoder(
+    #             #     decoder, vec(Xdata), p0, md;
+    #             #     second_derv = false, third_derv = false, fourth_derv = false,
+    #             #     autodiff = AutoFiniteDiff(), ϵ,
+    #             # )
+    #             # png(plt, joinpath(outdir, "dudx1_$(i)_FIN_AD"))
+    #             #
+    #             # plt = plot_derivatives1D_autodecoder(
+    #             #     decoder, vec(Xdata), p0, md;
+    #             #     second_derv = true, third_derv = false, fourth_derv = false,
+    #             #     autodiff = AutoFiniteDiff(), ϵ,
+    #             # )
+    #             # png(plt, joinpath(outdir, "dudx2_$(i)_FIN_AD"))
+    #             #
+    #             # plt = plot_derivatives1D_autodecoder(
+    #             #     decoder, vec(Xdata), p0, md;
+    #             #     second_derv = false, third_derv = true, fourth_derv = false,
+    #             #     autodiff = AutoFiniteDiff(), ϵ,
+    #             # )
+    #             # png(plt, joinpath(outdir, "dudx3_$(i)_FIN_AD"))
+    #             #
+    #             # plt = plot_derivatives1D_autodecoder(
+    #             #     decoder, vec(Xdata), p0, md;
+    #             #     second_derv = false, third_derv = false, fourth_derv = true,
+    #             #     autodiff = AutoFiniteDiff(), ϵ,
+    #             # )
+    #             # png(plt, joinpath(outdir, "dudx4_$(i)_FIN_AD"))
+    #
+    #             ###
+    #             # AutoForwardDiff
+    #             ###
+    #
+    #             plt = plot_derivatives1D_autodecoder(
+    #                 decoder, vec(Xdata), p0, md;
+    #                 second_derv = false, third_derv = false, fourth_derv = false,
+    #                 autodiff = AutoForwardDiff(),
+    #             )
+    #             png(plt, joinpath(outdir, "dudx1_$(i)_FWD_AD"))
+    #
+    #             plt = plot_derivatives1D_autodecoder(
+    #                 decoder, vec(Xdata), p0, md;
+    #                 second_derv = true, third_derv = false, fourth_derv = false,
+    #                 autodiff = AutoForwardDiff(),
+    #             )
+    #             png(plt, joinpath(outdir, "dudx2_$(i)_FWD_AD"))
+    #
+    #             plt = plot_derivatives1D_autodecoder(
+    #                 decoder, vec(Xdata), p0, md;
+    #                 second_derv = false, third_derv = true, fourth_derv = false,
+    #                 autodiff = AutoForwardDiff(),
+    #             )
+    #             png(plt, joinpath(outdir, "dudx3_$(i)_FWD_AD"))
+    #
+    #             plt = plot_derivatives1D_autodecoder(
+    #                 decoder, vec(Xdata), p0, md;
+    #                 second_derv = false, third_derv = false, fourth_derv = true,
+    #                 autodiff = AutoForwardDiff(),
+    #             )
+    #             png(plt, joinpath(outdir, "dudx4_$(i)_FWD_AD"))
+    #
+    #         elseif in_dim == 2
+    #
+    #         end # in-dim
+    #
+    #     end
+    # end
 
     #==============#
     # Done

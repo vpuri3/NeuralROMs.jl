@@ -143,6 +143,17 @@ function freeze_autodecoder(
     
     NN, p, st
 end
+#======================================================#
+
+"""
+    PeriodicLayer
+
+Enforces that input is treated as periodic between [-1, 1).
+"""
+@concrete struct PeriodicLayer <: Lux.AbstractExplicitLayer end
+
+# Lux.initialstates()
+# Lux.initialparameters()
 
 #======================================================#
 # Variational AutoDecoder
@@ -152,7 +163,7 @@ end
 
 Assumes input is `(xyz, idx)` of sizes `[in_dim, K]`, `[1, K]` respectively
 """
-function VariationalAutoDecoder(
+function VariationalDecoder(
     decoder::Lux.AbstractExplicitLayer,
     num_batches::Int,
     code_len::Int;
@@ -161,29 +172,16 @@ function VariationalAutoDecoder(
     EmbeddingType::Type{<:Lux.AbstractExplicitLayer} = Lux.Embedding
 )
 
-    code = if isnothing(code)
-        if isone(num_batches)
-            EmbeddingType(num_batches => code_len; init_weight)
-            # OneEmbedding(code_len; init_weight)
-        else
-            Embedding(num_batches => code_len; init_weight)
-        end
-    else
-        code
-    end
-
-    noop = NoOpLayer()
-
-    codex = Chain(;
-        vec = WrappedFunction(vec),
-        code = code,
-    )
-
-    Chain(;
-        assem   = Parallel(vcat; noop, codex), # [D+L, K] (x, code)
-        decoder = decoder,                     # [out, K] (out)
-    )
 end
+
+# struct VariationalDecoder <: Lux.AbstractExplicitLayer
+# end
+
+struct VariationalReparameterization <: Lux.AbstractExplicitLayer
+end
+
+# Lux.initialstates()
+# Lux.initialparameters()
 
 function vae_addrand(μ::AbstractArray, σ::Union{Number, AbstractArray})
     T = eltype(μ)

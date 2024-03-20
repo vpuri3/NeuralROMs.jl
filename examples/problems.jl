@@ -1,4 +1,6 @@
 #
+using Plots
+using TSne
 #======================================================#
 function get_prob_grid(prob::GeometryLearning.AbstractPDEProblem)
     if prob isa Advection1D
@@ -253,4 +255,27 @@ function convINR_network(
     end
 end
 
+#======================================================#
+function make_param_scatterplot(
+    p::AbstractMatrix,
+    t::AbstractVector,
+    ; plt = plot(),
+    kw...
+)
+    @assert size(p, 2) == length(t)
+
+    kw = (; kw..., zcolor = t,)
+
+    if size(p, 1) == 1
+        scatter!(plt, vec(p); kw...,)
+    elseif size(p, 1) == 2
+        scatter!(plt, p[1,:], p[2,:]; kw...,)
+    elseif size(p, 1) == 3
+        scatter!(plt, p[1,:], p[2,:], p[3,:]; kw...,)
+    else
+        # do TSNE
+    end
+
+    plt
+end
 #======================================================#
