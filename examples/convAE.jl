@@ -288,8 +288,8 @@ function postprocess_CAE(
     _Upred = unnormalizedata(_upred, md.ū, md.σu)
     Upred_ = unnormalizedata(upred_, md.ū, md.σu)
 
-    @show mse(_Upred, _Udata) / mse(_Udata, 0*_Udata)
-    @show mse(Upred_, Udata_) / mse(Udata_, 0*_Udata)
+    @show mse(_Upred, _Udata) / mse(_Udata, 0 * _Udata)
+    @show mse(Upred_, Udata_) / mse(Udata_, 0 * Udata_)
 
     modeldir = dirname(modelfile)
     jldsave(joinpath(modeldir, "train_codes"); _code, code_)

@@ -37,7 +37,9 @@ function burgers1d_train_DCAE(
     NN = cae_network(prob, l, w, act)
 
     isdir(modeldir) && rm(modeldir, recursive = true)
-    train_CAE(datafile, modeldir, NN, E; rng, warmup = false, device)
+    train_CAE(datafile, modeldir, NN, E; rng,
+        makedata_kws, warmup = false, device
+    )
 end
 
 function burgers1d_train_CINR(
@@ -56,7 +58,7 @@ function burgers1d_train_CINR(
 
     isdir(modeldir) && rm(modeldir, recursive = true)
     train_CINR(datafile, modeldir, NN, E; rng,
-        warmup = true, makedata_kws, device,
+        makedata_kws, warmup = true, device,
     )
 end
 
@@ -139,11 +141,11 @@ modeldir_PCA2 = joinpath(@__DIR__, "model_PCA_l_$(ll2)")
 # train_PCA(datafile, modeldir_PCA2, l2; makedata_kws, device)
 
 #==================#
-# evolve
+# postprocess
 #==================#
 
 modelfile_DCAE = joinpath(modeldir_DCAE, "model_07.jld2")
-# modelfile_CINR = joinpath(modeldir_CINR, "model_08.jld2")
+modelfile_CINR = joinpath(modeldir_CINR, "model_07.jld2")
 modelfile_SNFW = joinpath(modeldir_SNFW, "model_08.jld2")
 modelfile_SNFL = joinpath(modeldir_SNFL, "model_08.jld2")
 #
@@ -151,11 +153,19 @@ modelfile_PCA0 = joinpath(modeldir_PCA0, "model.jld2")
 modelfile_PCA1 = joinpath(modeldir_PCA1, "model.jld2")
 modelfile_PCA2 = joinpath(modeldir_PCA2, "model.jld2")
 
-# x0, t0, ud0, up0, _ = evolve_CAE( prob, datafile, modelfile_DCAE, case; rng,) # CPU
-# # x1, t1, ud1, up1, _ = evolve_CINR(prob, datafile, modelfile_CINR, case; rng, device)
+postprocess_CAE(prob, datafile, modelfile_DCAE)
+postprocess_SNF(prob, datafile, modelfile_SNFW)
+postprocess_SNF(prob, datafile, modelfile_SNFL)
+
+#==================#
+# evolve
+#==================#
+
+x0, t0, ud0, up0, _ = evolve_CAE( prob, datafile, modelfile_DCAE, case; rng,) # CPU
+# x1, t1, ud1, up1, _ = evolve_CINR(prob, datafile, modelfile_CINR, case; rng, device)
 x2, t2, ud2, up2, _ = evolve_SNF( prob, datafile, modelfile_SNFW, case; rng, device)
 x3, t3, ud3, up3, _ = evolve_SNF( prob, datafile, modelfile_SNFL, case; rng, device)
-# #
+#
 # x4, t4, ud4, up4, _ = evolve_PCA( prob, datafile, modelfile_PCA0, case; rng, device)
 # x5, t5, ud5, up5, _ = evolve_PCA( prob, datafile, modelfile_PCA1, case; rng, device)
 # x6, t6, ud6, up6, _ = evolve_PCA( prob, datafile, modelfile_PCA2, case; rng, device)

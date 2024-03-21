@@ -3,6 +3,7 @@ using GeometryLearning
 using Plots, TSne, LaTeXStrings
 
 #======================================================#
+
 function get_prob_grid(prob::GeometryLearning.AbstractPDEProblem)
     if prob isa Advection1D
         (128,)

@@ -144,6 +144,12 @@ function freeze_autodecoder(
     NN, p, st
 end
 #======================================================#
+# 
+#======================================================#
+
+#======================================================#
+# Periodic Layer
+#======================================================#
 
 """
     PeriodicLayer
@@ -257,6 +263,7 @@ end
 #======================================================#
 # Hyper Network
 #======================================================#
+
 struct HyperNet{W <: Lux.AbstractExplicitLayer, C <: Lux.AbstractExplicitLayer, A} <:
        Lux.AbstractExplicitContainerLayer{(:weight_generator, :evaluator)}
     weight_generator::W

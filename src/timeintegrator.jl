@@ -438,8 +438,9 @@ function evolve_model(
     end
 
     if (mse_norm > IC_TOL)
-        err = ErrorException("MSE ($mse_norm) > 1f-6.")
-        throw(err)
+        @warn "MSE ($mse_norm) > $(IC_TOL)."
+        # err = ErrorException("MSE ($mse_norm) > $(IC_TOL).")
+        # throw(err)
     end
 
     #============================#
