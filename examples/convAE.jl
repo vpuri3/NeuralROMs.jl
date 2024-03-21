@@ -1,4 +1,3 @@
-using CUDA: FUNC_ATTRIBUTE_PTX_VERSION
 #
 using GeometryLearning
 using LinearAlgebra, ComponentArrays              # arrays
@@ -199,39 +198,14 @@ function postprocess_CAE(
     fps::Int = 300,
     device = Lux.cpu_device(),
 )
-    
-    #==============#
     # load data
-    #==============#
-    data = jldopen(datafile)
-    Tdata = data["t"]
-    Xdata = data["x"]
-    Udata = data["u"]
-    mu = data["mu"]
+    Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
 
-    close(data)
-
-    @assert ndims(Udata) ∈ (3,4,)
-    @assert Xdata isa AbstractVecOrMat
-    Xdata = Xdata isa AbstractVector ? reshape(Xdata, 1, :) : Xdata # (Dim, Npoints)
-
-    if ndims(Udata) == 3 # [Nx, Nb, Nt]
-        Udata = reshape(Udata, 1, size(Udata)...) # [out_dim, Nx, Nb, Nt]
-    end
+    # load model
+    (NN, p, st), md = loadmodel(modelfile)
 
     in_dim  = size(Xdata, 1)
     out_dim = size(Udata, 1)
-
-    mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
-    mu = isa(mu, AbstractArray) ? vec(mu) : mu
-
-    #==============#
-    # load model
-    #==============#
-    model = jldopen(modelfile)
-    NN, p, st = model["model"]
-    md = model["metadata"] # (; ū, σu, _Ib, Ib_, _It, It_, readme)
-    close(model)
 
     #==============#
     # train/test split
@@ -262,7 +236,7 @@ function postprocess_CAE(
     grid = get_prob_grid(prob)
 
     #==============#
-    # get _code, mse
+    # evaluate model
     #==============#
     _udata = normalizedata(_Udata, md.ū, md.σu)
     udata_ = normalizedata(Udata_, md.ū, md.σu)

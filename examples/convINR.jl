@@ -301,14 +301,14 @@ function evolve_CINR(
     #==============#
     # freeze decoder weights
     #==============#
-    decoder = freeze_autodecoder(decoder, p0; rng)
+    decoder = freeze_decoder(decoder, length(p0); rng, p0)
     p0 = ComponentArray(p0, getaxes(decoder[2]))
 
     #==============#
     # make model
     #==============#
     grid = get_prob_grid(prob)
-    model = INRModel(decoder[1], decoder[3], Xdata, grid, md)
+    model = INRModel(decoder[1], decoder[3], grid, md)
 
     #==============#
     # evolve

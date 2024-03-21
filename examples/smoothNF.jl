@@ -356,39 +356,11 @@ function evolve_SNF(
     verbose::Bool = true,
     device = Lux.cpu_device(),
 )
-
-    #==============#
     # load data
-    #==============#
-    data = jldopen(datafile)
-    Tdata = data["t"]
-    Xdata = data["x"]
-    Udata = data["u"]
-    mu = data["mu"]
+    Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
 
-    close(data)
-
-    @assert ndims(Udata) ∈ (3,4,)
-    @assert Xdata isa AbstractVecOrMat
-    Xdata = Xdata isa AbstractVector ? reshape(Xdata, 1, :) : Xdata # (Dim, Npoints)
-
-    if ndims(Udata) == 3 # [Nx, Nb, Nt]
-        Udata = reshape(Udata, 1, size(Udata)...) # [out_dim, Nx, Nb, Nt]
-    end
-
-    in_dim  = size(Xdata, 1)
-    out_dim = size(Udata, 1)
-
-    mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
-    mu = isa(mu, AbstractArray) ? vec(mu) : mu
-
-    #==============#
     # load model
-    #==============#
-    model = jldopen(modelfile)
-    NN, p, st = model["model"]
-    md = model["metadata"]
-    close(model)
+    (NN, p, st), md = loadmodel(modelfile)
 
     #==============#
     # subsample in space
@@ -417,8 +389,9 @@ function evolve_SNF(
     #==============#
 
     p0 = _code[2].weight[:, 1]
-    NN, p0, st = freeze_autodecoder(decoder, p0; rng)
-    model = NeuralEmbeddingModel(NN, st, Xdata, md)
+
+    NN, p0, st = freeze_decoder(decoder, length(p0); rng, p0)
+    model = NeuralModel(NN, st, md)
 
     if zeroinit
         p0 *= 0
@@ -428,13 +401,6 @@ function evolve_SNF(
     #==============#
     # evolve
     #==============#
-
-    ### WORKS
-    # # device = Lux.cpu_device()
-    # linsolve = QRFactorization()
-    # autodiff = AutoForwardDiff()
-    # nlssolve = LevenbergMarquardt(;autodiff, linsolve)
-    # nlsmaxiters = 20
 
     # optimizer
     autodiff = AutoForwardDiff()
@@ -562,8 +528,7 @@ function postprocess_SNF(
     _xdata, _Icode = _data[1]
     _xdata = unnormalizedata(_xdata, md.x̄, md.σx)
 
-    model  = NeuralEmbeddingModel(NN, st, md, _Icode)
-    _Upred = eval_model(model, (_xdata, _Icode), p; device) |> cpu_device()
+    _Upred = eval_model((NN, p, st), (_xdata, _Icode), p; device) |> cpu_device()
     _Upred = reshape(_Upred, out_dim, Nx, length(_Ib), length(_It))
 
     @show mse(_Upred, _Udata) / mse(_Udata, 0*_Udata)
@@ -618,14 +583,14 @@ function postprocess_SNF(
 
     # # make model
     # p0 = _code[2].weight[:, 1]
-    # NN, p0, st = freeze_autodecoder(decoder, p0; rng)
-    # model = NeuralEmbeddingModel(NN, st, Xdata, md)
+    # NN, p0, st = freeze_decoder(decoder, length(p0); rng, p0)
+    # model = NeuralModel(NN, st, md)
 
     # # make data tuple
     # case = 1
     # Ud = Udata[:, :, case, :]
     # data = (Xdata, Ud, Tdata)
-    #
+
     # learn_init = false
     # learn_init = true
     # ps, Up, Ls = infer_SNF(model, data, p0; device, verbose, learn_init)

@@ -224,7 +224,7 @@ function post_reg(
     @show md
 
     xbatch = reshape(x, 1, :)
-    model = NeuralEmbeddingModel(NN, st, xbatch, md)
+    model = NeuralModel(NN, st, md)
 
     autodiff = AutoForwardDiff()
     ϵ = nothing

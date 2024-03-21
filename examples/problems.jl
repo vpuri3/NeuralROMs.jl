@@ -1,6 +1,6 @@
 #
 using GeometryLearning
-using Plots, TSne, LaTeXStrings
+using JLD2, Plots, TSne, LaTeXStrings
 
 #======================================================#
 
@@ -256,6 +256,94 @@ function convINR_network(
 
     end
 end
+#======================================================#
+
+function loaddata(
+    datafile::String,
+)
+
+    data = jldopen(datafile)
+    x = data["x"]
+    u = data["u"] # [Nx, Nb, Nt] or [out_dim, Nx, Nb, Nt]
+    t = data["t"]
+    mu = data["mu"]
+    md_data = data["metadata"]
+
+    close(data)
+
+    @assert ndims(u) ∈ (3,4,)
+    @assert x isa AbstractVecOrMat
+    x = x isa AbstractVector ? reshape(x, 1, :) : x # (Dim, Npoints)
+
+    if ndims(u) == 3 # [Nx, Nb, Nt]
+        u = reshape(u, 1, size(u)...) # [1, Nx, Nb, Nt]
+    end
+
+    in_dim  = size(x, 1)
+    out_dim = size(u, 1)
+
+    println("input size $in_dim with $(size(x, 2)) points per trajectory.")
+    println("output size $out_dim.")
+
+    @assert eltype(x) === Float32
+    @assert eltype(u) === Float32
+
+    mu = isnothing(mu) ? fill(nothing, size(u, 3)) |> Tuple : mu
+    mu = isa(mu, AbstractArray) ? vec(mu) : mu
+
+    x, t, mu, u, md_data
+end
+
+function loadmodel(
+    modelfile::String,
+)
+    model = jldopen(modelfile)
+    NN, p, st = model["model"]
+    metadata = model["metadata"]
+    close(model)
+    
+    (NN, p, st), metadata
+end
+#======================================================#
+"""
+Input size `[in_dim, Npoints]`
+"""
+function normalize_x(x::AbstractMatrix)
+
+    x̄  = sum(x, dims = 2) / size(x, 2) |> vec
+    σx = sum(abs2, x .- x̄, dims = 2) / size(x, 2) .|> sqrt |> vec
+    x  = normalizedata(x, x̄, σx)
+
+    x, x̄, σx
+end
+
+"""
+Input size `[out_dim, Npoints, Nparam, Ntime]`
+"""
+function normalize_u(u::AbstractArray{T,4}) where{T}
+
+    out_dim = size(u, 1)
+
+    ū  = sum(u, dims = (2,3,4)) / (length(u) ÷ out_dim) |> vec
+    σu = sum(abs2, u .- ū, dims = (2,3,4)) / (length(u) ÷ out_dim) .|> sqrt |> vec
+    u  = normalizedata(u, ū, σu)
+
+    u, ū, σu
+end
+
+"""
+Input size `[Ntime]`
+"""
+function normalize_t(t::AbstractVector)
+
+    N = length(t)
+
+    t̄  = sum(t) / N
+    σt = sum(abs2, t .- t̄) / N .|> sqrt
+    t  = normalizedata(t, t̄, σt)
+
+    t, t̄, σt
+end
 
 #======================================================#
 function displaymetadata(metadata::NamedTuple)
@@ -296,16 +384,18 @@ function eval_model(
 end
 
 function eval_model(
-    model::NeuralEmbeddingModel,
+    model::NTuple{3, Any},
     x::Tuple,
     p::AbstractArray;
     batchsize = numobs(x) ÷ 100,
     device = Lux.cpu_device(),
 )
+    NN, p, st = model
+
     loader = MLUtils.DataLoader(x; batchsize, shuffle = false, partial = true)
 
-    p = p |> device
-    model = model |> device
+    p, st = (p, st) |> device
+    st = Lux.testmode(st)
 
     if device isa Lux.LuxCUDADevice
         loader = CuIterator(loader)
@@ -313,8 +403,7 @@ function eval_model(
 
     y = ()
     for batch in loader
-        yy = model(batch[1], p, batch[2])
-        yy = reshape(yy, size(yy, 1), :)
+        yy = NN(batch, p, st)[1]
         y = (y..., yy)
     end
 
@@ -485,5 +574,90 @@ function make_param_scatterplot(
 
     plt
 end
+#======================================================#
+
+function make_optimizer(
+    E::Integer,
+    warmup::Bool,
+    weightdecay,
+)
+    lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
+    Nlrs = length(lrs)
+
+    opts = Tuple(
+        OptimiserChain(
+            Optimisers.Adam(lr),
+            weightdecay,
+        ) for lr in lrs
+    )
+
+    nepochs = (round.(Int, E / (Nlrs) * ones(Nlrs))...,)
+    schedules = Step.(lrs, 1f0, Inf32)
+    early_stoppings = (fill(true, Nlrs)...,)
+
+    if warmup
+        opt_warmup = OptimiserChain(Optimisers.Adam(1f-2), weightdecay,)
+        nepochs_warmup = 10
+        schedule_warmup = Step(1f-2, 1f0, Inf32)
+        early_stopping_warmup = true
+
+        ######################
+        opts = (opt_warmup, opts...,)
+        nepochs = (nepochs_warmup, nepochs...,)
+        schedules = (schedule_warmup, schedules...,)
+        early_stoppings = (early_stopping_warmup, early_stoppings...,)
+    end
+    
+    opts, nepochs, schedules, early_stoppings
+end
+
+#======================================================#
+
+function ps_indices(NN, property::Symbol;
+    rng::Random.AbstractRNG = Random.default_rng(),
+)
+    p = Lux.setup(copy(rng), NN)[1]
+    p = ComponentArray(p)
+    idx = only(getaxes(p))[property].idx
+
+    println("[ps_indices]: Passing $(length(idx)) / $(length(p)) $(property) parameters to IdxWeightDecay")
+
+    idx
+end
+
+function ps_W_indices(NN, property::Symbol;
+    rng::Random.AbstractRNG = Random.default_rng(),
+)
+    p = Lux.setup(copy(rng), NN)[1]
+    p = ComponentArray(p)
+
+    idx = Int32[]
+
+    pprop = getproperty(p, property)
+
+    for lname in propertynames(pprop)
+        w = getproperty(pprop, lname).weight # reshaped array
+
+        @assert ndims(w) == 2
+
+        i = if w isa Base.ReshapedArray
+            only(w.parent.indices)
+        elseif w isa SubArray
+            w.indices
+        end
+
+        println("Grabbing weight indices from $(property) layer $(lname), size $(size(w)).")
+
+        idx = vcat(idx, Int32.(i))
+    end
+
+    println("[ps_W_indices]: Passing $(length(idx)) / $(length(p)) $(property) parameters to IdxWeightDecay")
+
+    idx
+end
+
+
+#======================================================#
+
 
 #======================================================#
