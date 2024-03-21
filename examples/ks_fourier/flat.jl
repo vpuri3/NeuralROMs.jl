@@ -5,11 +5,11 @@ include(joinpath(pkgdir(GeometryLearning), "examples", "problems.jl"))
 #======================================================#
 
 rng = Random.default_rng()
-Random.seed!(rng, 199)
+Random.seed!(rng, 213)
 
-prob = Advection1D(0.25f0)
-datafile  = joinpath(@__DIR__, "data_advect/", "data.jld2")
-modeldir  = joinpath(@__DIR__, "dump")
+prob = KuramotoSivashinsky1D(0.01f0)
+datafile = joinpath(@__DIR__, "data_ks/", "data.jld2")
+modeldir = joinpath(@__DIR__, "dump/")
 modelfile = joinpath(modeldir, "model_08.jld2")
 device = Lux.gpu_device()
 
@@ -17,7 +17,7 @@ device = Lux.gpu_device()
 E = 1400
 l = 2
 hh, wh = 3, 8
-hd, wd = 5, 64
+hd, wd = 5, 128
 λ2, α, weight_decays = 1f-2, 0f0, 1f-2
 
 isdir(modeldir) && rm(modeldir, recursive = true)

@@ -30,47 +30,12 @@ function makedata_SNF(
     _It = Colon(), # train/test split in time
     It_ = Colon(),
 )
-
-    # TODO makedata_SNF: allow for _Ix, Ix_ for testing
-    # TODO makedata_SNF: rm _Ib, Ib_, _It, It_. makes no sense for autodecode
-
-    #==============#
     # load data
-    #==============#
-    data = jldopen(datafile)
-    x = data["x"]
-    u = data["u"] # [Nx, Nb, Nt] or [out_dim, Nx, Nb, Nt]
-    md_data = data["metadata"]
-    close(data)
+    x, t, mu, u, md_data = loaddata(datafile)
 
-    @assert ndims(u) ∈ (3,4,)
-    @assert x isa AbstractVecOrMat
-    x = x isa AbstractVector ? reshape(x, 1, :) : x # (Dim, Npoints)
-
-    if ndims(u) == 3 # [Nx, Nb, Nt]
-        u = reshape(u, 1, size(u)...) # [1, Nx, Nb, Nt]
-    end
-
-    in_dim  = size(x, 1)
-    out_dim = size(u, 1)
-
-    println("input size $in_dim with $(size(x, 2)) points per trajectory.")
-    println("output size $out_dim.")
-
-    @assert eltype(x) === Float32
-    @assert eltype(u) === Float32
-
-    #==============#
     # normalize
-    #==============#
-
-    ū  = sum(u, dims = (2,3,4)) / (length(u) ÷ out_dim) |> vec
-    σu = sum(abs2, u .- ū, dims = (2,3,4)) / (length(u) ÷ out_dim) .|> sqrt |> vec
-    u  = normalizedata(u, ū, σu)
-
-    x̄  = sum(x, dims = 2) / size(x, 2) |> vec
-    σx = sum(abs2, x .- x̄, dims = 2) / size(x, 2) .|> sqrt |> vec
-    x  = normalizedata(x, x̄, σx)
+    x, x̄, σx = normalize_x(x)
+    u, ū, σu = normalize_u(u)
 
     #==============#
     # subsample, test/train split
@@ -458,52 +423,11 @@ function postprocess_SNF(
     fps::Int = 300,
     device = Lux.cpu_device(),
 )
-
-    #==============#
     # load data
-    #==============#
-    data  = jldopen(datafile)
-    Tdata = data["t"]
-    Xdata = data["x"]
-    Udata = data["u"]
-    mu    = data["mu"]
-    md_data = data["metadata"]
+    Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
 
-    close(data)
-
-    @assert ndims(Udata) ∈ (3,4,)
-    @assert Xdata isa AbstractVecOrMat
-    Xdata = Xdata isa AbstractVector ? reshape(Xdata, 1, :) : Xdata # (Dim, Npoints)
-
-    if ndims(Udata) == 3 # [Nx, Nb, Nt]
-        Udata = reshape(Udata, 1, size(Udata)...)
-    end
-
-    in_dim  = size(Xdata, 1)
-    out_dim, Nx, Nb, Nt = size(Udata)
-
-    mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
-    mu = isa(mu, AbstractArray) ? vec(mu) : mu
-
-    #==============#
     # load model
-    #==============#
-    model = jldopen(modelfile)
-    NN, p, st = model["model"]
-    md = model["metadata"]
-    close(model)
-
-    #==============#
-    modeldir = dirname(modelfile)
-    outdir = joinpath(modeldir, "results")
-    mkpath(outdir)
-    #==============#
-
-    #==============#
-    # subsample in space
-    #==============#
-    # Udata = @view Udata[:, md.makedata_kws.Ix, :, :]
-    # Xdata = @view Xdata[:, md.makedata_kws.Ix]
+    model, md = loadmodel(modelfile)
 
     in_dim, Nx = size(Xdata)
 
@@ -536,6 +460,9 @@ function postprocess_SNF(
     grid = get_prob_grid(prob)
 
     if makeplot
+        modeldir = dirname(modelfile)
+        outdir = joinpath(modeldir, "results")
+        mkpath(outdir)
 
         # field plots
         for case in axes(_Ib, 1)

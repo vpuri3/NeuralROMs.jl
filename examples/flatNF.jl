@@ -246,9 +246,6 @@ function evolve_FNF(
     Xdata = @view Xdata[:, data_kws.Ix]
     Tdata = @view Tdata[data_kws.It]
 
-    Nx = size(Xdata, 2)
-    Nt = size(Udata, 4)
-
     Ud = Udata[:, :, case, :]
     U0 = Ud[:, :, 1]
 
