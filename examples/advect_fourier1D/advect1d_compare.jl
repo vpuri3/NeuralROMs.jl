@@ -149,7 +149,7 @@ postprocess_SNF(prob, datafile, modelfile_SNFL)
 # evolve
 #==================#
 
-# x0, t0, ud0, up0, _ = evolve_CAE( prob, datafile, modelfile_DCAE, case; rng,) # CPU
+x0, t0, ud0, up0, _ = evolve_CAE( prob, datafile, modelfile_DCAE, case; rng,) # CPU
 # x1, t1, ud1, up1, _ = evolve_CINR(prob, datafile, modelfile_CINR, case; rng, device)
 x2, t2, ud2, up2, _ = evolve_SNF( prob, datafile, modelfile_SNFW, case; rng, device)
 x3, t3, ud3, up3, _ = evolve_SNF( prob, datafile, modelfile_SNFL, case; rng, device)
