@@ -378,7 +378,7 @@ function fieldplot(
                 yaxis = :log, ylims = (10^-9, 1.0),
             )
             plot!(plt, Tdata, er; linewidth, palette,)
-            png(plt, joinpath(outdir, "$(prefix)_$(od)_case$(case)"))
+            png(plt, joinpath(outdir, "$(prefix)_e$(od)_case$(case)"))
 
             # anim = animate1D(Ud[:, It_data], Up[:, It_pred], vec(Xdata), Tdata[It_data];
             #                  w = 2, xlabel, ylabel, title)

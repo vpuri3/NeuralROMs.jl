@@ -598,7 +598,7 @@ function postprocess_SNF(
 
             # parameter evolution plot
             p2 = plot(;
-                title = "Trained parameter evolution, case $(case)",
+                title = "Learned parameter evolution, case $(case)",
                 xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false
             )
             plot!(p2, Tdata, _p'; linewidth, palette)

@@ -324,7 +324,7 @@ function postprocess_CAE(
 
             # parameter evolution plot
             p2 = plot(;
-                title = "Trained parameter evolution, case $(case)",
+                title = "Learned parameter evolution, case $(case)",
                 xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false
             )
             plot!(p2, Tdata, _p'; linewidth, palette)
@@ -369,6 +369,9 @@ function evolve_CAE(
 
     autodiff_xyz::ADTypes.AbstractADType = AutoFiniteDiff(),
     ϵ_xyz::Union{Real, Nothing} = 1f-2,
+
+    learn_ic::Bool = true,
+    zeroinit::Bool = false,
 
     verbose::Bool = true,
     device = Lux.cpu_device(),
@@ -442,6 +445,10 @@ function evolve_CAE(
     p0 = encoder[1](U0_resh, encoder[2], encoder[3])[1]
     p0 = dropdims(p0; dims = 2)
 
+    if zeroinit
+        p0 *= 0
+    end
+
     #==============#
     # make model
     #==============#
@@ -464,6 +471,7 @@ function evolve_CAE(
 
     @time _, ps, Up = evolve_model(prob, model, timealg, scheme, data, p0, Δt;
         nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz,
+        learn_ic,
         verbose, device,
     )
 
