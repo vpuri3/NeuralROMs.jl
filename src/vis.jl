@@ -165,13 +165,12 @@ function plot_derivatives1D_autodecoder(
     autodiff = AutoForwardDiff(),
     ϵ = nothing,
 )
-    NN, p, st = freeze_autodecoder(decoder, p0)
+    NN, p, st = freeze_decoder(decoder, length(p0); p0)
 
     Nx = length(x)
     xbatch = reshape(x, 1, Nx)
-    Icode = ones(Int32, 1, Nx)
 
-    model = NeuralEmbeddingModel(NN, st, Icode, md.x̄, md.σx, md.ū, md.σu)
+    model = NeuralModel(NN, st, md.x̄, md.σx, md.ū, md.σu)
     u, ud1x, ud2x, ud3x, ud4x = dudx4_1D(model, xbatch, p; autodiff, ϵ) .|> vec
 
     plt = plot(xabel = "x", ylabel = "u(x,t)")

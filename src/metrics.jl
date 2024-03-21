@@ -112,38 +112,6 @@ end
 
 #=====================================================================#
 
-"""
-    codereg(lossfun, σ; property)(NN, p, st, batch) -> l, st, stats
-
-code regularized loss: `lossfun(..) + 1/σ² ||ũ||₂²`
-"""
-function codereg(lossfun, σ2inv::Real; lname::Symbol = :mse)
-
-    function codereg_internal(NN, p, st::NamedTuple, batch::Tuple)
-        T = eltype(p)
-        N = numobs(batch)
-        l, st_new, stats = lossfun(NN, p, st, batch)
-
-        lstats = NamedTuple{(lname,)}((l,))
-
-        lcode = if iszero(σ2inv)
-             zero(T)
-        else
-            _, code = get_autodecoder(NN, p, st)
-            pcode, _ = code[1](batch[1][2], code[2], code[3])
-            lcode = sum(abs2, pcode)
-
-            σ2inv * lcode / N
-        end
-
-        loss = l + lcode
-
-        loss, st_new, (; stats..., lstats..., lcode)
-    end
-end
-
-#=====================================================================#
-
 export compute_cbound
 
 function compute_cbound(NN, p, st)
@@ -171,6 +139,38 @@ end
 function compute_cbound(W::AbstractMatrix) # ∞ norm
     rsum = sum(abs, W, dims = 2)
     maximum(rsum)
+end
+
+#=====================================================================#
+
+"""
+    codereg_autodecoder(lossfun, σ; property)(NN, p, st, batch) -> l, st, stats
+
+code regularized loss: `lossfun(..) + 1/σ² ||ũ||₂²`
+"""
+function codereg_autodecoder(lossfun, σ2inv::Real; lname::Symbol = :mse)
+
+    function codereg_internal(NN, p, st::NamedTuple, batch::Tuple)
+        T = eltype(p)
+        N = numobs(batch)
+        l, st_new, stats = lossfun(NN, p, st, batch)
+
+        lstats = NamedTuple{(lname,)}((l,))
+
+        lcode = if iszero(σ2inv)
+             zero(T)
+        else
+            _, code = get_autodecoder(NN, p, st)
+            pcode, _ = code[1](batch[1][2], code[2], code[3])
+            lcode = sum(abs2, pcode)
+
+            σ2inv * lcode / N
+        end
+
+        loss = l + lcode
+
+        loss, st_new, (; stats..., lstats..., lcode)
+    end
 end
 
 #=====================================================================#
@@ -258,6 +258,70 @@ function regularize_autodecoder(
         ###
 
         loss = l + lcode + lcond + l1 + l2
+
+        loss, st_new, stats
+    end
+end
+#=====================================================================#
+
+"""
+    regularize_flatdecoder(lossfun, σ, λ1, λ2, property)(NN, p, st, batch) -> l, st, stats
+
+`lossfun(..) + L2 (on hyper) + Lipschitz (on decoder)`
+"""
+function regularize_flatdecoder(
+    lossfun;
+    α::T = 0f0,  # on decoder
+    λ2::T = 0f0, # on hyper
+    lname::Symbol = :mse,
+) where{T<:Real}
+
+    function regularize_flatdecoder_internal(NN, p, st::NamedTuple, batch::Tuple)
+        @assert eltype(p) == T
+        N = numobs(batch)
+        l, st_new, stats = lossfun(NN, p, st, batch)
+
+        if p isa AbstractArray
+            @assert eltype(p) === T "got $(eltype(p)) === $(T)."
+            @assert eltype(l) === T "got $(eltype(l)) === $(T)."
+        end
+
+        lstats = NamedTuple{(lname,)}((l,))
+        stats = (; stats..., lstats...)
+
+        hyper, decoder = get_flatdecoder(NN, p, st)
+
+        ###
+        # Lipschitz reg on decoder
+        ###
+
+        lcond, stats = if iszero(α)
+            zero(T), stats
+        else
+            cbound = compute_cbound(decoder...)
+            lcond  = cbound * α / N
+            lcond, (; stats..., cbound, lcond)
+        end
+
+        ###
+        # L2 reg on decoder
+        ###
+
+        _p = hyper[2]
+        _N = length(_p)
+
+        l2, stats = if iszero(λ2)
+            zero(T), stats
+        else
+            l2 = T(0.5) * λ2 * sum(abs2, _p) / _N
+            l2, (; stats..., l2_hyper = l2,)
+        end
+
+        ###
+        # sum
+        ###
+
+        loss = l + lcond + l2
 
         loss, st_new, stats
     end

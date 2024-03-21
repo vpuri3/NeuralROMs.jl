@@ -81,8 +81,10 @@ export
 include("layers.jl")
 export
     Atten, Diag, PermutedBatchNorm, SplitRows, ImplicitEncoderDecoder,
-    AutoDecoder, get_autodecoder, freeze_autodecoder,
-    HyperNet, get_hyperdecoder
+    HyperNet,
+    AutoDecoder, get_autodecoder,
+    FlatDecoder, get_flatdecoder, freeze_decoder,
+    HyperDecoder, get_hyperdecoder
 
 include("optimisers.jl")
 export DecoderWeightDecay, IdxWeightDecay
@@ -96,7 +98,7 @@ export OpKernel, OpConv, OpKernelBilinear, OpConvBilinear, linear_nonlinear
 include("neuralmodel.jl")
 export
     normalizedata, unnormalizedata,
-    NeuralModel, NeuralEmbeddingModel,
+    NeuralModel,
     dudx1_1D, dudx2_1D, dudx4_1D,
     dudx1_2D, dudx2_2D # , dudx4_2D,
     dudp

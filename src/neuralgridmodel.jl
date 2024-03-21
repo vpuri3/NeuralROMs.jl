@@ -195,7 +195,6 @@ export INRModel
 @concrete mutable struct INRModel{Tx, Tu} <: AbstractNeuralGridModel
     NN
     st
-    Icode
 
     x̄::Tx
     σx::Tx
@@ -216,12 +215,6 @@ function INRModel(
     metadata::NamedTuple,
 ) where{T<:Number, D}
 
-    Icode = begin
-        sz = (1, size(x)[2:end]...,)
-        Icode = similar(x, Int32, sz)
-        fill!(Icode, true)
-    end
-
     Dx, Dy = make_dx_mats(x, grid)
 
     x̄ = metadata.x̄
@@ -230,12 +223,11 @@ function INRModel(
     σx = metadata.σx
     σu = metadata.σu
 
-    INRModel(NN, st, Icode, x̄, σx, ū, σu, Dx, Dy, grid)
+    INRModel(NN, st, x̄, σx, ū, σu, Dx, Dy, grid)
 end
 
 function Adapt.adapt_structure(to, model::INRModel)
     st = Adapt.adapt_structure(to, model.st)
-    Icode = Adapt.adapt_structure(to, model.Icode)
     x̄  = Adapt.adapt_structure(to, model.x̄ )
     ū  = Adapt.adapt_structure(to, model.ū )
     σx = Adapt.adapt_structure(to, model.σx)
@@ -244,33 +236,17 @@ function Adapt.adapt_structure(to, model::INRModel)
     Dy = Adapt.adapt_structure(to, model.Dy)
 
     INRModel(
-        model.NN, st, Icode, x̄, σx, ū, σu, Dx, Dy, model.grid,
+        model.NN, st, x̄, σx, ū, σu, Dx, Dy, model.grid,
     )
 end
 
 function (model::INRModel)(
     x::AbstractArray,
     p::AbstractVector,
-    Icode::Union{AbstractArray, Nothing} = nothing,
 )
 
-    Icode = if !isnothing(Icode)
-        Icode
-    else
-        if !isnothing(model.Icode)
-            model.Icode
-        else
-            Zygote.@ignore begin
-                sz = (1, size(x)[2:end]...,)
-                Icode = similar(x, Int32, sz)
-                fill!(Icode, true)
-            end
-        end
-    end
-
     x_norm = normalizedata(x, model.x̄, model.σx)
-    batch  = (x_norm, Icode)
-    u_norm = model.NN(batch, p, model.st)[1]
+    u_norm = model.NN(x_norm, p, model.st)[1]
 
     unnormalizedata(u_norm, model.ū, model.σu)
 end

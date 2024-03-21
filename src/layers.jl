@@ -87,19 +87,8 @@ function AutoDecoder(
     code_len::Int;
     init_weight = randn32, # scale_init(randn32, 1f-1, 0f0) # N(μ = 0, σ2 = 0.1^2)
     code = nothing,
-    EmbeddingType::Type{<:Lux.AbstractExplicitLayer} = Lux.Embedding
 )
-    code = if isnothing(code)
-        if isone(num_batches)
-            EmbeddingType(num_batches => code_len; init_weight)
-            # OneEmbedding(code_len; init_weight)
-        else
-            Embedding(num_batches => code_len; init_weight)
-        end
-    else
-        code
-    end
-
+    code = Embedding(num_batches => code_len; init_weight)
     noop = NoOpLayer()
 
     codex = Chain(;
@@ -124,29 +113,88 @@ function get_autodecoder(
     remake_ca_in_model(decoder...), remake_ca_in_model(code...)
 end
 
-function freeze_autodecoder(
-    decoder::NTuple{3, Any},
-    p0::AbstractVector;
-    rng::Random.AbstractRNG = Random.default_rng(),
+#======================================================#
+# FlatDecoder
+#======================================================#
+"""
+    FlatDecoder
+
+Input: `(x, param)` of sizes `[x_dim, K]`, and `[p_dim, K]` respectively.
+Output: solution field `u` of size `[out_dim, K]`.
+"""
+function FlatDecoder(
+    hyper::Lux.AbstractExplicitLayer,
+    decoder::Lux.AbstractExplicitLayer,
 )
-    num_batches = 1
-    code_len = length(p0)
+    noop = NoOpLayer()
+
+    Chain(;
+        assem   = Parallel(vcat; noop, hyper), # [D+L, K] (x, code)
+        decoder = decoder,                     # [out, K] (out)
+    )
+end
+
+function get_flatdecoder(
+    NN::Lux.AbstractExplicitLayer,
+    p::Union{NamedTuple, AbstractArray},
+    st::NamedTuple,
+)
+    hyper   = (NN.layers.assem.layers.hyper, p.assem.hyper, st.assem.hyper)
+    decoder = (NN.layers.decoder, p.decoder, st.decoder)
+
+    remake_ca_in_model(hyper...), remake_ca_in_model(decoder...)
+end
+
+#======================================================#
+# OneEmbedding, freeze_decoder
+#======================================================#
+
+struct OneEmbedding{F} <: Lux.AbstractExplicitLayer
+    len::Int
+    init::F
+end
+
+OneEmbedding(len::Int; init_weight = zeros32) = OneEmbedding(len, init_weight)
+
+function Lux.initialparameters(rng::AbstractRNG, e::OneEmbedding)
+    return (; weight = e.init(rng, e.len),)
+end
+
+Lux.initialstates(::Random.AbstractRNG, ::OneEmbedding) = (;)
+
+function (e::OneEmbedding)(x::AbstractVecOrMat, ps, st)
+    code = repeat(ps.weight, 1, size(x, 2)) # [x_in, K]
+    return code, st
+end
+
+function freeze_decoder(
+    decoder::NTuple{3, Any},
+    code_len::Integer;
+    rng::Random.AbstractRNG = Random.default_rng(),
+    p0::Union{AbstractVector, Nothing} = nothing,
+)
+    # freeze decoder
     decoder_frozen = Lux.Experimental.freeze(decoder...)
 
-    NN = AutoDecoder(decoder_frozen[1], num_batches, code_len)
+    # make NN
+    branch = BranchLayer(NoOpLayer(), OneEmbedding(code_len))
+    parallel = Parallel(vcat, NoOpLayer(), NoOpLayer())
+    NN = Chain(; branch, parallel, decoder = decoder_frozen[1])
+
+    # setup NN
     p, st = Lux.setup(rng, NN)
     st = Lux.testmode(st)
     p = ComponentArray(p)
 
-    copy!(p, p0)
     @set! st.decoder.frozen_params = decoder[2]
-    
+
+    if !isnothing(p0)
+        @assert length(p0) == code_len
+        copy!(p, p0)
+    end
+
     NN, p, st
 end
-
-#======================================================#
-# HDecoder
-#======================================================#
 
 #======================================================#
 # Periodic Layer
@@ -165,66 +213,29 @@ Enforces that input is treated as periodic between [-1, 1).
 #======================================================#
 # Variational AutoDecoder
 #======================================================#
-"""
-    VariationalAutoDecoder
-
-Assumes input is `(xyz, idx)` of sizes `[in_dim, K]`, `[1, K]` respectively
-"""
-function VariationalDecoder(
-    decoder::Lux.AbstractExplicitLayer,
-    num_batches::Int,
-    code_len::Int;
-    init_weight = randn32, # scale_init(randn32, 1f-1, 0f0) # N(μ = 0, σ2 = 0.1^2)
-    code = nothing,
-    EmbeddingType::Type{<:Lux.AbstractExplicitLayer} = Lux.Embedding
-)
-
-end
-
+# """
+#     VariationalAutoDecoder
+#
+# Assumes input is `(xyz, idx)` of sizes `[in_dim, K]`, `[1, K]` respectively
+# """
 # struct VariationalDecoder <: Lux.AbstractExplicitLayer
 # end
 
-struct VariationalReparameterization <: Lux.AbstractExplicitLayer
-end
+# struct VariationalReparameterization <: Lux.AbstractExplicitLayer
+# end
 
-# Lux.initialstates()
-# Lux.initialparameters()
-
-function vae_addrand(μ::AbstractArray, σ::Union{Number, AbstractArray})
-    T = eltype(μ)
-    s = size(μ)
-
-    ϵ = if μ isa AbstractGPUArray
-        CUDA.randn(T, s)
-    else
-        randn(T, s)
-    end
-
-    μ + ϵ .* σ
-end
-
-#======================================================#
-struct OneEmbedding{F} <: Lux.AbstractExplicitLayer
-    len::Int
-    init::F
-end
-
-OneEmbedding(len::Int; init_weight = zeros32) = OneEmbedding(len, init_weight)
-
-function Lux.initialparameters(rng::AbstractRNG, e::OneEmbedding)
-    return (; weight = e.init(rng, e.len),)
-end
-
-Lux.initialstates(::Random.AbstractRNG, ::OneEmbedding) = (;)
-
-function (e::OneEmbedding)(idx::AbstractArray{<:Integer}, ps, st)
-    @assert all(isequal(true), idx)
-
-    code = repeat(ps.weight, 1, length(idx)) # [code_len, Nidx]
-    code_re = reshape(code, e.len, size(idx)...)
-
-    return code_re, st
-end
+# function vae_addrand(μ::AbstractArray, σ::Union{Number, AbstractArray})
+#     T = eltype(μ)
+#     s = size(μ)
+#
+#     ϵ = if μ isa AbstractGPUArray
+#         CUDA.randn(T, s)
+#     else
+#         randn(T, s)
+#     end
+#
+#     μ + ϵ .* σ
+# end
 
 #======================================================#
 # Hyper Decoder
