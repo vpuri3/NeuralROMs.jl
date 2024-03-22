@@ -16,9 +16,9 @@ device = Lux.gpu_device()
 ## train
 E = 1400
 l = 2
-hh, wh = 3, 8
+hh, wh = 1, 8
 hd, wd = 5, 64
-λ2, α, weight_decays = 1f-1, 0f0, 1f-2
+λ2, α, weight_decays = 1f-2, 0f0, 1f-2
 
 isdir(modeldir) && rm(modeldir, recursive = true)
 model, STATS, metadata = train_FNF(datafile, modeldir,
