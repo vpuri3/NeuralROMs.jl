@@ -20,18 +20,14 @@ hh, wh = 3, 8
 hd, wd = 5, 64
 λ2, α, weight_decays = 1f-2, 0f0, 1f-2
 
-isdir(modeldir) && rm(modeldir, recursive = true)
-model, STATS, metadata = train_FNF(datafile, modeldir,
-    l, hh, hd, wh, wd, E;
-    rng, warmup = true, λ2, α, weight_decays, device,
-)
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# model, STATS, metadata = train_FNF(datafile, modeldir,
+#     l, hh, hd, wh, wd, E;
+#     rng, warmup = true, λ2, α, weight_decays, device,
+# )
 
 ## process
 case = 1
 postprocess_FNF(prob, datafile, modelfile; rng, device)
-x, t, up, ud, _ = evolve_FNF(prob, datafile, modelfile, case; rng, device)
-
-@show sqrt(mse(up, ud) / mse(ud, 0 * ud))
-@show norm(up - ud, Inf) / sqrt(mse(ud, 0 * ud))
 #======================================================#
 nothing

@@ -439,7 +439,7 @@ function fieldplot(
     for od in 1:out_dim
         up = Upred[od, :, :]
         ud = Udata[od, :, :]
-        nr = sum(abs2, ud) / length(ud)
+        nr = sum(abs2, ud) / length(ud) |> sqrt
         er = (up - ud) / nr
         er = sum(abs2, er; dims = 1) / size(ud, 1) |> vec
 
@@ -459,15 +459,6 @@ function fieldplot(
             plot!(plt, xd, up[:, Itplt]; linewidth, palette)
             scatter!(plt, xd[Ixplt], ud[Ixplt, Itplt]; w = 1, palette)
             png(plt, joinpath(outdir, "$(prefix)_u$(od)_case$(case)"))
-
-            # e(t)
-            plt = plot(;
-                title = "Error evolution, case = $(case)",
-                xlabel = L"Time ($s$)", ylabel = L"ε(t)", legend = false,
-                yaxis = :log, ylims = (10^-9, 1.0),
-            )
-            plot!(plt, Tdata, er; linewidth, palette,)
-            png(plt, joinpath(outdir, "$(prefix)_e$(od)_case$(case)"))
 
             # anim = animate1D(Ud[:, It_data], Up[:, It_pred], vec(Xdata), Tdata[It_data];
             #                  w = 2, xlabel, ylabel, title)
@@ -504,50 +495,22 @@ function fieldplot(
                 p3 = heatmap(up_re; title = "u$(od)(x, y)")
                 p4 = heatmap(up_re - ud_re; title = "u$(od)(x, y)")
 
-                png(p3, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)"))
-                png(p4, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)_error"))
+                png(p3, joinpath(outdir, "$(prefix)_u$(od)_$(k)_time_$(i)"))
+                png(p4, joinpath(outdir, "$(prefix)_u$(od)_$(k)_time_$(i)_error"))
             end
         else
             throw(ErrorException("in_dim = $in_dim not supported."))
         end
 
+        # e(t)
+        plt = plot(;
+                   title = "Error evolution, case = $(case)",
+                   xlabel = L"Time ($s$)", ylabel = L"ε(t)", legend = false,
+                   yaxis = :log, ylims = (10^-9, 1.0),
+                   )
+        plot!(plt, Tdata, er; linewidth, palette,)
+        png(plt, joinpath(outdir, "$(prefix)_e$(od)_case$(case)"))
     end
-    
-end
-
-#======================================================#
-function paramplot(
-    Tdata::AbstractArray,
-    _p::AbstractArray,
-    ps::AbstractArray, 
-    outdir::String,
-    prefix::String,
-    case::Integer,
-)
-    linewidth = 2.0
-    palette = :tab10
-
-    # parameter evolution
-
-    plt = plot(;
-        title = "Parameter evolution, case $(case)",
-        xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false,
-    )
-    plot!(plt, Tdata, ps'; linewidth, palette)
-    png(plt, joinpath(outdir, "$(prefix)_p_case$(case)"))
-
-    # parameter scatter plot
-
-    plt = plot(; title = "Parameter scatter plot, case = $case")
-    plt = make_param_scatterplot(ps, Tdata; plt,
-        color = :blues, label = "Evolution" , markerstrokewidth = 0, cbar = false)
-
-    png(plt, joinpath(outdir, "$(prefix)_p_scatter_case$(case)"))
-
-    plt = make_param_scatterplot(_p, Tdata; plt,
-        color = :reds , label = "Train data", markerstrokewidth = 0, cbar = false)
-
-    png(plt, joinpath(outdir, "$(prefix)_p_scatter_case$(case)_"))
     
 end
 
@@ -560,16 +523,16 @@ function make_param_scatterplot(
 )
     @assert size(p, 2) == length(t)
 
-    kw = (; kw..., zcolor = t,)
+    kw_scatter = (; kw..., zcolor = t, markerstrokewidth = 0)
 
     if size(p, 1) == 1
-        scatter!(plt, vec(p); kw...,)
+        plot!(plt, vec(p), t; kw...,)
     elseif size(p, 1) == 2
-        scatter!(plt, p[1,:], p[2,:]; kw...,)
+        scatter!(plt, p[1,:], p[2,:]; kw_scatter...,)
     elseif size(p, 1) == 3
-        scatter!(plt, p[1,:], p[2,:], p[3,:]; kw...,)
+        scatter!(plt, p[1,:], p[2,:], p[3,:]; kw_scatter...,)
     else
-        # do TSNE
+        # TSNE
     end
 
     plt

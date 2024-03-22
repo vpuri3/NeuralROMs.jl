@@ -308,11 +308,26 @@ function evolve_FNF(
     # parameter plots
     _ps = _code
     _ps = reshape(_ps, size(_ps, 1), :)
-    paramplot(Tdata, _ps, ps, outdir, "evolve", case)
+
+    title = L"$\tilde{u}$ distribution, case " * "$(case)"
+
+    plt = plot(; title)
+    plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
+    png(plt, joinpath(outdir, "evole_p_scatter_case$(case)"))
+
+    title = L"$\tilde{u}$ evolution, case " * "$(case)"
+
+    plt = plot(; title)
+    plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")
+    png(plt, joinpath(outdir, "evolve_p_case$(case)"))
 
     # save files
-    filename = joinpath(outdir, "evolve$case.jld2")
+    filename = joinpath(outdir, "evolve$(case).jld2")
     jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps)
+
+    # print error metrics
+    @show sqrt(mse(Up, Ud) / mse(Ud, 0 * Ud))
+    @show norm(Up - Ud, Inf) / sqrt(mse(Ud, 0 * Ud))
 
     Xdata, Tdata, Ud, Up, ps
 end
@@ -396,10 +411,12 @@ function postprocess_FNF(
     modeldir = dirname(modelfile)
     jldsave(joinpath(modeldir, "train_codes.jld2"); _code, code_)
 
+    modeldir = dirname(modelfile)
+    outdir = joinpath(modeldir, "results")
+    isdir(outdir) && rm(outdir; recursive = true)
+    mkpath(outdir)
+
     if makeplot
-        modeldir = dirname(modelfile)
-        outdir = joinpath(modeldir, "results")
-        mkpath(outdir)
 
         grid = get_prob_grid(prob)
 
@@ -454,6 +471,65 @@ function postprocess_FNF(
         png(plt, joinpath(outdir, "train_p_scatter"))
 
     end # makeplot
+
+    #==============#
+    # Evolve
+    #==============#
+    for case in 1:Nb
+        evolve_FNF(prob, datafile, modelfile, case; rng, device)
+    end
+
+    #==============#
+    # Compare evolution with training plots
+    #==============#
+    for case in  1:Nb
+        ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
+
+        ps = ev["Ppred"]
+        Ue = ev["Upred"]
+
+        _p = _code
+        Uh = _Upred[:, :, case, :] # HyperNet prediction
+        Ud = _Udata[:, :, case, :]
+
+        fieldplot(Xdata, Tdata, Uh, Ue, grid, outdir, "compare", case)
+
+        # Compare u
+        println("#=======================#")
+        println("Dynamics Solve")
+        @show norm(Ue - Ud, 2) / length(Ud)
+        @show norm(Ue - Ud, Inf)
+
+        println("#=======================#")
+        println("HyperNet Prediction")
+        @show norm(Uh - Ud, 2) / length(Ud)
+        @show norm(Uh - Ud, Inf)
+
+        ###
+        # Compare ũ
+        ###
+
+        println("#=======================#")
+        println("Dynamics Solve vs HyperNet Prediction")
+        @show norm(ps - _p, 2) / length(ps)
+        @show norm(ps - _p, Inf)
+
+        title = L"$\tilde{u}$ distribution, case " * "$(case)"
+
+        plt = plot(; title)
+        plt = make_param_scatterplot(_p, Tdata; plt, label = "HyperNet prediction", color = :reds, cbar = false)
+        plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
+        png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
+
+        title = L"$\tilde{u}$ evolution, case " * "$(case)"
+        palette = :tab10
+
+        plt = plot(; title)
+        plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette)
+        plot!(plt, Tdata, _p'; w = 4.0, label = "HyperNet prediction", style = :dash, palette)
+        png(plt, joinpath(outdir, "compare_p_case$(case)"))
+
+    end
 
     #==============#
     # Done
