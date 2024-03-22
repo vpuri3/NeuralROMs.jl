@@ -27,7 +27,6 @@ device = Lux.gpu_device()
 # )
 
 ## process
-case = 1
 postprocess_FNF(prob, datafile, modelfile; rng, device)
 #======================================================#
 nothing
