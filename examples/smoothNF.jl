@@ -51,6 +51,9 @@ function makedata_SNF(
 
     println("Using $Nx sample points per trajectory.")
 
+    in_dim  = size(x, 1)
+    out_dim = size(u, 1)
+
     _u = reshape(_u, out_dim, Nx, :)
     u_ = reshape(u_, out_dim, Nx, :)
 
@@ -167,57 +170,17 @@ function train_SNF(
     #--------------------------------------------#
     # training hyper-params
     #--------------------------------------------#
-    lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
-    Nlrs = length(lrs)
 
-    weightdecay = if isnothing(WeightDecayOpt) | (WeightDecayOpt === IdxWeightDecay)
+    idx = ps_W_indices(NN, :decoder; rng)
+    weightdecay = IdxWeightDecay(0f0, idx)
+    opts, nepochs, schedules, early_stoppings = make_optimizer(E, warmup, weightdecay)
 
-        decoder_idx = if isnothing(weight_decay_ifunc) | (weight_decay_ifunc === decoder_W_indices)
-            decoder_W_indices(NN; rng)   # WD on decoder weights and biases
-        else
-            weight_decay_ifunc(NN; rng)
-        end
-
-        IdxWeightDecay(0f0, decoder_idx)
-
-    elseif WeightDecayOpt === DecoderWeightDecay
-        ca_axes = p_axes(NN; rng)
-        DecoderWeightDecay(0f0, ca_axes)
-    else
-        error("Unsupported weight decay algorithm")
-    end
-
-    # Grokking (https://arxiv.org/abs/2201.02177)
-    # Optimisers.Adam(lr, (0.9f0, 0.95f0)), # 0.999 (default), 0.98, 0.95  # https://www.youtube.com/watch?v=IHikLL8ULa4&ab_channel=NeelNanda
-    opts = Tuple(
-        OptimiserChain(
-            Optimisers.Adam(lr),
-            weightdecay,
-        ) for lr in lrs
-    )
-
-    nepochs = (round.(Int, E / (Nlrs) * ones(Nlrs))...,)
-    schedules = Step.(lrs, 1f0, Inf32)
-    early_stoppings = (fill(true, Nlrs)...,)
-
-    if warmup
-        opt_warmup = OptimiserChain(Optimisers.Adam(1f-2), weightdecay,)
-        nepochs_warmup = 10
-        schedule_warmup = Step(1f-2, 1f0, Inf32)
-        early_stopping_warmup = true
-
-        ######################
-        opts = (opt_warmup, opts...,)
-        nepochs = (nepochs_warmup, nepochs...,)
-        schedules = (schedule_warmup, schedules...,)
-        early_stoppings = (early_stopping_warmup, early_stoppings...,)
-    end
-
-    #----------------------#----------------------#
+    #--------------------------------------------#
 
     train_args = (; l, h, w, E, _batchsize, λ1, λ2, σ2inv, α, weight_decays)
     metadata   = (; metadata..., train_args)
 
+    display(NN)
     displaymetadata(metadata)
 
     @time model, ST = train_model(NN, _data; rng,
@@ -235,7 +198,6 @@ function train_SNF(
 end
 
 #======================================================#
-
 function infer_SNF(
     model::AbstractNeuralModel,
     data::Tuple, # (X, U, T)
@@ -403,7 +365,18 @@ function evolve_SNF(
     # parameter plots
     _ps = _code[2].weight # [code_len, _Nb * Nt]
     _ps = reshape(_ps, size(_ps, 1), :)
-    paramplot(Tdata, _ps, ps, outdir, "evolve", case)
+
+    title = L"$\tilde{u}$ distribution, case " * "$(case)"
+
+    plt = plot(; title)
+    plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
+    png(plt, joinpath(outdir, "evole_p_scatter_case$(case)"))
+
+    title = L"$\tilde{u}$ evolution, case " * "$(case)"
+
+    plt = plot(; title)
+    plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")
+    png(plt, joinpath(outdir, "evolve_p_case$(case)"))
 
     # save files
     filename = joinpath(outdir, "evolve$case.jld2")
@@ -429,7 +402,11 @@ function postprocess_SNF(
     # load model
     model, md = loadmodel(modelfile)
 
-    in_dim, Nx = size(Xdata)
+    NN, p, st = model
+    in_dim  = size(Xdata, 1)
+    out_dim = size(Udata, 1)
+
+    Nx = size(Xdata, 2)
 
     #==============#
     # train/test split
@@ -472,7 +449,7 @@ function postprocess_SNF(
         end
 
         # parameter plots
-        decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+        decoder, _code = get_autodecoder(NN, p, st)
         _ps = _code[2].weight # [code_len, _Nb * Nt]
         _ps = reshape(_ps, size(_ps, 1), length(_Ib), length(_It))
 
@@ -502,6 +479,15 @@ function postprocess_SNF(
     end # makeplot
 
     #==============#
+    # Evolve
+    #==============#
+    Nb = size(Udata, 3)
+
+    for case in 1:Nb
+        evolve_SNF(prob, datafile, modelfile, case; rng, device)
+    end
+
+    #==============#
     # infer with nonlinear solve
     #==============#
 
@@ -528,10 +514,6 @@ function postprocess_SNF(
     # plot!(plt, Xdata[1,:], Up[1,:,end  ], w = 4, c = :red  , label = "pred")
     # display(plt)
 
-    #==============#
-    # evolve
-    #==============#
-    
     # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
     # p0 = _code[2].weight[:, 1]
 
@@ -544,8 +526,8 @@ function postprocess_SNF(
     #     idx = LinRange(1, ncodes, 4) .|> Base.Fix1(round, Int)
     #
     #     for i in idx
-    #         p0 = _code[2].weight[:, i]
     #
+    #         p0 = _code[2].weight[:, i]
     #         if in_dim == 1
     #
     #             ###
@@ -632,48 +614,6 @@ function postprocess_SNF(
     end
 
     nothing
-end
-
-#===========================================================#
-function decoder_indices(NN;
-    rng::Random.AbstractRNG = Random.default_rng(),
-)
-    p = Lux.setup(copy(rng), NN)[1]
-    p = ComponentArray(p)
-    decoder_idx = only(getaxes(p))[:decoder].idx
-
-    println("[decoder_indices]: Passing $(length(decoder_idx)) / $(length(p)) decoder parameters to IdxWeightDecay")
-
-    decoder_idx
-end
-
-function decoder_W_indices(NN;
-    rng::Random.AbstractRNG = Random.default_rng(),
-)
-    p = Lux.setup(copy(rng), NN)[1]
-    p = ComponentArray(p)
-
-    idx = Int32[]
-
-    for lname in propertynames(p.decoder)
-        w = getproperty(p.decoder, lname).weight # reshaped array
-
-        @assert ndims(w) == 2
-
-        i = if w isa Base.ReshapedArray
-            only(w.parent.indices)
-        elseif w isa SubArray
-            w.indices
-        end
-
-        println("Grabbing weight indices from decoder layer $lname, size $(size(w))")
-
-        idx = vcat(idx, Int32.(i))
-    end
-
-    println("[decoder_W_indices]: Passing $(length(idx)) / $(length(p)) decoder parameters to IdxWeightDecay")
-
-    idx
 end
 
 #===========================================================#

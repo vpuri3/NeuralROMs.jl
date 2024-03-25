@@ -12,7 +12,7 @@ function get_prob_grid(prob::GeometryLearning.AbstractPDEProblem)
     elseif prob isa KuramotoSivashinsky1D
         (256,)
     elseif prob isa Advection2D
-        (96,96,)
+        (128,128,)
     elseif prob isa BurgersViscous2D
         (512,512,)
     else
@@ -474,12 +474,12 @@ function fieldplot(
             x_re = reshape(Xdata[1, :], grid)
             y_re = reshape(Xdata[2, :], grid)
 
-            upred_re = reshape(upred, out_dim, grid..., :)
-            udata_re = reshape(udata, out_dim, grid..., :)
+            upred_re = reshape(up, grid..., :)
+            udata_re = reshape(ud, grid..., :)
 
             Itplt = LinRange(1, Nt,  4) .|> Base.Fix1(round, Int)
 
-            for i in eachindex(idx_pred)
+            for i in eachindex(Itplt)
                 up_re = upred_re[:, :, i]
                 ud_re = udata_re[:, :, i]
 
@@ -495,8 +495,8 @@ function fieldplot(
                 p3 = heatmap(up_re; title = "u$(od)(x, y)")
                 p4 = heatmap(up_re - ud_re; title = "u$(od)(x, y)")
 
-                png(p3, joinpath(outdir, "$(prefix)_u$(od)_$(k)_time_$(i)"))
-                png(p4, joinpath(outdir, "$(prefix)_u$(od)_$(k)_time_$(i)_error"))
+                png(p3, joinpath(outdir, "$(prefix)_u$(od)_$(case)_time_$(i)"))
+                png(p4, joinpath(outdir, "$(prefix)_u$(od)_$(case)_time_$(i)_error"))
             end
         else
             throw(ErrorException("in_dim = $in_dim not supported."))
@@ -542,17 +542,27 @@ end
 function make_optimizer(
     E::Integer,
     warmup::Bool,
-    weightdecay,
+    weightdecay = nothing,
 )
     lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
     Nlrs = length(lrs)
 
-    opts = Tuple(
-        OptimiserChain(
-            Optimisers.Adam(lr),
-            weightdecay,
-        ) for lr in lrs
-    )
+    # Grokking (https://arxiv.org/abs/2201.02177)
+    # Optimisers.Adam(lr, (0.9f0, 0.95f0)), # 0.999 (default), 0.98, 0.95
+    # https://www.youtube.com/watch?v=IHikLL8ULa4&ab_channel=NeelNanda
+    opts = if isnothing(weightdecay)
+        Tuple(
+            Optimisers.Adam(lr) for lr in lrs
+        )
+    else
+        Tuple(
+            OptimiserChain(
+                Optimisers.Adam(lr),
+                weightdecay,
+            )
+            for lr in lrs
+        )
+    end
 
     nepochs = (round.(Int, E / (Nlrs) * ones(Nlrs))...,)
     schedules = Step.(lrs, 1f0, Inf32)
@@ -618,7 +628,6 @@ function ps_W_indices(NN, property::Symbol;
 
     idx
 end
-
 
 #======================================================#
 

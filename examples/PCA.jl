@@ -38,64 +38,26 @@ function makedata_PCA(
     _It = Colon(), # train/test split in time
     It_ = Colon(),
 )
-    #==============#
     # load data
-    #==============#
-    data = jldopen(datafile)
-    t  = data["t"]
-    x  = data["x"]
-    u  = data["u"]
-    mu = data["mu"]
-    md_data = data["metadata"]
-    close(data)
-
-    @assert ndims(u) ∈ (3,4,)
-    @assert x isa AbstractVecOrMat
-    x = x isa AbstractVector ? reshape(x, 1, :) : x # (Dim, Npoints)
-
-    if ndims(u) == 3 # [Nx, Nb, Nt]
-        u = reshape(u, 1, size(u)...) # [1, Nx, Nb, Nt]
-    end
+    x, t, mu, u, md_data = loaddata(datafile)
 
     in_dim  = size(x, 1)
     out_dim = size(u, 1)
 
-    println("input size $in_dim with $(size(x, 2)) points per trajectory.")
-    println("output size $out_dim.")
-
-    @assert eltype(x) === Float32
-    @assert eltype(u) === Float32
-
-    mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
-    mu = isa(mu, AbstractArray) ? vec(mu) : mu
-
-    #==============#
     # normalize
-    #==============#
+    x, x̄, σx = normalize_x(x)
+    u, ū, σu = normalize_u(u)
+    # t, t̄, σt = normalize_t(t)
 
-    ū  = sum(u, dims = (2,3,4)) / (length(u) ÷ out_dim) |> vec
-    σu = sum(abs2, u .- ū, dims = (2,3,4)) / (length(u) ÷ out_dim) .|> sqrt |> vec
-    u  = normalizedata(u, ū, σu)
-
-    x̄  = sum(x, dims = 2) / size(x, 2) |> vec
-    σx = sum(abs2, x .- x̄, dims = 2) / size(x, 2) .|> sqrt |> vec
-    x  = normalizedata(x, x̄, σx)
-
-    #==============#
-    # subsample in space, time
-    #==============#
+    # subsample, train/test split
     _x = @view x[:, Ix]
     x_ = @view x[:, Ix]
 
-    _t = @view t[_It]
-    t_ = @view t[It_]
-
-    #==============#
-    # train/test split
-    #==============#
-
     _u = @view u[:, Ix, _Ib, _It]
     u_ = @view u[:, Ix, Ib_, It_]
+
+    _t = @view t[_It]
+    t_ = @view t[It_]
 
     Nx = size(_x, 2)
     @assert size(_u, 2) == size(_x, 2) "size(_u): $(size(_u)), size(_x): $(size(_x))"
@@ -252,35 +214,10 @@ function evolve_PCA(
     verbose::Bool = true,
     device = Lux.cpu_device(),
 )
-    
-    #==============#
     # load data
-    #==============#
-    data = jldopen(datafile)
-    Tdata = data["t"]
-    Xdata = data["x"]
-    Udata = data["u"]
-    mu = data["mu"]
+    Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
 
-    close(data)
-
-    @assert ndims(Udata) ∈ (3,4,)
-    @assert Xdata isa AbstractVecOrMat
-    Xdata = Xdata isa AbstractVector ? reshape(Xdata, 1, :) : Xdata # (Dim, Npoints)
-
-    if ndims(Udata) == 3 # [Nx, Nb, Nt]
-        Udata = reshape(Udata, 1, size(Udata)...) # [out_dim, Nx, Nb, Nt]
-    end
-
-    in_dim  = size(Xdata, 1)
-    out_dim = size(Udata, 1)
-
-    mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
-    mu = isa(mu, AbstractArray) ? vec(mu) : mu
-
-    #==============#
     # load model
-    #==============#
     model = jldopen(modelfile)
     P  = model["Pmatrix"]
     md = model["metadata"]
@@ -329,12 +266,72 @@ function evolve_PCA(
 
     learn_ic = false
 
-    @time _, ps, Up = evolve_model(prob, model, timealg, scheme, data, p0, Δt;
+    @time _, ps, Up = evolve_model(
+        prob, model, timealg, scheme, data, p0, Δt;
         learn_ic, nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz,
         verbose, device,
     )
 
+    #==============#
+    # visualization
+    #==============#
+
+    modeldir = dirname(modelfile)
+    outdir = joinpath(modeldir, "results")
+    mkpath(outdir)
+
+    # field visualizations
+    grid = get_prob_grid(prob)
+    fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "evolve", case)
+
+    # parameter plots
+    plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
+    plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
+    png(plt, joinpath(outdir, "evole_p_scatter_case$(case)"))
+
+    plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+    plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")
+    png(plt, joinpath(outdir, "evolve_p_case$(case)"))
+
+    # save files
+    filename = joinpath(outdir, "evolve$(case).jld2")
+    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps)
+
+    # print error metrics
+    @show sqrt(mse(Up, Ud) / mse(Ud, 0 * Ud))
+    @show norm(Up - Ud, Inf) / sqrt(mse(Ud, 0 * Ud))
+
     Xdata, Tdata, Ud, Up, ps
 end
+
+#======================================================#
+function postprocess_PCA(
+    prob::AbstractPDEProblem,
+    datafile::String,
+    modelfile::String;
+    rng::Random.AbstractRNG = Random.default_rng(),
+    makeplot::Bool = true,
+    verbose::Bool = true,
+    fps::Int = 300,
+    device = Lux.cpu_device(),
+)
+    # load data
+    Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
+
+    #==============#
+    # Evolve
+    #==============#
+    Nb = size(Udata, 3)
+
+    for case in 1:Nb
+        evolve_PCA(prob, datafile, modelfile, case; rng, device)
+    end
+    
+    model = jldopen(modelfile)
+    P  = model["Pmatrix"]
+    _ps = P' * Udata[1, :, :]
+
+end
+
 #======================================================#
 nothing

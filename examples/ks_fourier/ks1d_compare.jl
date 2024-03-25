@@ -7,6 +7,7 @@ joinpath(pkgdir(GeometryLearning), "examples", "PCA.jl")      |> include
 joinpath(pkgdir(GeometryLearning), "examples", "convAE.jl")   |> include
 joinpath(pkgdir(GeometryLearning), "examples", "convINR.jl")  |> include
 joinpath(pkgdir(GeometryLearning), "examples", "smoothNF.jl") |> include
+joinpath(pkgdir(GeometryLearning), "examples", "flatNF.jl")   |> include
 joinpath(pkgdir(GeometryLearning), "examples", "problems.jl") |> include
 
 #======================================================#
@@ -103,6 +104,24 @@ function ks1d_train_SNFL(
         λ1, λ2, σ2inv, α, weight_decays, device,
     )
 end
+
+function ks1d_train_FNFW(
+    l::Integer, 
+    modeldir::String;
+    device = Lux.cpu_device(),
+)
+    E = 1400
+    hh, wh = 3, 8
+    hd, wd = 5, 128
+    λ2, α, weight_decays = 1f-2, 0f0, 1f-2
+
+    isdir(modeldir) && rm(modeldir, recursive = true)
+    train_FNF(datafile, modeldir,
+        l, hh, hd, wh, wd, E;
+        rng, warmup = true, λ2, α, weight_decays, device,
+    )
+end
+
 #======================================================#
 
 l0 = latent * 2^0
@@ -125,6 +144,8 @@ modeldir_SNFL = joinpath(@__DIR__, "model_SNFL_l_$(ll0)") # us (Lipschitz)
 modeldir_PCA0 = joinpath(@__DIR__, "model_PCA_l_$(ll0)")
 modeldir_PCA1 = joinpath(@__DIR__, "model_PCA_l_$(ll1)")
 modeldir_PCA2 = joinpath(@__DIR__, "model_PCA_l_$(ll2)")
+#
+modeldir_FNFW = joinpath(@__DIR__, "model_FNFL_l_$(ll0)") # us
 
 # ks1d_train_DCAE(latent, modeldir_DCAE; device)
 # # ks1d_train_CINR(latent, modeldir_CINR; device)
@@ -134,6 +155,8 @@ modeldir_PCA2 = joinpath(@__DIR__, "model_PCA_l_$(ll2)")
 # train_PCA(datafile, modeldir_PCA0, l0; makedata_kws, device)
 # train_PCA(datafile, modeldir_PCA1, l1; makedata_kws, device)
 # train_PCA(datafile, modeldir_PCA2, l2; makedata_kws, device)
+#
+# ks1d_train_FNFW(latent, modeldir_FNFW; device)
 
 #==================#
 # post process
@@ -147,8 +170,11 @@ modelfile_SNFL = joinpath(modeldir_SNFL, "model_08.jld2")
 modelfile_PCA0 = joinpath(modeldir_PCA0, "model.jld2")
 modelfile_PCA1 = joinpath(modeldir_PCA1, "model.jld2")
 modelfile_PCA2 = joinpath(modeldir_PCA2, "model.jld2")
+#
+modelfile_FNFW = joinpath(modeldir_FNFW, "model_08.jld2")
 
-postprocess_CAE(prob, datafile, modelfile_DCAE)
+# postprocess_FNF(prob, datafile, modelfile_FNFW)
+# postprocess_CAE(prob, datafile, modelfile_DCAE)
 postprocess_SNF(prob, datafile, modelfile_SNFL)
 postprocess_SNF(prob, datafile, modelfile_SNFW)
 
@@ -156,14 +182,16 @@ postprocess_SNF(prob, datafile, modelfile_SNFW)
 # evolve
 #==================#
 
-x0, t0, ud0, up0, _ = evolve_CAE( prob, datafile, modelfile_DCAE, case; rng, learn_ic = false) # CPU
+x0, t0, ud0, up0, _ = evolve_CAE( prob, datafile, modelfile_DCAE, case; rng) # CPU
 # x1, t1, ud1, up1, _ = evolve_CINR(prob, datafile, modelfile_CINR, case; rng, device)
-x2, t2, ud2, up2, _ = evolve_SNF( prob, datafile, modelfile_SNFW, case; rng, device, learn_ic = false)
-x3, t3, ud3, up3, _ = evolve_SNF( prob, datafile, modelfile_SNFL, case; rng, device, learn_ic = false)
+x2, t2, ud2, up2, _ = evolve_SNF( prob, datafile, modelfile_SNFW, case; rng, device)
+x3, t3, ud3, up3, _ = evolve_SNF( prob, datafile, modelfile_SNFL, case; rng, device)
 #
-# x4, t4, ud4, up4, _ = evolve_PCA( prob, datafile, modelfile_PCA0, case; rng, device)
+x4, t4, ud4, up4, _ = evolve_PCA( prob, datafile, modelfile_PCA0, case; rng, device)
 # x5, t5, ud5, up5, _ = evolve_PCA( prob, datafile, modelfile_PCA1, case; rng, device)
 # # x6, t6, ud6, up6, _ = evolve_PCA( prob, datafile, modelfile_PCA2, case; rng, device)
+#
+x7, t7, ud7, up7, _ = evolve_FNF( prob, datafile, modelfile_FNFW, case; rng, device)
 
 #==================#
 # clean data
@@ -178,6 +206,8 @@ x4 = dropdims(x4; dims = 1)
 # x5 = dropdims(x5; dims = 1)
 # x6 = dropdims(x6; dims = 1)
 
+x7 = dropdims(x7; dims = 1)
+
 ud0, up0 = dropdims.((ud0, up0); dims = 1)
 # ud1, up1 = dropdims.((ud1, up1); dims = 1)
 ud2, up2 = dropdims.((ud2, up2); dims = 1)
@@ -186,6 +216,8 @@ ud3, up3 = dropdims.((ud3, up3); dims = 1)
 ud4, up4 = dropdims.((ud4, up4); dims = 1)
 # ud5, up5 = dropdims.((ud5, up5); dims = 1)
 # ud6, up6 = dropdims.((ud6, up6); dims = 1)
+
+ud7, up7 = dropdims.((ud7, up7); dims = 1)
 
 #==================#
 # save data
@@ -201,8 +233,10 @@ dict = Dict(
     "xSNFL" => x3, "tSNFL" => t3, "uSNFL" => up3,
     #
     "xPCA0" => x4, "tPCA0" => t4, "uPCA0" => up4, # 1l modes
-    "xPCA1" => x5, "tPCA1" => t5, "uPCA1" => up5, # 2l modes
+    # "xPCA1" => x5, "tPCA1" => t5, "uPCA1" => up5, # 2l modes
     # "xPCA2" => x6, "tPCA2" => t6, "uPCA2" => up6, # 4l modes
+    #
+    "xFNFW" => x7, "tFNFW" => t7, "uFNFW" => up7,
 )
 
 npzwrite(filename, dict)
@@ -220,6 +254,8 @@ n3 = sum(abs2, ud3) / length(ud3)
 n4 = sum(abs2, ud4) / length(ud4)
 # n5 = sum(abs2, ud5) / length(ud5)
 # n6 = sum(abs2, ud6) / length(ud6)
+#
+n7 = sum(abs2, ud7) / length(ud4) |> sqrt
 
 # error field
 e0 = (up0 - ud0) / n0 # (X, T)
@@ -228,8 +264,10 @@ e2 = (up2 - ud2) / n2
 e3 = (up3 - ud3) / n3
 #
 e4 = (up4 - ud4) / n4
-e5 = (up5 - ud5) / n5
+# e5 = (up5 - ud5) / n5
 # e6 = (up6 - ud6) / n6
+#
+e7 = (up7 - ud7) / n7
 
 # error vs time
 et0 = sum(abs2, e0; dims = 1) / size(e0, 1) |> vec
@@ -238,8 +276,10 @@ et2 = sum(abs2, e2; dims = 1) / size(e2, 1) |> vec
 et3 = sum(abs2, e3; dims = 1) / size(e3, 1) |> vec
 #
 et4 = sum(abs2, e4; dims = 1) / size(e4, 1) |> vec
-et5 = sum(abs2, e5; dims = 1) / size(e5, 1) |> vec
+# et5 = sum(abs2, e5; dims = 1) / size(e5, 1) |> vec
 # et6 = sum(abs2, e6; dims = 1) / size(e6, 1) |> vec
+
+et7 = sum(abs2, e7; dims = 1) / size(e7, 1) |> vec
 
 #==================#
 # figure
@@ -268,8 +308,11 @@ plot!(p1, x3, up3[:, i2], w = 4, s = :solid, c = :blue , label = "Smooth-NFL (ou
 
 # PCA
 plot!(p1, x4, up4[:, i2], w = 4, s = :solid, c = :orange , label = "PCA R=$(l0)")
-plot!(p1, x5, up5[:, i2], w = 4, s = :solid, c = :brown  , label = "PCA R=$(l1)")
+# plot!(p1, x5, up5[:, i2], w = 4, s = :solid, c = :brown  , label = "PCA R=$(l1)")
 # plot!(p1, x6, up6[:, i2], w = 4, s = :solid, c = :magenta, label = "PCA R=$(l2)")
+
+# FNF
+plot!(p1, x7, up7[:, i2], w = 4, s = :solid, c = :green , label = "FNF")
 
 pltname = joinpath(@__DIR__, "compare_l_$(latent)")
 png(p1, pltname)
@@ -288,8 +331,10 @@ plot!(p2, t2, et2, w = 4, label = "Smooth-NFW (ours)")
 plot!(p2, t3, et3, w = 4, label = "Smooth-NFL (ours)")
 
 plot!(p2, t4, et4, w = 4, label = "PCA R=$(l0)")
-plot!(p2, t5, et5, w = 4, label = "PCA R=$(l1)")
+# plot!(p2, t5, et5, w = 4, label = "PCA R=$(l1)")
 # plot!(p2, t6, et6, w = 4, label = "PCA R=$(l2)")
+
+plot!(p2, t7, et7, w = 4, label = "FNF")
 
 plot(p1, p2) |> display
 #======================================================#

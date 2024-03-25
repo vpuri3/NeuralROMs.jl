@@ -15,7 +15,7 @@ using Plots, JLD2
 
 CUDA.allowscalar(false)
 
-function uIC(x, y; μ = (0.25f0, 0.25f0), σ = 0.1f0)
+function uIC(x, y; μ = (-0.50f0, -0.50f0), σ = 0.1f0)
     r2 = @. (x - μ[1])^2 + (y - μ[2])^2
     u0 = @. exp(-1f0/2f0 * r2/(σ^2))
     reshape(u0, :, 1)
@@ -148,15 +148,15 @@ function advect1D(Nx, Ny, ν, cx, cy, mu = nothing, p = nothing;
     (sol, V), (x, u, t, mu)
 end
 
-Nx, Ny = 96, 96
+Nx, Ny = 128, 128
 
-intx = IntervalDomain(0.0f0, 1.0f0; periodic = true)
-inty = IntervalDomain(0.0f0, 1.0f0; periodic = true)
+intx = IntervalDomain(-1.0f0, 1.0f0; periodic = true)
+inty = IntervalDomain(-1.0f0, 1.0f0; periodic = true)
 domain = intx × inty
 
 ν = 0f0
 cx, cy = 0.25f0, 0.25f0
-tspan = (0f0, 2.0f0)
+tspan = (0f0, 4.0f0)
 ntsave = 500
 mu = nothing
 

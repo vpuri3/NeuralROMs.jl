@@ -127,7 +127,6 @@ function train_FNF(
     α::Real = 0f0,
     weight_decays::Union{Real, NTuple{M, <:Real}} = 0f0,
     makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :,),
-    cb_epoch = nothing,
     device = Lux.cpu_device(),
 ) where{M}
 
@@ -178,9 +177,9 @@ function train_FNF(
         Chain(in_layer, fill(hd_layer, hd)..., fn_layer)
     end
 
-    #----------------------#---------------------#
+    #-------------------------------------------#
     # training hyper-params
-    #----------------------#---------------------#
+    #-------------------------------------------#
 
     NN = FlatDecoder(hyper, decoder)
 
@@ -193,19 +192,18 @@ function train_FNF(
     weightdecay = IdxWeightDecay(0f0, idx)
     opts, nepochs, schedules, early_stoppings = make_optimizer(E, warmup, weightdecay)
 
-    #----------------------#----------------------#
+    #-------------------------------------------#
 
     train_args = (; l, hh, hd, wh, wd, E, _batchsize, λ2, σ2inv, α, weight_decays)
     metadata   = (; metadata..., train_args)
 
-    displaymetadata(metadata)
     display(NN)
+    displaymetadata(metadata)
 
     @time model, ST = train_model(NN, _data; rng,
         _batchsize, batchsize_, weight_decays,
         opts, nepochs, schedules, early_stoppings,
         device, dir, metadata, lossfun,
-        cb_epoch,
     )
 
     displaymetadata(metadata)
@@ -253,11 +251,12 @@ function evolve_FNF(
     data = copy.(data) # ensure no SubArrays
 
     #==============#
-    # get decoer
+    # get hyper-decoer
     #==============#
     hyper, decoder = get_flatdecoder(NN, p, st)
 
-    # get codes
+    # TODO: make param vector and query latent-predictor
+    # just grab saved codes for now
     codes = jldopen(joinpath(dirname(modelfile), "train_codes.jld2"))
     _code = codes["_code"]
 
@@ -271,8 +270,6 @@ function evolve_FNF(
     #==============#
     # evolve
     #==============#
-
-    # optimizer
     autodiff = AutoForwardDiff()
     linsolve = QRFactorization()
     linesearch = LineSearch()
@@ -288,8 +285,7 @@ function evolve_FNF(
 
     @time ts, ps, Up = evolve_model(
         prob, model, timealg, scheme, data, p0, Δt;
-        nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz,
-        learn_ic,
+        nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz, learn_ic,
         verbose, device,
     )
 
@@ -306,18 +302,11 @@ function evolve_FNF(
     fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "evolve", case)
 
     # parameter plots
-    _ps = _code
-    _ps = reshape(_ps, size(_ps, 1), :)
-
-    title = L"$\tilde{u}$ distribution, case " * "$(case)"
-
-    plt = plot(; title)
+    plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
     plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
     png(plt, joinpath(outdir, "evole_p_scatter_case$(case)"))
 
-    title = L"$\tilde{u}$ evolution, case " * "$(case)"
-
-    plt = plot(; title)
+    plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
     plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")
     png(plt, joinpath(outdir, "evolve_p_case$(case)"))
 
@@ -331,6 +320,7 @@ function evolve_FNF(
 
     Xdata, Tdata, Ud, Up, ps
 end
+
 #===========================================================#
 function postprocess_FNF(
     prob::AbstractPDEProblem,
@@ -417,7 +407,6 @@ function postprocess_FNF(
     mkpath(outdir)
 
     if makeplot
-
         grid = get_prob_grid(prob)
 
         # field plots
@@ -514,19 +503,14 @@ function postprocess_FNF(
         @show norm(ps - _p, 2) / length(ps)
         @show norm(ps - _p, Inf)
 
-        title = L"$\tilde{u}$ distribution, case " * "$(case)"
-
-        plt = plot(; title)
+        plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
         plt = make_param_scatterplot(_p, Tdata; plt, label = "HyperNet prediction", color = :reds, cbar = false)
         plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
         png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
 
-        title = L"$\tilde{u}$ evolution, case " * "$(case)"
-        palette = :tab10
-
-        plt = plot(; title)
-        plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette)
-        plot!(plt, Tdata, _p'; w = 4.0, label = "HyperNet prediction", style = :dash, palette)
+        plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+        plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
+        plot!(plt, Tdata, _p'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
         png(plt, joinpath(outdir, "compare_p_case$(case)"))
 
     end
@@ -543,6 +527,5 @@ function postprocess_FNF(
 
     nothing
 end
-#===========================================================#
 #===========================================================#
 #

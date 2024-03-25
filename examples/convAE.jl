@@ -29,50 +29,15 @@ function makedata_CAE(
     _It = Colon(), # train/test split in time
     It_ = Colon(),
 )
-
-    #==============#
     # load data
-    #==============#
-    data = jldopen(datafile)
-    t  = data["t"]
-    x  = data["x"]
-    u  = data["u"] # [Nx, Nb, Nt] or [out_dim, Nx, Nb, Nt]
-    mu = data["mu"]
-    md_data = data["metadata"]
-    close(data)
-    
-    @assert ndims(u) ∈ (3,4,)
-    @assert x isa AbstractVecOrMat
-    x = x isa AbstractVector ? reshape(x, 1, :) : x # (Dim, Npoints)
+    x, t, mu, u, md_data = loaddata(datafile)
 
-    if ndims(u) == 3 # [Nx, Nb, Nt]
-        u = reshape(u, 1, size(u)...) # [1, Nx, Nb, Nt]
-    end
-    
-    in_dim  = size(x, 1)
-    out_dim = size(u, 1)
-
-    println("input size $in_dim with $(size(x, 2)) points per trajectory.")
-    println("output size $out_dim.")
-    
-    @assert eltype(x) === Float32
-    @assert eltype(u) === Float32
-    
-    #==============#
     # normalize
-    #==============#
-    
-    ū  = sum(u, dims = (2,3,4)) / (length(u) ÷ out_dim) |> vec
-    σu = sum(abs2, u .- ū, dims = (2,3,4)) / (length(u) ÷ out_dim) .|> sqrt |> vec
-    u  = normalizedata(u, ū, σu)
-    
-    x̄  = sum(x, dims = 2) / size(x, 2) |> vec
-    σx = sum(abs2, x .- x̄, dims = 2) / size(x, 2) .|> sqrt |> vec
-    x  = normalizedata(x, x̄, σx)
+    x, x̄, σx = normalize_x(x)
+    u, ū, σu = normalize_u(u)
+    t, t̄, σt = normalize_t(t)
 
-    #==============#
     # subsample, test/train split
-    #==============#
     _x = @view x[:, Ix]
     x_ = @view x[:, Ix]
 
@@ -82,7 +47,9 @@ function makedata_CAE(
     Nx = size(_x, 2)
     @assert size(_u, 2) == size(_x, 2)
 
-    println("Using $Nx sample points per trajectory.")
+    # get dimensinos
+    in_dim  = size(x, 1)
+    out_dim = size(u, 1)
 
     _u = permutedims(_u, (2, 1, 3, 4)) # [Nx, out_dim, Nbatch, Ntime]
     u_ = permutedims(_u, (2, 1, 3, 4))
@@ -90,6 +57,7 @@ function makedata_CAE(
     _Ns = size(_u, 3) * size(_u, 4)
     Ns_ = size(u_, 3) * size(u_, 4)
 
+    println("Using $Nx sample points per trajectory.")
     println("$_Ns / $Ns_ trajectories in train/test sets.")
 
     grid = if in_dim == 1
@@ -98,10 +66,11 @@ function makedata_CAE(
         md_data.grid
     end
 
+    # make arrays
     _u = reshape(_u, grid..., out_dim, _Ns)
     u_ = reshape(u_, grid..., out_dim, Ns_)
 
-    readme = "Train/test on 0.0-0.5."
+    readme = ""
     makedata_kws = (; Ix, _Ib, Ib_, _It, It_,)
     metadata = (; ū, σu, x̄, σx,
         Nx, _Ns, Ns_,
@@ -127,7 +96,7 @@ function train_CAE(
     device = Lux.cpu_device(),
 )
 
-    _data, _, metadata = makedata_CAE(datafile; makedata_kws...)
+    _data, data_, metadata = makedata_CAE(datafile; makedata_kws...)
     dir = modeldir
 
     lossfun = function(NN, p, st, batch)
@@ -144,29 +113,7 @@ function train_CAE(
     #--------------------------------------------#
     # optimizer
     #--------------------------------------------#
-    lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
-    Nlrs = length(lrs)
-
-    opts = Tuple(Optimisers.Adam(lr) for lr in lrs)
-
-    nepochs = (round.(Int, E / (Nlrs) * ones(Nlrs))...,)
-    schedules = Step.(lrs, 1f0, Inf32)
-    early_stoppings = (fill(true, Nlrs)...,)
-
-    if warmup
-        opt_warmup = Optimisers.Adam(1f-2)
-        nepochs_warmup = 10
-        schedule_warmup = Step(1f-2, 1f0, Inf32)
-        early_stopping_warmup = true
-        
-        ######################
-        opts = (opt_warmup, opts...,)
-        nepochs = (nepochs_warmup, nepochs...,)
-        schedules = (schedule_warmup, schedules...,)
-        early_stoppings = (early_stopping_warmup, early_stoppings...,)
-    end
-
-    #--------------------------------------------#
+    opts, nepochs, schedules, early_stoppings = make_optimizer(E, warmup)
 
     train_args = (; E, _batchsize,)
     metadata   = (; metadata..., train_args)
@@ -206,6 +153,7 @@ function postprocess_CAE(
 
     in_dim  = size(Xdata, 1)
     out_dim = size(Udata, 1)
+    Nb = size(Udata, 3)
 
     #==============#
     # train/test split
@@ -324,6 +272,76 @@ function postprocess_CAE(
         png(plt, joinpath(outdir, "train_p_scatter"))
 
     end # makeplot
+
+    #==============#
+    # Evolve
+    #==============#
+    for case in 1:Nb
+        evolve_CAE(prob, datafile, modelfile, case; rng, device)
+    end
+
+    #==============#
+    # Compare evolution with training plots
+    #==============#
+    codes = jldopen(joinpath(modeldir, "train_codes"))
+    _code = codes["_code"]
+    code_ = codes["code_"]
+    _ps = reshape(_code, size(_code, 1), :)
+
+    for case in  1:Nb
+        ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
+
+        ps = ev["Ppred"]
+        Ue = ev["Upred"]
+
+        _p = _code
+        Uh = _Upred[:, :, case, :] # encoder/decoder prediction
+        Ud = _Udata[:, :, case, :]
+
+        fieldplot(Xdata, Tdata, Uh, Ue, grid, outdir, "compare", case)
+
+        # Compare u
+        println("#=======================#")
+        println("Dynamics Solve")
+        @show norm(Ue - Ud, 2) / length(Ud)
+        @show norm(Ue - Ud, Inf)
+
+        println("#=======================#")
+        println("HyperNet Prediction")
+        @show norm(Uh - Ud, 2) / length(Ud)
+        @show norm(Uh - Ud, Inf)
+
+        ###
+        # Compare ũ
+        ###
+
+        println("#=======================#")
+        println("Dynamics Solve vs HyperNet Prediction")
+        @show norm(ps - _p, 2) / length(ps)
+        @show norm(ps - _p, Inf)
+
+        plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
+        plt = make_param_scatterplot(_p, Tdata; plt, label = "HyperNet prediction", color = :reds, cbar = false)
+        plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
+        png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
+
+        plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+        plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
+        plot!(plt, Tdata, _p'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
+        png(plt, joinpath(outdir, "compare_p_case$(case)"))
+    end
+
+    #==============#
+    # Done
+    #==============#
+    if haskey(md, :readme)
+        RM = joinpath(outdir, "README.md")
+        RM = open(RM, "w")
+        write(RM, md.readme)
+        close(RM)
+    end
+
+    nothing
 end
 
 #======================================================#
@@ -350,39 +368,14 @@ function evolve_CAE(
     verbose::Bool = true,
     device = Lux.cpu_device(),
 )
-
-    #==============#
     # load data
-    #==============#
-    data = jldopen(datafile)
-    Tdata = data["t"]
-    Xdata = data["x"]
-    Udata = data["u"]
-    mu = data["mu"]
+    Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
 
-    close(data)
-
-    @assert ndims(Udata) ∈ (3,4,)
-    @assert Xdata isa AbstractVecOrMat
-    Xdata = Xdata isa AbstractVector ? reshape(Xdata, 1, :) : Xdata # (Dim, Npoints)
-
-    if ndims(Udata) == 3 # [Nx, Nb, Nt]
-        Udata = reshape(Udata, 1, size(Udata)...) # [out_dim, Nx, Nb, Nt]
-    end
+    # load model
+    (NN, p, st), md = loadmodel(modelfile)
 
     in_dim  = size(Xdata, 1)
     out_dim = size(Udata, 1)
-
-    mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
-    mu = isa(mu, AbstractArray) ? vec(mu) : mu
-
-    #==============#
-    # load model
-    #==============#
-    model = jldopen(modelfile)
-    NN, p, st = model["model"]
-    md = model["metadata"] # (; ū, σu, _Ib, Ib_, _It, It_, readme)
-    close(model)
 
     #==============#
     # subsample in space
@@ -444,8 +437,7 @@ function evolve_CAE(
     end
 
     @time _, ps, Up = evolve_model(prob, model, timealg, scheme, data, p0, Δt;
-        nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz,
-        learn_ic,
+        nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz, learn_ic,
         verbose, device,
     )
 
@@ -462,11 +454,13 @@ function evolve_CAE(
     fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "evolve", case)
 
     # parameter plots
-    codes = jldopen(joinpath(modeldir, "train_codes"))
-    _code = codes["_code"]
-    code_ = codes["code_"]
-    _ps = reshape(_code, size(_code, 1), :)
-    paramplot(Tdata, _ps, ps, outdir, "evolve", case)
+    plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
+    plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
+    png(plt, joinpath(outdir, "evole_p_scatter_case$(case)"))
+
+    plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+    plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")
+    png(plt, joinpath(outdir, "evolve_p_case$(case)"))
 
     # save files
     filename = joinpath(outdir, "evolve$case.jld2")
