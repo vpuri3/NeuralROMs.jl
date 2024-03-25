@@ -27,12 +27,14 @@ function train_CAE_compare(
     datafile::String,
     modeldir::String,
     train_params = (;);
+    rng::Random.AbstractRNG = Random.default_rng(),
     device = Lux.cpu_device(),
 )
     E   = haskey(train_params, :E  ) ? train_params.E : 1400
     w   = haskey(train_params, :w  ) ? train_params.w : 32
     act = haskey(train_params, :act) ? train_params.E : tanh # relu, tanh
     makedata_kws = get_makedata_kws(train_params)
+    bsz = haskey(train_params, :batchsize_) ? (; batchsize_ = train_params.batchsize_,) : (;)
 
     NN = cae_network(prob, l, w, act)
 
@@ -45,7 +47,7 @@ function train_CAE_compare(
 
     isdir(modeldir) && rm(modeldir, recursive = true)
     train_CAE(datafile, modeldir, NN, E; rng,
-        makedata_kws, warmup = false, device
+        makedata_kws, warmup = false, device, bsz...,
     )
 end
 
@@ -54,6 +56,7 @@ function train_SNF_compare(
     datafile::String,
     modeldir::String,
     train_params = (;);
+    rng::Random.AbstractRNG = Random.default_rng(),
     device = Lux.cpu_device(),
 )
     E = haskey(train_params, :E) ? train_params.E : 1400
@@ -75,11 +78,16 @@ function train_SNF_compare(
         throw(ErrorException("Select either weight decay regularization or Lipschitz regularization"))
     end
 
+    # batchsize
+    bsz = haskey(train_params, :batchsize_) ? (; batchsize_ = train_params.batchsize_,) : (;)
+
+    # makedata_kws
     makedata_kws = get_makedata_kws(train_params)
 
     isdir(modeldir) && rm(modeldir, recursive = true)
     train_SNF(datafile, modeldir, l, hh, hd, wh, wd, E;
         rng, makedata_kws, λ2, α, weight_decays = γ, device,
+        bsz...,
     )
 end
 

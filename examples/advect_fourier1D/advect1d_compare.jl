@@ -31,19 +31,19 @@ modeldir_SNW = joinpath(@__DIR__, "model_SNW$(l0)") # us (Weight decay)
 modeldir_SNL = joinpath(@__DIR__, "model_SNL$(l0)") # us (Lipschitz)
 
 # # train PCA
-# train_PCA(datafile, modeldir_PCA, l_pca; makedata_kws, device)
+# train_PCA(datafile, modeldir_PCA, l_pca; makedata_kws, rng, device)
 #
 # # train_CAE
 # train_params_CAE = (; E = 1400, w = 32, makedata_kws,)
-# train_CAE_compare(prob, latent, datafile, modeldir_CAE, train_params_CAE; device)
+# train_CAE_compare(prob, latent, datafile, modeldir_CAE, train_params_CAE; rng, device)
 #
 # # train_SNW
 # train_params_SNW = (; E = 1400, wd = 64, α = 0f-0, γ = 1f-2, makedata_kws,)
-# train_SNF_compare(latent, datafile, modeldir_SNW, train_params_SNW; device)
+# train_SNF_compare(latent, datafile, modeldir_SNW, train_params_SNW; rng, device)
 #
 # # train_SNL
 # train_params_SNL = (; E = 1400, wd = 64, α = 1f-4, γ = 0f-0, makedata_kws,)
-# train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; device)
+# train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
 
 #==================#
 # postprocess
@@ -54,10 +54,10 @@ modelfile_CAE = joinpath(modeldir_CAE, "model_07.jld2")
 modelfile_SNW = joinpath(modeldir_SNW, "model_08.jld2")
 modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 
-# postprocess_PCA(prob, datafile, modelfile_PCA)
-# postprocess_CAE(prob, datafile, modelfile_CAE)
-# postprocess_SNF(prob, datafile, modelfile_SNW)
-# postprocess_SNF(prob, datafile, modelfile_SNL)
+# postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
+# postprocess_CAE(prob, datafile, modelfile_CAE; rng, device)
+# postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
+# postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 
 #==================#
 # make figures

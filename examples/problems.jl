@@ -99,9 +99,10 @@ function cae_network(
     elseif prob isa Advection2D # (128, 128) -> l -> (128, 128)
 
         encoder = Chain(
-            Conv((8, 8), 1  => w, act; stride = 4, pad = 2), # /4 = 24
-            Conv((8, 8), w  => w, act; stride = 4, pad = 2), # /4 = 6
-            Conv((6, 6), w  => w, act; stride = 1, pad = 0), # /6 = 1
+            Conv((8, 8), 1  => w, act; stride = 4, pad = 2), # /4 = 32
+            Conv((8, 8), w  => w, act; stride = 4, pad = 2), # /4 = 8
+            Conv((8, 8), w  => w, act; stride = 4, pad = 2), # /4 = 2
+            Conv((2, 2), w  => w, act; stride = 1, pad = 0), # /2 = 1
             flatten,
             Dense(w, l),
         )
@@ -109,9 +110,10 @@ function cae_network(
         decoder = Chain(
             Dense(l, w, act),
             ReshapeLayer((1, 1, w)),
-            ConvTranspose((6, 6), w => w, act; stride = 1, pad = 0), # *2 = 2
-            ConvTranspose((8, 8), w => w, act; stride = 4, pad = 2), # *4 = 8
-            ConvTranspose((8, 8), w => 1     ; stride = 4, pad = 2), # *4 = 32
+            ConvTranspose((4, 4), w => w, act; stride = 1, pad = 0), # *4 = 4
+            ConvTranspose((8, 8), w => w, act; stride = 4, pad = 2), # *4 = 16
+            ConvTranspose((8, 8), w => w, act; stride = 4, pad = 2), # *4 = 64
+            ConvTranspose((8, 8), w => 1     ; stride = 2, pad = 3), # *2 = 128
         )
         
         Chain(; encoder, decoder)
