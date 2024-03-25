@@ -429,7 +429,7 @@ function postprocess_ADE(
     _xdata, _Icode = _data[1]
     _xdata = unnormalizedata(_xdata, md.x̄, md.σx)
 
-    _Upred = eval_model((NN, p, st), (_xdata, _Icode), p; device) |> cpu_device()
+    _Upred = eval_model((NN, p, st), (_xdata, _Icode); device) |> cpu_device()
     _Upred = reshape(_Upred, out_dim, Nx, length(_Ib), length(_It))
 
     @show mse(_Upred, _Udata) / mse(_Udata, 0*_Udata)

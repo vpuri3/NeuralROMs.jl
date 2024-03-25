@@ -12,13 +12,10 @@ prob = BurgersViscous1D(1f-4)
 datafile = joinpath(@__DIR__, "data_burg1D", "data.jld2")
 device = Lux.gpu_device()
 
-_Ib, Ib_ = [1, 3,], [2,]
+_Ib, Ib_ = [1, 3, 5,], [2, 4]
 Ix  = Colon()
 _It = Colon()
 makedata_kws = (; Ix, _Ib, Ib_, _It, It_ = :)
-case = Ib_[1]
-
-makedata_kws = (; Ix = :, _Ib = [1,], Ib_ = [1,], _It = :, It_ = :)
 
 # latent 
 latent = 2
@@ -42,8 +39,6 @@ train_PCA(datafile, modeldir_PCA, l_pca; rng, makedata_kws, device)
 # train_CAE
 train_params_CAE = (; E = 1400, w = 64, makedata_kws,)
 train_CAE_compare(prob, latent, datafile, modeldir_CAE, train_params_CAE; rng, device)
-
-# batchsize_ = (128 * 128) * 500 ÷ 4
 
 # train_SNW
 train_params_SNW = (; E = 1400, wd = 128, α = 0f-0, γ = 1f-2, makedata_kws)#, batchsize_)

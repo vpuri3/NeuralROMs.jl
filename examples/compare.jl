@@ -99,7 +99,7 @@ function compare_plots(
     modeldirs,
     labels,
     outdir::String,
-    casename::String,
+    casename::AbstractString,
     case::Integer,
     grid,
 )

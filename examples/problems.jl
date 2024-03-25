@@ -386,13 +386,12 @@ function eval_model(
         y = (y..., yy)
     end
 
-    hcat(y...)
+    hcat(y...) |> Lux.cpu_device()
 end
 
 function eval_model(
     model::NTuple{3, Any},
-    x::Tuple,
-    p::AbstractArray;
+    x;
     batchsize = numobs(x) ÷ 100,
     device = Lux.cpu_device(),
 )
@@ -413,7 +412,7 @@ function eval_model(
         y = (y..., yy)
     end
 
-    hcat(y...)
+    hcat(y...) |> Lux.cpu_device()
 end
 
 #======================================================#

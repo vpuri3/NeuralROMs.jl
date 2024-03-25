@@ -366,19 +366,19 @@ function postprocess_SNF(
     #==============#
     # evaluate model
     #==============#
-    _data, data_, _ = makedata_SNF(datafile; _Ib = md.makedata_kws._Ib, _It = md.makedata_kws._It)
+    _data, data_, _ = makedata_SNF(datafile; makedata_kws...)
 
     in_dim  = size(Xdata, 1)
     out_dim, Nx, Nb, Nt = size(Udata)
 
-    _code = hyper[1](_data[1][2], hyper[2], hyper[3])[1]
-    code_ = hyper[1](data_[1][2], hyper[2], hyper[3])[1]
+    _code = eval_model(hyper, _data[1][2]; device)
+    code_ = eval_model(hyper, data_[1][2]; device)
 
     _xc = vcat(_data[1][1], _code)
     xc_ = vcat(data_[1][1], code_)
 
-    _upred = decoder[1](_xc, decoder[2], decoder[3])[1]
-    upred_ = decoder[1](xc_, decoder[2], decoder[3])[1]
+    _upred = eval_model(decoder, _xc; device)
+    upred_ = eval_model(decoder, xc_; device)
 
     _upred = reshape(_upred, out_dim, Nx, length(_Ib), length(_It))
     upred_ = reshape(upred_, out_dim, Nx, length(Ib_), length(It_))
@@ -466,14 +466,14 @@ function postprocess_SNF(
     #==============#
     # Evolve
     #==============#
-    for case in 1:Nb
+    for case in union(_Ib, Ib_)
         evolve_SNF(prob, datafile, modelfile, case; rng, device)
     end
 
     #==============#
     # Compare evolution with training plots
     #==============#
-    for case in  1:Nb
+    for case in  union(_Ib, Ib_)
         ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
 
         ps = ev["Ppred"]
@@ -514,7 +514,6 @@ function postprocess_SNF(
         plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
         plot!(plt, Tdata, _p'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
         png(plt, joinpath(outdir, "compare_p_case$(case)"))
-
     end
 
     #==============#

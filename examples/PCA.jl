@@ -136,6 +136,11 @@ function train_PCA(
     # visualize
     #==============================#
 
+    modeldir = dirname(modelfile)
+    outdir = joinpath(modeldir, "results")
+    isdir(outdir) && rm(outdir; recursive = true)
+    mkpath(outdir)
+
     if makeplot
 
         _a = P' * _udata
@@ -150,19 +155,25 @@ function train_PCA(
         xlabel = "x"
         ylabel = "u(x, t)"
 
+        # grid = get_prob_grid(prob)
+        #
+        # for case in axes(_Ib, 1)
+        #     u = _u[:, :, case, :]
+        #     v = _v[:, :, case, :]
+        #     fieldplot(_x, _t, u, v, grid, outdir, "train", case)
+        # end
 
         for k in 1:length(_Ib)
             u = @view _u[:, k, :]
             v = @view _v[:, k, :]
 
-            _mu = md.mu[_Ib[k]]
-            title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+            title = "Case $(Ib_[k])"
 
-            it = LinRange(1, size(u, 2), 4) .|> Base.Fix1(round, Int)
+            It = LinRange(1, size(u, 2), 4) .|> Base.Fix1(round, Int)
 
             plt = plot(; title, xlabel, ylabel)
-            plot!(plt, _x[1,:], u[:, it], linewidth=3, c = :black)
-            plot!(plt, _x[1,:], v[:, it], linewidth=3, c = :red)
+            plot!(plt, _x[1,:], u[:, It], linewidth=3, c = :black)
+            plot!(plt, _x[1,:], v[:, It], linewidth=3, c = :red)
             png(plt, joinpath(modeldir, "train_$k"))
             display(plt)
 
@@ -174,8 +185,7 @@ function train_PCA(
             u = @view u_[:, k, :]
             v = @view v_[:, k, :]
 
-            _mu = md.mu[_Ib[k]]
-            title  = isnothing(_mu) ? "" : "μ = $(round(_mu, digits = 2))"
+            title = "Case $(_Ib[k])"
 
             it = LinRange(1, size(u, 2), 4) .|> Base.Fix1(round, Int)
             

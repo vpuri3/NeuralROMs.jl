@@ -153,7 +153,6 @@ function postprocess_CAE(
 
     in_dim  = size(Xdata, 1)
     out_dim = size(Udata, 1)
-    Nb = size(Udata, 3)
 
     #==============#
     # train/test split
@@ -276,7 +275,7 @@ function postprocess_CAE(
     #==============#
     # Evolve
     #==============#
-    for case in 1:Nb
+    for case in union(_Ib, Ib_)
         evolve_CAE(prob, datafile, modelfile, case; rng, device)
     end
 
@@ -288,7 +287,7 @@ function postprocess_CAE(
     code_ = codes["code_"]
     _ps = reshape(_code, size(_code, 1), :)
 
-    for case in  1:Nb
+    for case in  union(_Ib, Ib_)
         ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
 
         ps = ev["Ppred"]
