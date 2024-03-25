@@ -1,6 +1,6 @@
 #
 using GeometryLearning
-include(joinpath(pkgdir(GeometryLearning), "examples", "flatNF.jl"))
+include(joinpath(pkgdir(GeometryLearning), "examples", "smoothNF.jl"))
 include(joinpath(pkgdir(GeometryLearning), "examples", "problems.jl"))
 #======================================================#
 
@@ -21,12 +21,12 @@ hd, wd = 5, 96
 λ2, α, weight_decays = 1f-2, 0f0, 1f-2
 
 isdir(modeldir) && rm(modeldir, recursive = true)
-model, STATS, metadata = train_FNF(
+model, STATS, metadata = train_SNF(
     datafile, modeldir, l, hh, hd, wh, wd, E;
     rng, warmup = true, λ2, α, weight_decays, device,
 )
 
 ## process
-postprocess_FNF(prob, datafile, modelfile; rng, device)
+postprocess_SNF(prob, datafile, modelfile; rng, device)
 #======================================================#
 nothing

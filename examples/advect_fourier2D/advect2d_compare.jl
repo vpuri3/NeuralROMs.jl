@@ -42,15 +42,16 @@ modeldir_SNL = joinpath(@__DIR__, "model_SNL$(l0)") # us (Lipschitz)
 # # train_CAE
 # train_params_CAE = (; E = 1400, w = 64, makedata_kws,)
 # train_CAE_compare(prob, latent, datafile, modeldir_CAE, train_params_CAE; rng, device)
-
-# train_SNW
-batchsize_ = (128 * 128) * 500 ÷ 4
-train_params_SNW = (; E = 1400, wd = 128, α = 0f-0, γ = 1f-2, makedata_kws, batchsize_)
-train_SNF_compare(latent, datafile, modeldir_SNW, train_params_SNW; rng, device)
-
-# train_SNL
-train_params_SNL = (; E = 1400, wd = 128, α = 1f-4, γ = 0f-0, makedata_kws, batchsize_)
-train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
+#
+# batchsize_ = (128 * 128) * 500 ÷ 4
+#
+# # train_SNW
+# train_params_SNW = (; E = 1400, wd = 128, α = 0f-0, γ = 1f-2, makedata_kws, batchsize_)
+# train_SNF_compare(latent, datafile, modeldir_SNW, train_params_SNW; rng, device)
+#
+# # train_SNL
+# train_params_SNL = (; E = 1400, wd = 128, α = 1f-4, γ = 0f-0, makedata_kws, batchsize_)
+# train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
 
 #==================#
 # postprocess
@@ -61,8 +62,8 @@ modelfile_CAE = joinpath(modeldir_CAE, "model_07.jld2")
 modelfile_SNW = joinpath(modeldir_SNW, "model_08.jld2")
 modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 
-postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
-postprocess_CAE(prob, datafile, modelfile_CAE; rng, device)
+# postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
+# postprocess_CAE(prob, datafile, modelfile_CAE; rng)#, device)
 postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
 postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 
@@ -70,11 +71,11 @@ postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 # make figures
 #==================#
 
-casename = "1D KS"
+casename = "2D Advection"
 modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNW, modeldir_SNL,)
 labels = ("PCA R = $(l_pca)", "Lee & Carlberg", "SNFW (ours)", "SNFL (ours)")
 
-p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, "1D KS", 1, (256,))
+p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, (256,))
 
 #======================================================#
 nothing

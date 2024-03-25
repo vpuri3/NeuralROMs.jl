@@ -75,7 +75,7 @@ function train_SNF_compare(
     γ = haskey(train_params, :γ) ? train_params.γ : 0f-0 # Weight decay
 
     if iszero(α) & iszero(γ)
-        throw(ErrorException("Select either weight decay regularization or Lipschitz regularization"))
+        @warn "Got γ = 0, α = 0"
     end
 
     # batchsize

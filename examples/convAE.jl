@@ -362,7 +362,7 @@ function evolve_CAE(
     autodiff_xyz::ADTypes.AbstractADType = AutoFiniteDiff(),
     ϵ_xyz::Union{Real, Nothing} = 1f-2,
 
-    learn_ic::Bool = true,
+    learn_ic::Bool = false,
     zeroinit::Bool = false,
 
     verbose::Bool = true,

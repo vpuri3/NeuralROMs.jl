@@ -42,8 +42,8 @@ modeldir_SNL = joinpath(@__DIR__, "model_SNL$(l0)") # us (Lipschitz)
 # train_SNF_compare(latent, datafile, modeldir_SNW, train_params_SNW; rng, device)
 #
 # train_SNL
-train_params_SNL = (; E = 1400, wd = 128, wh = 16, hh = 1, α = 1f-5, γ = 0f-0, makedata_kws,)
-train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
+# train_params_SNL = (; E = 1400, wd = 128, wh = 8, hh = 0, α = 1f-7, γ = 0f-0, makedata_kws,)
+# train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
 
 #==================#
 # postprocess
@@ -57,16 +57,17 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 # postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
 # postprocess_CAE(prob, datafile, modelfile_CAE; rng, device)
 # postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
-postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
+# postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 
 #==================#
 # make figures
 #==================#
+grid = (256,)
 casename = "1D KS"
 modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNW, modeldir_SNL,)
 labels = ("PCA R = $(l_pca)", "Lee & Carlberg", "SNFW (ours)", "SNFL (ours)")
 
-p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, "1D KS", 1, (256,))
+p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid)
 
 #======================================================#
 nothing

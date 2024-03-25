@@ -293,6 +293,10 @@ function loaddata(
     mu = isnothing(mu) ? fill(nothing, size(u, 3)) |> Tuple : mu
     mu = isa(mu, AbstractArray) ? vec(mu) : mu
 
+    if isa(mu[1], Number)
+        mu = map(x -> [x], mu)
+    end
+
     x, t, mu, u, md_data
 end
 

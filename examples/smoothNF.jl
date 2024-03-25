@@ -42,13 +42,11 @@ function makedata_SNF(
     _x = @view x[:, Ix]
     x_ = @view x[:, Ix]
 
+    _t = @view t[_It]
+    t_ = @view t[It_]
+
     _u = @view u[:, Ix, _Ib, _It]
     u_ = @view u[:, Ix, Ib_, It_]
-
-    Nx = size(_x, 2)
-    @assert size(_u, 2) == size(_x, 2)
-
-    println("Using $Nx sample points per trajectory.")
 
     # get dimensions
     in_dim  = size(x, 1)
@@ -59,33 +57,37 @@ function makedata_SNF(
         prm_dim += length(mu[1])
     end
 
-    # make arrays
+    _, Nx, _Nb, _Nt = size(_u)
+    _, Nx, Nb_, Nt_ = size(u_)
 
-    _u = reshape(_u, out_dim, Nx, :)
-    u_ = reshape(u_, out_dim, Nx, :)
+    _Ns = _Nb * _Nt # num trajectories
+    Ns_ = Nb_ * Nt_
 
-    _Ns = size(_u, 3) # number of codes i.e. # trajectories
-    Ns_ = size(u_, 3)
-
+    println("Using $Nx sample points per trajectory.")
     println("$_Ns / $Ns_ trajectories in train/test sets.")
+
+    # make arrays
 
     # space
     _xyz = zeros(Float32, in_dim, Nx, _Ns)
     xyz_ = zeros(Float32, in_dim, Nx, Ns_)
 
-    _xyz[:, :, :] .= _x
+    _xyz[:, :, :] .= _x # [in_dim, Nx]
     xyz_[:, :, :] .= x_
 
     # parameters
-    _prm = zeros(Float32, prm_dim, Nx, _Ns)
-    prm_ = zeros(Float32, prm_dim, Nx, Ns_)
+    _prm = zeros(Float32, prm_dim, Nx, _Nb, _Nt)
+    prm_ = zeros(Float32, prm_dim, Nx, Nb_, Nt_)
 
-    _prm[1, :, :] .= vec(t) |> adjoint
-    prm_[1, :, :] .= vec(t) |> adjoint
+    reshape(view(_prm, 1, :, :, :), Nx * _Nb, _Nt) .= reshape(_t, 1, _Nt)
+    reshape(view(prm_, 1, :, :, :), Nx * Nb_, Nt_) .= reshape(t_, 1, Nt_)
 
     if !isnothing(mu[1])
-        error("TODO FlatNF: varying mu")
-        # prm_dim[2:prm_dim, :, :] .= mu
+        _mu = hcat(mu[_Ib]...)
+        mu_ = hcat(mu[Ib_]...)
+
+        _prm[2:prm_dim, :, :, :] .= reshape(_mu, prm_dim-1, 1, _Nb, 1)
+        prm_[2:prm_dim, :, :, :] .= reshape(mu_, prm_dim-1, 1, Nb_, 1)
     end
 
     # solution

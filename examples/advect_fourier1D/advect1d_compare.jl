@@ -62,11 +62,12 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 #==================#
 # make figures
 #==================#
+grid = (128,)
 casename = "1D Advection"
 modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNW, modeldir_SNL,)
 labels = ("PCA R = $(l_pca)", "Lee & Carlberg", "SNFW (ours)", "SNFL (ours)")
 
-p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, "1D Advection", 1, (128,))
+p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid)
 
 
 #======================================================#

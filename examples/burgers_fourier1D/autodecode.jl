@@ -9,10 +9,10 @@ rng = Random.default_rng()
 Random.seed!(rng, 460)
 
 prob = BurgersViscous1D(1f-4)
-device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "data_burg1D", "data.jld2")
 modeldir = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
+device = Lux.gpu_device()
 
 E = 3500  # epochs
 l = 4     # latent
