@@ -36,10 +36,9 @@ function makedata_SNF(
     # normalize
     x, x̄, σx = normalize_x(x)
     u, ū, σu = normalize_u(u)
+    t, t̄, σt = normalize_t(t)
 
-    #==============#
     # subsample, test/train split
-    #==============#
     _x = @view x[:, Ix]
     x_ = @view x[:, Ix]
 
@@ -51,8 +50,16 @@ function makedata_SNF(
 
     println("Using $Nx sample points per trajectory.")
 
+    # get dimensions
     in_dim  = size(x, 1)
     out_dim = size(u, 1)
+    prm_dim = 1
+
+    if !isnothing(mu[1])
+        prm_dim += length(mu[1])
+    end
+
+    # make arrays
 
     _u = reshape(_u, out_dim, Nx, :)
     u_ = reshape(u_, out_dim, Nx, :)
@@ -62,13 +69,6 @@ function makedata_SNF(
 
     println("$_Ns / $Ns_ trajectories in train/test sets.")
 
-    # indices
-    _idx = zeros(Int32, Nx, _Ns)
-    idx_ = zeros(Int32, Nx, Ns_)
-
-    _idx[:, :] .= 1:_Ns |> adjoint
-    idx_[:, :] .= 1:Ns_ |> adjoint
-
     # space
     _xyz = zeros(Float32, in_dim, Nx, _Ns)
     xyz_ = zeros(Float32, in_dim, Nx, Ns_)
@@ -76,18 +76,30 @@ function makedata_SNF(
     _xyz[:, :, :] .= _x
     xyz_[:, :, :] .= x_
 
+    # parameters
+    _prm = zeros(Float32, prm_dim, Nx, _Ns)
+    prm_ = zeros(Float32, prm_dim, Nx, Ns_)
+
+    _prm[1, :, :] .= vec(t) |> adjoint
+    prm_[1, :, :] .= vec(t) |> adjoint
+
+    if !isnothing(mu[1])
+        error("TODO FlatNF: varying mu")
+        # prm_dim[2:prm_dim, :, :] .= mu
+    end
+
     # solution
     _y = reshape(_u, out_dim, :)
     y_ = reshape(u_, out_dim, :)
 
-    _x = (reshape(_xyz, in_dim, :), reshape(_idx, 1, :))
-    x_ = (reshape(xyz_, in_dim, :), reshape(idx_, 1, :))
+    _x = (reshape(_xyz, in_dim, :), reshape(_prm, prm_dim, :))
+    x_ = (reshape(xyz_, in_dim, :), reshape(prm_, prm_dim, :))
 
-    readme = "Train/test on the same trajectory."
+    readme = ""
 
     makedata_kws = (; Ix, _Ib, Ib_, _It, It_)
 
-    metadata = (; ū, σu, x̄, σx,
+    metadata = (; ū, σu, x̄, σx, t̄, σt,
         Nx, _Ns, Ns_,
         makedata_kws, md_data, readme,
     )
@@ -101,34 +113,49 @@ function train_SNF(
     datafile::String,
     modeldir::String,
     l::Int, # latent space size
-    h::Int, # num hidden layers
-    w::Int, # hidden layer width
+    hh::Int, # num hidden layers
+    hd::Int, # num hidden layers
+    wh::Int, # hidden layer width
+    wd::Int, # hidden layer width
     E::Int; # num epochs
     rng::Random.AbstractRNG = Random.default_rng(),
     warmup::Bool = true,
     _batchsize = nothing,
     batchsize_ = nothing,
-    λ1::Real = 0f0,
     λ2::Real = 0f0,
     σ2inv::Real = 0f0,
     α::Real = 0f0,
     weight_decays::Union{Real, NTuple{M, <:Real}} = 0f0,
-    WeightDecayOpt = nothing,
-    weight_decay_ifunc = nothing,
     makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :,),
-    init_code = nothing,
-    cb_epoch = nothing,
     device = Lux.cpu_device(),
 ) where{M}
-    _data, _, metadata = makedata_SNF(datafile; makedata_kws...)
+
+    _data, data_, metadata = makedata_SNF(datafile; makedata_kws...)
     dir = modeldir
+
+    in_dim  = size(_data[1][1], 1)
+    prm_dim = size(_data[1][2], 1)
+    out_dim = size(_data[2], 1)
 
     #--------------------------------------------#
     # architecture
     #--------------------------------------------#
-    in_dim, out_dim = size(_data[1][1], 1), size(_data[2], 1) # in/out dim
 
-    println("input size, output size, $in_dim, $out_dim")
+    println("input size: $in_dim")
+    println("param size: $prm_dim")
+    println("output size: $out_dim")
+
+    hyper = begin
+        wi = prm_dim
+        wo = l
+
+        act = tanh
+        in_layer = Dense(wi, wh, act)
+        hd_layer = Dense(wh, wh, act)
+        fn_layer = Dense(wh, wo; use_bias = false)
+
+        Chain(in_layer, fill(hd_layer, hh)..., fn_layer)
+    end
 
     decoder = begin
         init_wt_in = scaled_siren_init(1f1)
@@ -143,41 +170,31 @@ function train_SNF(
         wi = l + in_dim
         wo = out_dim
 
-        in_layer = Dense(wi, w , act; init_weight = init_wt_in, init_bias)
-        hd_layer = Dense(w , w , act; init_weight = init_wt_hd, init_bias)
-        fn_layer = Dense(w , wo     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
+        in_layer = Dense(wi, wd, act; init_weight = init_wt_in, init_bias)
+        hd_layer = Dense(wd, wd, act; init_weight = init_wt_hd, init_bias)
+        fn_layer = Dense(wd, wo     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
 
-        Chain(in_layer, fill(hd_layer, h)..., fn_layer)
+        Chain(in_layer, fill(hd_layer, hd)..., fn_layer)
     end
 
-    init_code = if isnothing(init_code)
-        if l < 8
-            randn32 # N(μ = 0, σ2 = 1.0^2)
-        else
-            scale_init(randn32, 1f-1, 0f0) # N(μ = 0, σ2 = 0.1^2)
-        end
-    else
-        init_code
-    end
+    #-------------------------------------------#
+    # training hyper-params
+    #-------------------------------------------#
 
-    NN = AutoDecoder(decoder, metadata._Ns, l; init_weight = init_code)
+    NN = FlatDecoder(hyper, decoder)
 
     _batchsize = isnothing(_batchsize) ? numobs(_data) ÷ 100 : _batchsize
     batchsize_ = isnothing(batchsize_) ? numobs(_data) ÷ 1   : batchsize_
 
-    lossfun = regularize_autodecoder(mse; σ2inv, α, λ1, λ2)
-
-    #--------------------------------------------#
-    # training hyper-params
-    #--------------------------------------------#
+    lossfun = GeometryLearning.regularize_flatdecoder(mse; α, λ2)
 
     idx = ps_W_indices(NN, :decoder; rng)
     weightdecay = IdxWeightDecay(0f0, idx)
     opts, nepochs, schedules, early_stoppings = make_optimizer(E, warmup, weightdecay)
 
-    #--------------------------------------------#
+    #-------------------------------------------#
 
-    train_args = (; l, h, w, E, _batchsize, λ1, λ2, σ2inv, α, weight_decays)
+    train_args = (; l, hh, hd, wh, wd, E, _batchsize, λ2, σ2inv, α, weight_decays)
     metadata   = (; metadata..., train_args)
 
     display(NN)
@@ -187,76 +204,13 @@ function train_SNF(
         _batchsize, batchsize_, weight_decays,
         opts, nepochs, schedules, early_stoppings,
         device, dir, metadata, lossfun,
-        cb_epoch,
     )
 
     displaymetadata(metadata)
-    
+
     plot_training(ST...) |> display
 
     model, ST, metadata
-end
-
-#======================================================#
-function infer_SNF(
-    model::AbstractNeuralModel,
-    data::Tuple, # (X, U, T)
-    p0::AbstractVector;
-    device = Lux.cpu_device(),
-    learn_init::Bool = false,
-    verbose::Bool = false,
-)
-    # make data
-    xdata, udata, _ = data
-
-    in_dim, Nx = size(xdata)
-    out_dim, Nx, Nt = size(udata)
-
-    model = model |> device # problem here.
-    xdata = xdata |> device
-    udata = udata |> device
-    p = p0 |> device
-
-    # optimizer
-    autodiff = AutoForwardDiff()
-    linsolve = QRFactorization()
-    linesearch = LineSearch() # BackTracking(), HagerZhang(), 
-    nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
-
-    codes  = ()
-    upreds = ()
-    MSEs   = []
-
-    for iter in 1:Nt
-        batch = xdata, udata[:, :, iter]
-
-        if learn_init & (iter == 1)
-            p, _ = nonlinleastsq(model, p, batch, Optimisers.Descent(1f-3); verbose, maxiters = 100)
-            p, _ = nonlinleastsq(model, p, batch, Optimisers.Descent(1f-4); verbose, maxiters = 100)
-            p, _ = nonlinleastsq(model, p, batch, Optimisers.Descent(1f-5); verbose, maxiters = 100)
-        end
-
-        p, _ = nonlinleastsq(model, p, batch, nlssolve; maxiters = 20, verbose)
-
-        # eval
-        upred = model(batch[1], p)
-        l = round(mse(upred, batch[2]); sigdigits = 8)
-
-        codes  = push(codes, p)
-        upreds = push(upreds, upred)
-        push!(MSEs, l)
-
-        if verbose
-            println("#=============================#")
-            println("Iter $iter, MSE: $l")
-            iter += 1
-        end
-    end
-
-    code = mapreduce(getdata, hcat, codes) |> Lux.cpu_device()
-    pred = cat(upreds...; dims = 3)        |> Lux.cpu_device()
-
-    return code, pred, MSEs
 end
 
 #======================================================#
@@ -266,20 +220,14 @@ function evolve_SNF(
     modelfile::String,
     case::Integer; # batch
     rng::Random.AbstractRNG = Random.default_rng(),
-
     data_kws = (; Ix = :, It = :),
-
     Δt::Union{Real, Nothing} = nothing,
     timealg::GeometryLearning.AbstractTimeAlg = EulerForward(),
     adaptive::Bool = false,
     scheme::Union{Nothing, GeometryLearning.AbstractSolveScheme} = nothing,
-
     autodiff_xyz::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ_xyz::Union{Real, Nothing} = nothing,
-
-    learn_ic::Bool = true,
-    zeroinit::Bool = false,
-
+    learn_ic::Bool = false,
     verbose::Bool = true,
     device = Lux.cpu_device(),
 )
@@ -296,9 +244,6 @@ function evolve_SNF(
     Xdata = @view Xdata[:, data_kws.Ix]
     Tdata = @view Tdata[data_kws.It]
 
-    Nx = size(Xdata, 2)
-    Nt = size(Udata, 4)
-
     Ud = Udata[:, :, case, :]
     U0 = Ud[:, :, 1]
 
@@ -306,30 +251,25 @@ function evolve_SNF(
     data = copy.(data) # ensure no SubArrays
 
     #==============#
-    # get decoer
+    # get hyper-decoer
     #==============#
+    hyper, decoder = get_flatdecoder(NN, p, st)
 
-    decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    # TODO: make param vector and query latent-predictor
+    # just grab saved codes for now
+    codes = jldopen(joinpath(dirname(modelfile), "train_codes.jld2"))
+    _code = codes["_code"]
 
     #==============#
     # make model
     #==============#
-
-    p0 = _code[2].weight[:, 1]
-
+    p0 = _code[:, 1]
     NN, p0, st = freeze_decoder(decoder, length(p0); rng, p0)
     model = NeuralModel(NN, st, md)
-
-    if zeroinit
-        p0 *= 0
-        # copy!(p0, randn32(rng, length(p0)))
-    end
 
     #==============#
     # evolve
     #==============#
-
-    # optimizer
     autodiff = AutoForwardDiff()
     linsolve = QRFactorization()
     linesearch = LineSearch()
@@ -345,8 +285,7 @@ function evolve_SNF(
 
     @time ts, ps, Up = evolve_model(
         prob, model, timealg, scheme, data, p0, Δt;
-        nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz,
-        learn_ic,
+        nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz, learn_ic,
         verbose, device,
     )
 
@@ -363,24 +302,21 @@ function evolve_SNF(
     fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "evolve", case)
 
     # parameter plots
-    _ps = _code[2].weight # [code_len, _Nb * Nt]
-    _ps = reshape(_ps, size(_ps, 1), :)
-
-    title = L"$\tilde{u}$ distribution, case " * "$(case)"
-
-    plt = plot(; title)
+    plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
     plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
-    png(plt, joinpath(outdir, "evole_p_scatter_case$(case)"))
+    png(plt, joinpath(outdir, "evolve_p_scatter_case$(case)"))
 
-    title = L"$\tilde{u}$ evolution, case " * "$(case)"
-
-    plt = plot(; title)
+    plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
     plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")
     png(plt, joinpath(outdir, "evolve_p_case$(case)"))
 
     # save files
-    filename = joinpath(outdir, "evolve$case.jld2")
+    filename = joinpath(outdir, "evolve$(case).jld2")
     jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps)
+
+    # print error metrics
+    @show sqrt(mse(Up, Ud) / mse(Ud, 0 * Ud))
+    @show norm(Up - Ud, Inf) / sqrt(mse(Ud, 0 * Ud))
 
     Xdata, Tdata, Ud, Up, ps
 end
@@ -402,12 +338,6 @@ function postprocess_SNF(
     # load model
     model, md = loadmodel(modelfile)
 
-    NN, p, st = model
-    in_dim  = size(Xdata, 1)
-    out_dim = size(Udata, 1)
-
-    Nx = size(Xdata, 2)
-
     #==============#
     # train/test split
     #==============#
@@ -425,21 +355,59 @@ function postprocess_SNF(
 
     displaymetadata(md)
 
-    _data, _, _ = makedata_SNF(datafile; _Ib = md.makedata_kws._Ib, _It = md.makedata_kws._It)
-    _xdata, _Icode = _data[1]
-    _xdata = unnormalizedata(_xdata, md.x̄, md.σx)
+    #==============#
+    # Get model
+    #==============#
+    hyper, decoder = get_flatdecoder(model...)
+    model = NeuralModel(decoder[1], decoder[3], md)
 
-    _Upred = eval_model((NN, p, st), (_xdata, _Icode), p; device) |> cpu_device()
-    _Upred = reshape(_Upred, out_dim, Nx, length(_Ib), length(_It))
+    #==============#
+    # evaluate model
+    #==============#
+    _data, data_, _ = makedata_SNF(datafile; _Ib = md.makedata_kws._Ib, _It = md.makedata_kws._It)
 
-    @show mse(_Upred, _Udata) / mse(_Udata, 0*_Udata)
+    in_dim  = size(Xdata, 1)
+    out_dim, Nx, Nb, Nt = size(Udata)
 
-    grid = get_prob_grid(prob)
+    _code = hyper[1](_data[1][2], hyper[2], hyper[3])[1]
+    code_ = hyper[1](data_[1][2], hyper[2], hyper[3])[1]
+
+    _xc = vcat(_data[1][1], _code)
+    xc_ = vcat(data_[1][1], code_)
+
+    _upred = decoder[1](_xc, decoder[2], decoder[3])[1]
+    upred_ = decoder[1](xc_, decoder[2], decoder[3])[1]
+
+    _upred = reshape(_upred, out_dim, Nx, length(_Ib), length(_It))
+    upred_ = reshape(upred_, out_dim, Nx, length(Ib_), length(It_))
+
+    _Upred = unnormalizedata(_upred, md.ū, md.σu)
+    Upred_ = unnormalizedata(upred_, md.ū, md.σu)
+
+    @show mse(_Upred, _Udata) / mse(_Udata, 0 * _Udata)
+    @show mse(Upred_, Udata_) / mse(Udata_, 0 * Udata_)
+
+    #==============#
+    # save codes
+    #==============#
+    code_len = size(_code, 1)
+
+    _code = reshape(_code, code_len, Nx, Nt)
+    code_ = reshape(code_, code_len, Nx, Nt)
+
+    _code = _code[:, 1, :]
+    code_ = code_[:, 1, :]
+
+    modeldir = dirname(modelfile)
+    jldsave(joinpath(modeldir, "train_codes.jld2"); _code, code_)
+
+    modeldir = dirname(modelfile)
+    outdir = joinpath(modeldir, "results")
+    isdir(outdir) && rm(outdir; recursive = true)
+    mkpath(outdir)
 
     if makeplot
-        modeldir = dirname(modelfile)
-        outdir = joinpath(modeldir, "results")
-        mkpath(outdir)
+        grid = get_prob_grid(prob)
 
         # field plots
         for case in axes(_Ib, 1)
@@ -449,8 +417,7 @@ function postprocess_SNF(
         end
 
         # parameter plots
-        decoder, _code = get_autodecoder(NN, p, st)
-        _ps = _code[2].weight # [code_len, _Nb * Nt]
+        _ps = _code # [code_len, _Nb * Nt]
         _ps = reshape(_ps, size(_ps, 1), length(_Ib), length(_It))
 
         linewidth = 2.0
@@ -474,6 +441,22 @@ function postprocess_SNF(
             png(p2, joinpath(outdir, "train_p_case$(case)"))
         end
 
+        for case in axes(Ib_, 1)
+            if case ∉ _Ib
+                _p = _ps[:, case, :]
+                plt = make_param_scatterplot(_p, Tdata; plt,
+                    label = "Case $(case) (Testing)", color = colors[case], shape = :star)
+
+                # parameter evolution plot
+                p2 = plot(;
+                    title = "Trained parameter evolution, case $(case)",
+                    xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false
+                )
+                plot!(p2, Tdata, _p'; linewidth, palette)
+                png(p2, joinpath(outdir, "test_p_case$(case)"))
+            end
+        end
+
         png(plt, joinpath(outdir, "train_p_scatter"))
 
     end # makeplot
@@ -481,127 +464,56 @@ function postprocess_SNF(
     #==============#
     # Evolve
     #==============#
-    Nb = size(Udata, 3)
-
     for case in 1:Nb
         evolve_SNF(prob, datafile, modelfile, case; rng, device)
     end
 
     #==============#
-    # infer with nonlinear solve
+    # Compare evolution with training plots
     #==============#
+    for case in  1:Nb
+        ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
 
-    # # get decoder
-    # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+        ps = ev["Ppred"]
+        Ue = ev["Upred"]
 
-    # # make model
-    # p0 = _code[2].weight[:, 1]
-    # NN, p0, st = freeze_decoder(decoder, length(p0); rng, p0)
-    # model = NeuralModel(NN, st, md)
+        _p = _code
+        Uh = _Upred[:, :, case, :] # HyperNet prediction
+        Ud = _Udata[:, :, case, :]
 
-    # # make data tuple
-    # case = 1
-    # Ud = Udata[:, :, case, :]
-    # data = (Xdata, Ud, Tdata)
+        fieldplot(Xdata, Tdata, Uh, Ue, grid, outdir, "compare", case)
 
-    # learn_init = false
-    # learn_init = true
-    # ps, Up, Ls = infer_SNF(model, data, p0; device, verbose, learn_init)
+        # Compare u
+        println("#=======================#")
+        println("Dynamics Solve")
+        @show norm(Ue - Ud, 2) / length(Ud)
+        @show norm(Ue - Ud, Inf)
 
-    # plt = plot(Xdata[1,:], Ud[1,:,begin], w = 4, c = :black, label = nothing)
-    # plot!(plt, Xdata[1,:], Up[1,:,begin], w = 4, c = :red  , label = nothing)
-    # plot!(plt, Xdata[1,:], Ud[1,:,end  ], w = 4, c = :black, label = "data")
-    # plot!(plt, Xdata[1,:], Up[1,:,end  ], w = 4, c = :red  , label = "pred")
-    # display(plt)
+        println("#=======================#")
+        println("HyperNet Prediction")
+        @show norm(Uh - Ud, 2) / length(Ud)
+        @show norm(Uh - Ud, Inf)
 
-    # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-    # p0 = _code[2].weight[:, 1]
+        ###
+        # Compare ũ
+        ###
 
-    #==============#
-    # check derivative
-    #==============#
-    # begin
-    #     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
-    #     ncodes = size(_code[2].weight, 2)
-    #     idx = LinRange(1, ncodes, 4) .|> Base.Fix1(round, Int)
-    #
-    #     for i in idx
-    #
-    #         p0 = _code[2].weight[:, i]
-    #         if in_dim == 1
-    #
-    #             ###
-    #             # AutoFiniteDiff
-    #             ###
-    #
-    #             # ϵ  = 1f-2
-    #             #
-    #             # plt = plot_derivatives1D_autodecoder(
-    #             #     decoder, vec(Xdata), p0, md;
-    #             #     second_derv = false, third_derv = false, fourth_derv = false,
-    #             #     autodiff = AutoFiniteDiff(), ϵ,
-    #             # )
-    #             # png(plt, joinpath(outdir, "dudx1_$(i)_FIN_AD"))
-    #             #
-    #             # plt = plot_derivatives1D_autodecoder(
-    #             #     decoder, vec(Xdata), p0, md;
-    #             #     second_derv = true, third_derv = false, fourth_derv = false,
-    #             #     autodiff = AutoFiniteDiff(), ϵ,
-    #             # )
-    #             # png(plt, joinpath(outdir, "dudx2_$(i)_FIN_AD"))
-    #             #
-    #             # plt = plot_derivatives1D_autodecoder(
-    #             #     decoder, vec(Xdata), p0, md;
-    #             #     second_derv = false, third_derv = true, fourth_derv = false,
-    #             #     autodiff = AutoFiniteDiff(), ϵ,
-    #             # )
-    #             # png(plt, joinpath(outdir, "dudx3_$(i)_FIN_AD"))
-    #             #
-    #             # plt = plot_derivatives1D_autodecoder(
-    #             #     decoder, vec(Xdata), p0, md;
-    #             #     second_derv = false, third_derv = false, fourth_derv = true,
-    #             #     autodiff = AutoFiniteDiff(), ϵ,
-    #             # )
-    #             # png(plt, joinpath(outdir, "dudx4_$(i)_FIN_AD"))
-    #
-    #             ###
-    #             # AutoForwardDiff
-    #             ###
-    #
-    #             plt = plot_derivatives1D_autodecoder(
-    #                 decoder, vec(Xdata), p0, md;
-    #                 second_derv = false, third_derv = false, fourth_derv = false,
-    #                 autodiff = AutoForwardDiff(),
-    #             )
-    #             png(plt, joinpath(outdir, "dudx1_$(i)_FWD_AD"))
-    #
-    #             plt = plot_derivatives1D_autodecoder(
-    #                 decoder, vec(Xdata), p0, md;
-    #                 second_derv = true, third_derv = false, fourth_derv = false,
-    #                 autodiff = AutoForwardDiff(),
-    #             )
-    #             png(plt, joinpath(outdir, "dudx2_$(i)_FWD_AD"))
-    #
-    #             plt = plot_derivatives1D_autodecoder(
-    #                 decoder, vec(Xdata), p0, md;
-    #                 second_derv = false, third_derv = true, fourth_derv = false,
-    #                 autodiff = AutoForwardDiff(),
-    #             )
-    #             png(plt, joinpath(outdir, "dudx3_$(i)_FWD_AD"))
-    #
-    #             plt = plot_derivatives1D_autodecoder(
-    #                 decoder, vec(Xdata), p0, md;
-    #                 second_derv = false, third_derv = false, fourth_derv = true,
-    #                 autodiff = AutoForwardDiff(),
-    #             )
-    #             png(plt, joinpath(outdir, "dudx4_$(i)_FWD_AD"))
-    #
-    #         elseif in_dim == 2
-    #
-    #         end # in-dim
-    #
-    #     end
-    # end
+        println("#=======================#")
+        println("Dynamics Solve vs HyperNet Prediction")
+        @show norm(ps - _p, 2) / length(ps)
+        @show norm(ps - _p, Inf)
+
+        plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
+        plt = make_param_scatterplot(_p, Tdata; plt, label = "HyperNet prediction", color = :reds, cbar = false)
+        plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
+        png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
+
+        plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+        plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
+        plot!(plt, Tdata, _p'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
+        png(plt, joinpath(outdir, "compare_p_case$(case)"))
+
+    end
 
     #==============#
     # Done
@@ -615,6 +527,5 @@ function postprocess_SNF(
 
     nothing
 end
-
 #===========================================================#
 #

@@ -327,9 +327,9 @@ function postprocess_PCA(
         evolve_PCA(prob, datafile, modelfile, case; rng, device)
     end
     
-    model = jldopen(modelfile)
-    P  = model["Pmatrix"]
-    _ps = P' * Udata[1, :, :]
+    # model = jldopen(modelfile)
+    # P  = model["Pmatrix"]
+    # _ps = P' * Udata[1, :, :, :]
 
 end
 

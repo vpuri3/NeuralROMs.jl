@@ -443,7 +443,7 @@ function fieldplot(
         er = (up - ud) / nr
         er = sum(abs2, er; dims = 1) / size(ud, 1) |> vec
 
-        Nx, Nt = length(Xdata), length(Tdata)
+        Nx, Nt = size(Xdata, 2), length(Tdata)
 
         if in_dim == 1
             xd = vec(Xdata)
