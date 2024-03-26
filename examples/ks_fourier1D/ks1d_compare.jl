@@ -15,7 +15,7 @@ device = Lux.gpu_device()
 makedata_kws = (; Ix = :, _Ib = [1,], Ib_ = [1,], _It = :, It_ = :)
 
 # latent 
-latent = 1
+latent = 2
 l_pca  = 2
 
 #==================#
@@ -32,18 +32,18 @@ modeldir_SNL = joinpath(@__DIR__, "model_SNL$(l0)") # us (Lipschitz)
 
 # # train PCA
 # train_PCA(datafile, modeldir_PCA, l_pca; rng, makedata_kws, device)
-
-# train_CAE
-train_params_CAE = (; E = 1400, w = 64, makedata_kws,)
-train_CAE_compare(prob, latent, datafile, modeldir_CAE, train_params_CAE; rng, device)
-
-# train_SNW
-train_params_SNW = (; E = 1400, wd = 128, γ = 1f-2, makedata_kws,)
-train_SNF_compare(latent, datafile, modeldir_SNW, train_params_SNW; rng, device)
-
+#
+# # train_CAE
+# train_params_CAE = (; E = 1400, w = 64, makedata_kws,)
+# train_CAE_compare(prob, latent, datafile, modeldir_CAE, train_params_CAE; rng, device)
+#
+# # train_SNW
+# train_params_SNW = (; E = 1400, wd = 128, α = 0f-0, γ = 1f-2, makedata_kws,)
+# train_SNF_compare(latent, datafile, modeldir_SNW, train_params_SNW; rng, device)
+#
 # train_SNL
-train_params_SNL = (; E = 1400, wd = 128, α = 1f-7, makedata_kws,)
-train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
+# train_params_SNL = (; E = 1400, wd = 128, wh = 8, hh = 0, α = 1f-7, γ = 0f-0, makedata_kws,)
+# train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
 
 #==================#
 # postprocess
@@ -55,9 +55,9 @@ modelfile_SNW = joinpath(modeldir_SNW, "model_08.jld2")
 modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 
 # postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
-postprocess_CAE(prob, datafile, modelfile_CAE; rng)
-postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
-postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
+# postprocess_CAE(prob, datafile, modelfile_CAE; rng, device)
+# postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
+# postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 
 #==================#
 # make figures

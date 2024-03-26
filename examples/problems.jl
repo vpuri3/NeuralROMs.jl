@@ -119,10 +119,10 @@ function cae_network(
         
         Chain(; encoder, decoder)
 
-    elseif prob isa BurgersViscous2D # (512, 512) -> l -> (512, 512)
+    elseif prob isa BurgersViscous2D # (512, 512, 2) -> l -> (512, 512, 2)
 
         encoder = Chain(
-            Conv((8, 8), 1  => w, act; stride = 4, pad = 2), # /4
+            Conv((8, 8), 2  => w, act; stride = 4, pad = 2), # /4
             Conv((8, 8), w  => w, act; stride = 4, pad = 2), # /4
             Conv((8, 8), w  => w, act; stride = 4, pad = 2), # /4
             Conv((8, 8), w  => w, act; stride = 1, pad = 0), # /8
@@ -136,9 +136,9 @@ function cae_network(
             ConvTranspose((8, 8), w => w, act; stride = 1, pad = 0), # *4 = 4
             ConvTranspose((8, 8), w => w, act; stride = 4, pad = 2), # *4 = 16
             ConvTranspose((8, 8), w => w, act; stride = 4, pad = 2), # *4 = 64
-            ConvTranspose((8, 8), w => 1     ; stride = 4, pad = 2), # *4 = 256
+            ConvTranspose((8, 8), w => 2     ; stride = 4, pad = 2), # *4 = 256
         )
-        
+
         Chain(; encoder, decoder)
 
     end

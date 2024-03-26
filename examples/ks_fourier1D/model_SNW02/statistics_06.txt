@@ -14,7 +14,7 @@ TEST  STATS
 R² score:             0.99999946
 MSE (mean SQR error): 5.1576893e-7
 RMSE (Root MSE):      0.0007181706
-MAE (mean ABS error): 0.00051285815
+MAE (mean ABS error): 0.0005128582
 maxAE (max ABS error) 0.014399052
 Lipschitz bound:      4.8271345e6
 

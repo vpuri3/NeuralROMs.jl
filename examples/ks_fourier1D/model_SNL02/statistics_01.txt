@@ -4,7 +4,7 @@ TRAIN STATS
 R² score:             0.99969333
 MSE (mean SQR error): 0.0003045486
 RMSE (Root MSE):      0.01745132
-MAE (mean ABS error): 0.009862224
+MAE (mean ABS error): 0.009862223
 maxAE (max ABS error) 0.7705784
 Lipschitz bound:      1.3308387e8
 

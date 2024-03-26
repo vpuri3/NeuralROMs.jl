@@ -39,11 +39,11 @@ function train_CAE_compare(
     NN = cae_network(prob, l, w, act)
 
     ### size debugging
-    p, st = Lux.setup(rng, NN)
-    x = rand(Float32, 512, 512, 1, 5,)
-    y = NN(x, p, st)[1]
-    @show size(y)
-    @assert false
+    # p, st = Lux.setup(rng, NN)
+    # x = rand(Float32, 512, 512, 1, 5,)
+    # y = NN(x, p, st)[1]
+    # @show size(y)
+    # @assert false
 
     isdir(modeldir) && rm(modeldir, recursive = true)
     train_CAE(datafile, modeldir, NN, E; rng,
