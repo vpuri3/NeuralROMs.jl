@@ -442,7 +442,7 @@ function postprocess_SNF(
 
         for (i, case) in enumerate(Ib_)
             if case ∉ _Ib
-                p_ = _ps[:, i, :]
+                p_ = ps_[:, i, :]
                 color = colors[i + length(_Ib)]
                 plt = make_param_scatterplot(p_, Tdata; plt,
                     label = "Case $(case) (Testing)", color, cbar = false)

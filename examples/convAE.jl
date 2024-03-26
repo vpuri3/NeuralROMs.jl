@@ -234,7 +234,7 @@ function postprocess_CAE(
         # parameter plots
         linewidth = 2.0
         palette = :tab10
-        colors = (:reds, :greens, :blues,)
+        colors = (:reds, :greens, :blues, cgrad(:thermal), cgrad(:acton))
         shapes = (:circle, :square, :star,)
 
         plt = plot(; title = "Parameter scatter plot")
