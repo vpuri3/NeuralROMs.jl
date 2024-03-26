@@ -213,12 +213,16 @@ function postprocess_CAE(
     @show mse(Upred_, Udata_) / mse(Udata_, 0 * Udata_)
 
     modeldir = dirname(modelfile)
-    jldsave(joinpath(modeldir, "train_codes"); _code, code_)
+    jldsave(joinpath(modeldir, "train_codes.jld2"); _code, code_)
+
+    _ps = reshape(_code, size(_code, 1), length(_Ib), length(_It)) # [code_len, _Nb, _Nt]
+    ps_ = reshape(code_, size(code_, 1), length(Ib_), length(It_)) # [code_len, Nb_, Nt_]
+
+    modeldir = dirname(modelfile)
+    outdir = joinpath(modeldir, "results")
+    mkpath(outdir)
 
     if makeplot
-        modeldir = dirname(modelfile)
-        outdir = joinpath(modeldir, "results")
-        mkpath(outdir)
 
         # field plots
         for case in axes(_Ib, 1)
@@ -228,9 +232,6 @@ function postprocess_CAE(
         end
 
         # parameter plots
-        _ps = reshape(_code, size(_code, 1), length(_Ib), length(_It))
-        ps_ = reshape(code_, size(code_, 1), length(Ib_), length(It_))
-
         linewidth = 2.0
         palette = :tab10
         colors = (:reds, :greens, :blues,)
@@ -238,10 +239,10 @@ function postprocess_CAE(
 
         plt = plot(; title = "Parameter scatter plot")
 
-        for case in axes(_Ib, 1)
-            _p = _ps[:, case, :]
+        for (i, case) in enumerate(_Ib)
+            _p = _ps[:, i, :]
             plt = make_param_scatterplot(_p, Tdata; plt,
-                label = "Case $(case) (Training)", color = colors[case])
+                label = "Case $(case) (Training)", color = colors[i])
 
             # parameter evolution plot
             p2 = plot(;
@@ -252,18 +253,18 @@ function postprocess_CAE(
             png(p2, joinpath(outdir, "train_p_case$(case)"))
         end
 
-        for case in axes(Ib_, 1)
+        for (i, case) in enumerate(Ib_)
             if case ∉ _Ib
-                _p = _ps[:, case, :]
-                plt = make_param_scatterplot(_p, Tdata; plt,
-                    label = "Case $(case) (Testing)", color = colors[case], shape = :star)
+                p_ = ps_[:, i, :]
+                plt = make_param_scatterplot(p_, Tdata; plt,
+                    label = "Case $(case) (Testing)", color = colors[i], shape = :star)
 
                 # parameter evolution plot
                 p2 = plot(;
                     title = "Trained parameter evolution, case $(case)",
                     xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false
                 )
-                plot!(p2, Tdata, _p'; linewidth, palette)
+                plot!(p2, Tdata, p_'; linewidth, palette)
                 png(p2, joinpath(outdir, "test_p_case$(case)"))
             end
         end
@@ -282,20 +283,16 @@ function postprocess_CAE(
     #==============#
     # Compare evolution with training plots
     #==============#
-    codes = jldopen(joinpath(modeldir, "train_codes"))
-    _code = codes["_code"]
-    code_ = codes["code_"]
-    _ps = reshape(_code, size(_code, 1), :)
 
-    for case in  union(_Ib, Ib_)
+    for (i, case) in  enumerate(_Ib)
         ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
 
         ps = ev["Ppred"]
         Ue = ev["Upred"]
 
-        _p = _code
-        Uh = _Upred[:, :, case, :] # encoder/decoder prediction
-        Ud = _Udata[:, :, case, :]
+        _p = _ps[:, i, :]
+        Uh = _Upred[:, :, i, :] # encoder/decoder prediction
+        Ud = _Udata[:, :, i, :]
 
         fieldplot(Xdata, Tdata, Uh, Ue, grid, outdir, "compare", case)
 
@@ -327,6 +324,49 @@ function postprocess_CAE(
         plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
         plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
         plot!(plt, Tdata, _p'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
+        png(plt, joinpath(outdir, "compare_p_case$(case)"))
+    end
+
+    for (i, case) in  enumerate(Ib_)
+        ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
+
+        ps = ev["Ppred"]
+        Ue = ev["Upred"]
+
+        p_ = ps_[:, i, :]
+        Uh = Upred_[:, :, i, :] # encoder/decoder prediction
+        Ud = Udata_[:, :, i, :]
+
+        fieldplot(Xdata, Tdata, Uh, Ue, grid, outdir, "compare", case)
+
+        # Compare u
+        println("#=======================#")
+        println("Dynamics Solve")
+        @show norm(Ue - Ud, 2) / length(Ud)
+        @show norm(Ue - Ud, Inf)
+
+        println("#=======================#")
+        println("HyperNet Prediction")
+        @show norm(Uh - Ud, 2) / length(Ud)
+        @show norm(Uh - Ud, Inf)
+
+        ###
+        # Compare ũ
+        ###
+
+        println("#=======================#")
+        println("Dynamics Solve vs HyperNet Prediction")
+        @show norm(ps - p_, 2) / length(ps)
+        @show norm(ps - p_, Inf)
+
+        plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
+        plt = make_param_scatterplot(p_, Tdata; plt, label = "HyperNet prediction", color = :reds, cbar = false)
+        plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
+        png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
+
+        plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+        plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
+        plot!(plt, Tdata, p_'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
         png(plt, joinpath(outdir, "compare_p_case$(case)"))
     end
 
@@ -455,7 +495,7 @@ function evolve_CAE(
     # parameter plots
     plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
     plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
-    png(plt, joinpath(outdir, "evole_p_scatter_case$(case)"))
+    png(plt, joinpath(outdir, "evolve_p_scatter_case$(case)"))
 
     plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
     plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")

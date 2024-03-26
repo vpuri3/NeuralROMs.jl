@@ -257,15 +257,16 @@ function evolve_SNF(
     #==============#
     hyper, decoder = get_flatdecoder(NN, p, st)
 
-    # TODO: make param vector and query latent-predictor
-    # just grab saved codes for now
-    codes = jldopen(joinpath(dirname(modelfile), "train_codes.jld2"))
-    _code = codes["_code"]
+    #==============#
+    # get p0
+    #==============#
+    _data, _, _ = makedata_SNF(datafile; Ix = [1,], _It = [1,])
+    _prm = _data[1][2]
+    p0 = hyper[1](_prm[:, case], hyper[2], hyper[3])[1]
 
     #==============#
     # make model
     #==============#
-    p0 = _code[:, 1]
     NN, p0, st = freeze_decoder(decoder, length(p0); rng, p0)
     model = NeuralModel(NN, st, md)
 
@@ -392,16 +393,14 @@ function postprocess_SNF(
     #==============#
     # save codes
     #==============#
-    code_len = size(_code, 1)
+    _code = reshape(_code, size(_code, 1), Nx, length(_Ib), length(_It))
+    code_ = reshape(code_, size(code_, 1), Nx, length(Ib_), length(It_))
 
-    _code = reshape(_code, code_len, Nx, Nt)
-    code_ = reshape(code_, code_len, Nx, Nt)
-
-    _code = _code[:, 1, :]
-    code_ = code_[:, 1, :]
+    _ps = _code[:, 1, :, :] # [code_len, _Nb, _Nt]
+    ps_ = code_[:, 1, :, :] # [code_len, Nb_, Nt_]
 
     modeldir = dirname(modelfile)
-    jldsave(joinpath(modeldir, "train_codes.jld2"); _code, code_)
+    jldsave(joinpath(modeldir, "train_codes.jld2"); _code = _ps, code_ = ps_)
 
     modeldir = dirname(modelfile)
     outdir = joinpath(modeldir, "results")
@@ -419,9 +418,6 @@ function postprocess_SNF(
         end
 
         # parameter plots
-        _ps = _code # [code_len, _Nb * Nt]
-        _ps = reshape(_ps, size(_ps, 1), length(_Ib), length(_It))
-
         linewidth = 2.0
         palette = :tab10
         colors = (:reds, :greens, :blues,)
@@ -429,10 +425,10 @@ function postprocess_SNF(
 
         plt = plot(; title = "Parameter scatter plot")
 
-        for case in axes(_Ib, 1)
-            _p = _ps[:, case, :]
+        for (i, case) in enumerate(_Ib)
+            _p = _ps[:, i, :]
             plt = make_param_scatterplot(_p, Tdata; plt,
-                label = "Case $(case)", color = colors[case])
+                label = "Case $(case)", color = colors[i])
 
             # parameter evolution plot
             p2 = plot(;
@@ -443,18 +439,18 @@ function postprocess_SNF(
             png(p2, joinpath(outdir, "train_p_case$(case)"))
         end
 
-        for case in axes(Ib_, 1)
+        for (i, case) in enumerate(Ib_)
             if case ∉ _Ib
-                _p = _ps[:, case, :]
-                plt = make_param_scatterplot(_p, Tdata; plt,
-                    label = "Case $(case) (Testing)", color = colors[case], shape = :star)
+                p_ = _ps[:, i, :]
+                plt = make_param_scatterplot(p_, Tdata; plt,
+                    label = "Case $(case) (Testing)", color = colors[i], shape = :star)
 
                 # parameter evolution plot
                 p2 = plot(;
                     title = "Trained parameter evolution, case $(case)",
                     xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false
                 )
-                plot!(p2, Tdata, _p'; linewidth, palette)
+                plot!(p2, Tdata, p_'; linewidth, palette)
                 png(p2, joinpath(outdir, "test_p_case$(case)"))
             end
         end
@@ -473,15 +469,16 @@ function postprocess_SNF(
     #==============#
     # Compare evolution with training plots
     #==============#
-    for case in  union(_Ib, Ib_)
+
+    for (i, case) in  enumerate(_Ib)
         ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
 
         ps = ev["Ppred"]
         Ue = ev["Upred"]
 
-        _p = _code
-        Uh = _Upred[:, :, case, :] # HyperNet prediction
-        Ud = _Udata[:, :, case, :]
+        _p = _ps[:, i, :]
+        Uh = _Upred[:, :, i, :] # HyperNet prediction
+        Ud = _Udata[:, :, i, :]
 
         fieldplot(Xdata, Tdata, Uh, Ue, grid, outdir, "compare", case)
 
@@ -513,6 +510,49 @@ function postprocess_SNF(
         plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
         plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
         plot!(plt, Tdata, _p'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
+        png(plt, joinpath(outdir, "compare_p_case$(case)"))
+    end
+
+    for (i, case) in  enumerate(Ib_)
+        ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
+
+        ps = ev["Ppred"]
+        Ue = ev["Upred"]
+
+        p_ = ps_[:, i, :]
+        Uh = Upred_[:, :, i, :] # HyperNet prediction
+        Ud = Udata_[:, :, i, :]
+
+        fieldplot(Xdata, Tdata, Uh, Ue, grid, outdir, "compare", case)
+
+        # Compare u
+        println("#=======================#")
+        println("Dynamics Solve")
+        @show norm(Ue - Ud, 2) / length(Ud)
+        @show norm(Ue - Ud, Inf)
+
+        println("#=======================#")
+        println("HyperNet Prediction")
+        @show norm(Uh - Ud, 2) / length(Ud)
+        @show norm(Uh - Ud, Inf)
+
+        ###
+        # Compare ũ
+        ###
+
+        println("#=======================#")
+        println("Dynamics Solve vs HyperNet Prediction")
+        @show norm(ps - p_, 2) / length(ps)
+        @show norm(ps - p_, Inf)
+
+        plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
+        plt = make_param_scatterplot(p_, Tdata; plt, label = "HyperNet prediction", color = :reds, cbar = false)
+        plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
+        png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
+
+        plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+        plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
+        plot!(plt, Tdata, p_'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
         png(plt, joinpath(outdir, "compare_p_case$(case)"))
     end
 

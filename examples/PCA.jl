@@ -167,7 +167,7 @@ function train_PCA(
             u = @view _u[:, k, :]
             v = @view _v[:, k, :]
 
-            title = "Case $(Ib_[k])"
+            title = "Case $(_Ib[k])"
 
             It = LinRange(1, size(u, 2), 4) .|> Base.Fix1(round, Int)
 
@@ -185,13 +185,13 @@ function train_PCA(
             u = @view u_[:, k, :]
             v = @view v_[:, k, :]
 
-            title = "Case $(_Ib[k])"
+            title = "Case $(Ib_[k])"
 
-            it = LinRange(1, size(u, 2), 4) .|> Base.Fix1(round, Int)
+            It = LinRange(1, size(u, 2), 4) .|> Base.Fix1(round, Int)
             
             plt = plot(; title, xlabel, ylabel)
-            plot!(plt, _x[1,:], u[:, it], linewidth=3, c = :black)
-            plot!(plt, _x[1,:], v[:, it], linewidth=3, c = :red)
+            plot!(plt, _x[1,:], u[:, It], linewidth=3, c = :black)
+            plot!(plt, _x[1,:], v[:, It], linewidth=3, c = :red)
             png(plt, joinpath(modeldir, "test_$k"))
             display(plt)
 
