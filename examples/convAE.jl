@@ -305,7 +305,7 @@ function postprocess_CAE(
         @show norm(Ue - Ud, Inf)
 
         println("#=======================#")
-        println("HyperNet Prediction")
+        println("Encoder Prediction")
         @show norm(Uh - Ud, 2) / length(Ud)
         @show norm(Uh - Ud, Inf)
 
@@ -314,18 +314,18 @@ function postprocess_CAE(
         ###
 
         println("#=======================#")
-        println("Dynamics Solve vs HyperNet Prediction")
+        println("Dynamics Solve vs Encoder Prediction")
         @show norm(ps - _p, 2) / length(ps)
         @show norm(ps - _p, Inf)
 
         plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
-        plt = make_param_scatterplot(_p, Tdata; plt, label = "HyperNet prediction", color = :reds, cbar = false)
+        plt = make_param_scatterplot(_p, Tdata; plt, label = "Encoder prediction", color = :reds, cbar = false)
         plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
         png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
 
         plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
         plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
-        plot!(plt, Tdata, _p'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
+        plot!(plt, Tdata, _p'; w = 4.0, label = "Encoder prediction", style = :dash, palette = :tab10)
         png(plt, joinpath(outdir, "compare_p_case$(case)"))
     end
 
@@ -348,7 +348,7 @@ function postprocess_CAE(
         @show norm(Ue - Ud, Inf)
 
         println("#=======================#")
-        println("HyperNet Prediction")
+        println("Encoder Prediction")
         @show norm(Uh - Ud, 2) / length(Ud)
         @show norm(Uh - Ud, Inf)
 
@@ -357,18 +357,18 @@ function postprocess_CAE(
         ###
 
         println("#=======================#")
-        println("Dynamics Solve vs HyperNet Prediction")
+        println("Dynamics Solve vs Encoder Prediction")
         @show norm(ps - p_, 2) / length(ps)
         @show norm(ps - p_, Inf)
 
         plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
-        plt = make_param_scatterplot(p_, Tdata; plt, label = "HyperNet prediction", color = :reds, cbar = false)
+        plt = make_param_scatterplot(p_, Tdata; plt, label = "Encoder prediction", color = :reds, cbar = false)
         plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
         png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
 
         plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
         plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
-        plot!(plt, Tdata, p_'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
+        plot!(plt, Tdata, p_'; w = 4.0, label = "Encoder prediction", style = :dash, palette = :tab10)
         png(plt, joinpath(outdir, "compare_p_case$(case)"))
     end
 

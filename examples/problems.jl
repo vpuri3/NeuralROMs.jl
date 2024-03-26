@@ -122,28 +122,29 @@ function cae_network(
     elseif prob isa BurgersViscous2D # (512, 512) -> l -> (512, 512)
 
         encoder = Chain(
+            Conv((8, 8), 1  => w, act; stride = 4, pad = 2), # /4
             Conv((8, 8), w  => w, act; stride = 4, pad = 2), # /4
             Conv((8, 8), w  => w, act; stride = 4, pad = 2), # /4
-            Conv((8, 8), w  => w, act; stride = 4, pad = 2), # /4
-            Conv((2, 2), w  => w, act; stride = 1, pad = 0), # /2
+            Conv((8, 8), w  => w, act; stride = 1, pad = 0), # /8
             flatten,
             Dense(w, l),
         )
 
         decoder = Chain(
-            ConvTranspose((4, 4), w => w, act; stride = 1, pad = 0), # *4 = 4
+            Dense(l, w, act),
+            ReshapeLayer((1, 1, w)),
+            ConvTranspose((8, 8), w => w, act; stride = 1, pad = 0), # *4 = 4
             ConvTranspose((8, 8), w => w, act; stride = 4, pad = 2), # *4 = 16
             ConvTranspose((8, 8), w => w, act; stride = 4, pad = 2), # *4 = 64
             ConvTranspose((8, 8), w => 1     ; stride = 4, pad = 2), # *4 = 256
         )
-
+        
         Chain(; encoder, decoder)
 
     end
 end
 
 #======================================================#
-
 function inr_decoder(l, h, w, in_dim, out_dim)
     init_wt_in = scaled_siren_init(3f1)
     init_wt_hd = scaled_siren_init(1f0)
@@ -172,98 +173,18 @@ function convINR_network(
     wd::Integer,
     act,
 )
+    Ns = get_prob_grid(prob)
+    in_dim  = length(Ns)
+    out_dim = prob isa BurgersViscous2D ? 2 : 1
 
-    if prob isa Advection1D
-        Ns = (128,)
-        in_dim  = 1
-        out_dim = 1
+    encoder = cae_network(prob, l, we, act).layers.encoder
+    decoder = inr_decoder(l, h, wd, in_dim, out_dim)
 
-        wi = in_dim
-
-        encoder = Chain(
-            Conv((8,), wi  => we, act; stride = 4, pad = 2), # /4
-            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4
-            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4
-            Conv((2,), we  => we, act; stride = 1, pad = 0), # /2
-            flatten,
-            Dense(we, l),
-        )
-
-        decoder = inr_decoder(l, h, wd, in_dim, out_dim)
-        
-        ImplicitEncoderDecoder(encoder, decoder, Ns, out_dim)
-
-    elseif prob isa KuramotoSivashinsky1D
-
-        Ns = (256,)
-        in_dim  = 1
-        out_dim = 1
-
-        wi = in_dim
-
-        encoder = Chain(
-            Conv((8,), wi  => we, act; stride = 4, pad = 2), # /4
-            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4
-            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4
-            Conv((4,), we  => we, act; stride = 1, pad = 0), # /4
-            flatten,
-            Dense(we, l),
-        )
-
-        decoder = inr_decoder(l, h, wd, in_dim, out_dim)
-        
-        ImplicitEncoderDecoder(encoder, decoder, Ns, out_dim)
-
-    elseif prob isa BurgersViscous1D
-
-        Ns = (1024,)
-        in_dim  = 1
-        out_dim = 1
-
-        wi = in_dim
-
-        encoder = Chain(
-            Conv((8,), wi  => we, act; stride = 4, pad = 2), # /4 = 256
-            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4 = 64
-            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4 = 16
-            Conv((8,), we  => we, act; stride = 4, pad = 2), # /4 = 4
-            Conv((4,), we  => we, act; stride = 1, pad = 0), # /4 = 1
-            flatten,
-            Dense(we, l),
-        )
-
-        decoder = inr_decoder(l, h, wd, in_dim, out_dim)
-        
-        ImplicitEncoderDecoder(encoder, decoder, Ns, out_dim)
-
-    elseif prob isa BurgersViscous2D
-
-        Ns = (512, 512,)
-        in_dim  = 1
-        out_dim = 1
-
-        wi = in_dim
-
-        encoder = Chain(
-            Conv((8,8), wi  => we, act; stride = 4, pad = 2), # /4 = 128
-            Conv((8,8), we  => we, act; stride = 4, pad = 2), # /4 = 32
-            Conv((8,8), we  => we, act; stride = 4, pad = 2), # /4 = 8
-            Conv((8,8), we  => we, act; stride = 1, pad = 0), # /8 = 1
-            flatten,
-            Dense(we, l),
-        )
-
-        decoder = inr_decoder(l, h, wd, in_dim, out_dim)
-        
-        ImplicitEncoderDecoder(encoder, decoder, Ns, out_dim)
-
-    end
+    ImplicitEncoderDecoder(encoder, decoder, Ns, out_dim)
 end
 #======================================================#
 
-function loaddata(
-    datafile::String,
-)
+function loaddata(datafile::String)
 
     data = jldopen(datafile)
     x = data["x"]
@@ -634,8 +555,5 @@ function ps_W_indices(NN, property::Symbol;
 
     idx
 end
-
-#======================================================#
-
 
 #======================================================#

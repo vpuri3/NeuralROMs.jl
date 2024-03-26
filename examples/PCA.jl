@@ -111,9 +111,14 @@ function train_PCA(
     It_ = isa(makedata_kws.It_, Colon) ? (1:size(u_, 4)) : makedata_kws.It_
 
     # misc
-    @assert out_dim == 1 "work on Burgers 2D later"
-    _u = reshape(_u, Nx, _Nb, _Nt)
-    u_ = reshape(u_, Nx, Nb_, Nt_)
+    if out_dim == 1
+        _u = reshape(_u, Nx, _Nb, _Nt)
+        u_ = reshape(u_, Nx, Nb_, Nt_)
+    else
+        @warn "PCA for out_dim > 1 creates basis matrix only for the first output field"
+        _u = _u[1, :, :, :]
+        u_ = u_[1, :, :, :]
+    end
 
     #==============================#
     # SVD

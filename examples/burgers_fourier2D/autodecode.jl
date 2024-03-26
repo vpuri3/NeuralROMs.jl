@@ -122,9 +122,8 @@ rng = Random.default_rng()
 Random.seed!(rng, 220)
 
 prob = BurgersViscous2D(1f-3)
-
-device = Lux.gpu_device()
 datafile = joinpath(@__DIR__, "data_burgers2D/", "data.jld2")
+device = Lux.gpu_device()
 
 modeldir = joinpath(@__DIR__, "model2")
 modelfile = joinpath(modeldir, "model_08.jld2")

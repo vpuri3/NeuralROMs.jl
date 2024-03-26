@@ -31,6 +31,10 @@ end
 
 function uIC(x, y; μ = 0.9) # 0.9 - 1.1
     u = @. μ * sin(2π * x) * sin(2π * y)
+
+    u[x .< 0.0] .= 0
+    u[y .< 0.0] .= 0
+
     u[x .> 0.5] .= 0
     u[y .> 0.5] .= 0
 
@@ -38,7 +42,7 @@ function uIC(x, y; μ = 0.9) # 0.9 - 1.1
 end
 
 function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
-    tspan=(0.f0, 1.0f0),
+    tspan=(0.f0, 0.5f0),
     ntsave=500,
     odealg=SSPRK43(),
     odekw = (;),
@@ -47,10 +51,10 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
 )
     N = Nx * Ny
 
-    abstol = reltol = 1e-4 |> T
+    abstol = reltol = 1e-6 |> T
 
     """ space discr """
-    interval = IntervalDomain(0.f0, 1.f0; periodic = true)
+    interval = IntervalDomain(-0.25f0, 0.75f0; periodic = true)
     domain = interval × interval
     V = FourierSpace(Nx, Ny; domain) |> T
     discr = Collocation()
@@ -60,7 +64,6 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
     u0 = uIC(x,y) .|> T
     ps = ComponentArray(vel=u0)
     V = make_transform(V, u0.vx; p=ps)
-
 
     """ move to device """
     V  = V  |> device
@@ -100,7 +103,7 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
     end
 
     """ time discr """
-    tspan = (0.0, 1.0) .|> T
+    tspan = tspan .|> T
     tsave = range(tspan...; length = ntsave) .|> T
     prob  = ODEProblem(ddt, u0, tspan, p)
 
@@ -143,31 +146,32 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
 
         mu = isnothing(mu) ? fill(nothing, size(u, 2)) |> Tuple : mu
         x_save = reshape(vcat(x', y'), 2, N)
-        metadata = (; Nx, Ny, ν, readme = "u [Nx, Nbatch, Nt]")
+        grid = (Nx, Ny,)
+        metadata = (; Nx, Ny, ν, grid, readme = "u [Nx, Nbatch, Nt]")
 
         filename = joinpath(dir, "data.jld2")
         jldsave(filename; x = x_save, u, t, mu, metadata)
 
 
-        for k in 1:size(u, 3)
+        for case in 1:size(u, 3)
             x_re = reshape(x , Nx, Ny)
             y_re = reshape(y , Nx, Ny)
 
-            vx_re = reshape(u[1,:,k,:], Nx, Ny, :)
-            vy_re = reshape(u[2,:,k,:], Nx, Ny, :)
+            _x = x_re[:, 1]
+            _y = y_re[1, :]
 
-            vx_slice1 = vx_re[:, Int(Nx/2), :] # y = 0.5
-            vx_slice2 = vx_re[Int(Nx/2), :, :] # x = 0.5
+            It = LinRange(1, ntsave, 90) .|> Base.Fix1(round, Int)
+
+            vx_re = reshape(u[1,:,case,:], Nx, Ny, :)
+            vy_re = reshape(u[2,:,case,:], Nx, Ny, :)
 
             V1D = FourierSpace(Nx; domain = interval)
-
-            # anim = animate(vx_slice1, V1D, t; w = 2.0, title = "vx(y=0.5)")
-            # filename = joinpath(dir, "burgers_slice1" * ".gif")
-            # gif(anim, filename, fps = 100)
-            #
-            # anim = animate(vx_slice2, V1D, t; w = 2.0, title = "vx(x=0.5)")
-            # filename = joinpath(dir, "burgers_slice2" * ".gif")
-            # gif(anim, filename, fps = 100)
+            vx_slice = Tuple(diag(vx_re[: ,:, i]) for i in It)
+            vx_slice = hcat(vx_slice...)
+            
+            anim = animate(vx_slice, V1D, t; w = 2.0, title = "vx(x=y)")
+            filename = joinpath(dir, "burgers_slice3" * ".gif")
+            gif(anim, filename, fps = 30)
 
             ############
 
@@ -179,19 +183,14 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
             # filename = joinpath(dir, "burgers_vy" * ".gif")
             # gif(anim, filename, fps=100)
 
-            # d = 1:32:nx
-            # plt = heatmap(u_re[d,d,100]; a = 45, b = 30)
-            # display(plt)
+            It = LinRange(1, ntsave, 4) .|> Base.Fix1(round, Int)
 
-            idx = LinRange(1, ntsave, 6) .|> Base.Fix1(round, Int)
+            for (i, id) in enumerate(It)
+                _u_re = vx_re[:, :, id]
 
-            for (i, id) in enumerate(idx)
-                _u_re = reshape(_u, Nx, Ny, :)
+                p1 = heatmap(_x, _y, _u_re'; title = "Burgers 2D Data", xlabel = "x", ylabel = "y")
 
-                p1 = heatmap(_x, _y, _u_re[:, :, id]';
-                    title = "Advection 2D Data", xlabel, ylabel)
-
-                p2 = meshplt(x_re, y_re, _u_re[:, :, id])
+                p2 = meshplt(x_re, y_re, _u_re)
 
                 png(p1, joinpath(dir, "heatmap_$i"))
                 png(p2, joinpath(dir, "meshplt_$i"))
@@ -202,7 +201,7 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
     (sol, V), (x, u, t, mu)
 end
 
-Nx = Ny = 256
+Nx = Ny = 512
 ν = 1f-3
 dir = joinpath(@__DIR__, "data_burgers2D")
 device = gpu_device()
