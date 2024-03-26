@@ -19,7 +19,7 @@ makedata_kws = (; Ix, _Ib, Ib_, _It, It_ = :)
 
 # latent 
 latent = 2
-l_pca  = 4
+l_pca  = 8
 
 #==================#
 # train
@@ -69,7 +69,7 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 grid = (1024,)
 casename = L"1D Viscous Burgers ($\mathit{Re} = 10\,\textit{k}$)"
 modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNW, modeldir_SNL,)
-labels = ("PCA R = $(l_pca)", "Lee & Carlberg", "SNFW (ours)", "SNFL (ours)")
+labels = ("PCA ($(l_pca) modes)", "Lee & Carlberg", "SNFW (ours)", "SNFL (ours)")
 
 p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid)
 p4, p5, p6 = compare_plots(modeldirs, labels, @__DIR__, casename, 2, grid)
