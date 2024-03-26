@@ -420,15 +420,16 @@ function postprocess_SNF(
         # parameter plots
         linewidth = 2.0
         palette = :tab10
-        colors = (:reds, :greens, :blues,)
+        colors = (:reds, :greens, :blues, cgrad(:thermal), cgrad(:acton))
         shapes = (:circle, :square, :star,)
 
         plt = plot(; title = "Parameter scatter plot")
 
         for (i, case) in enumerate(_Ib)
             _p = _ps[:, i, :]
+            color = colors[i]
             plt = make_param_scatterplot(_p, Tdata; plt,
-                label = "Case $(case)", color = colors[i])
+                label = "Case $(case)", color, cbar = false)
 
             # parameter evolution plot
             p2 = plot(;
@@ -442,8 +443,9 @@ function postprocess_SNF(
         for (i, case) in enumerate(Ib_)
             if case ∉ _Ib
                 p_ = _ps[:, i, :]
+                color = colors[i + length(_Ib)]
                 plt = make_param_scatterplot(p_, Tdata; plt,
-                    label = "Case $(case) (Testing)", color = colors[i], shape = :star)
+                    label = "Case $(case) (Testing)", color, cbar = false)
 
                 # parameter evolution plot
                 p2 = plot(;

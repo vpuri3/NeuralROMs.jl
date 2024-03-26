@@ -1,6 +1,7 @@
 #
 using GeometryLearning
-using JLD2, Plots, TSne, LaTeXStrings
+using JLD2, TSne
+using Plots, ColorSchemes, LaTeXStrings
 
 #======================================================#
 

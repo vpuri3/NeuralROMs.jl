@@ -241,8 +241,9 @@ function postprocess_CAE(
 
         for (i, case) in enumerate(_Ib)
             _p = _ps[:, i, :]
+            color = colors[i]
             plt = make_param_scatterplot(_p, Tdata; plt,
-                label = "Case $(case) (Training)", color = colors[i])
+                label = "Case $(case) (Training)", color, cbar = false)
 
             # parameter evolution plot
             p2 = plot(;
@@ -256,8 +257,9 @@ function postprocess_CAE(
         for (i, case) in enumerate(Ib_)
             if case ∉ _Ib
                 p_ = ps_[:, i, :]
+                color = colors[i + length(_Ib)]
                 plt = make_param_scatterplot(p_, Tdata; plt,
-                    label = "Case $(case) (Testing)", color = colors[i], shape = :star)
+                    label = "Case $(case) (Testing)", color, cbar = false)
 
                 # parameter evolution plot
                 p2 = plot(;
