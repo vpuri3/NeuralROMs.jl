@@ -118,7 +118,8 @@ function train_CAE(
     train_args = (; E, _batchsize,)
     metadata   = (; metadata..., train_args)
 
-    @show metadata
+    display(NN)
+    displaymetadata(metadata)
 
     @time model, ST = train_model(NN, _data; rng,
         _batchsize, batchsize_, 
@@ -127,7 +128,7 @@ function train_CAE(
         cb_epoch,
     )
 
-    @show metadata
+    displaymetadata(metadata)
 
     plot_training(ST...) |> display
 

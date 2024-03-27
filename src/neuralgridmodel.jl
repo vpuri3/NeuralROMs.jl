@@ -121,26 +121,30 @@ end
 
 function apply_matrix(u, grid, Dx)
     out_dim, N = size(u)
-    @assert out_dim == 1 "We apply Dx mats to individual fields."
     @assert prod(grid) == N "grid size $grid doesn't match with field size $out_dim x $N."
 
-    u_re = reshape(u, grid...)
-
-    du = Dx * u_re
-    
-    reshape(du, out_dim, N)
+    dus = ()
+    for od in 1:out_dim
+        u_re = reshape(u[od, :], grid...)
+        du = Dx * u_re
+        du = reshape(du, 1, N)
+        dus = (dus..., du)
+    end
+    vcat(dus...)
 end
 
 function apply_matrix(u, grid, Dx, Dy)
     out_dim, N = size(u)
-    @assert out_dim == 1 "We apply Dx mats to individual fields."
     @assert prod(grid) == N "grid size $grid doesn't match with field size $out_dim x $N."
 
-    u_re = reshape(u, grid...)
-
-    du = Dx * u_re * Dy'
-    
-    reshape(du, out_dim, N)
+    dus = ()
+    for od in 1:out_dim
+        u_re = reshape(u[od, :], grid...)
+        du = Dx * u_re * Dy'
+        du = reshape(du, 1, N)
+        dus = (dus..., du)
+    end
+    vcat(dus...)
 end
 
 #===========================================================#
@@ -150,6 +154,7 @@ export PCAModel
     Dx
     Dy
     grid
+    out_dim
 
     ū::Tu
     σu::Tu
@@ -159,15 +164,23 @@ function PCAModel(
     P::AbstractMatrix,
     x::AbstractArray,
     grid::NTuple{D, Integer},
+    out_dim::Integer,
     metadata::NamedTuple,
 ) where{D}
 
     ū = metadata.ū
     σu = metadata.σu
 
+    if out_dim > 1
+        @warn """
+        out_dim > 1 not fully implemented in PCAModel.
+        All output fields will be identical.
+        """
+    end
+
     Dx, Dy = make_dx_mats(x, grid)
 
-    PCAModel(P, Dx, Dy, grid, ū, σu,)
+    PCAModel(P, Dx, Dy, grid, out_dim, ū, σu,)
 end
 
 function Adapt.adapt_structure(to, model::PCAModel)
@@ -177,7 +190,7 @@ function Adapt.adapt_structure(to, model::PCAModel)
     ū  = Adapt.adapt_structure(to, model.ū)
     σu = Adapt.adapt_structure(to, model.σu)
 
-    PCAModel(P, Dx, Dy, model.grid, ū, σu,)
+    PCAModel(P, Dx, Dy, model.grid, model.out_dim, ū, σu,)
 end
 
 function (model::PCAModel)(
@@ -185,8 +198,19 @@ function (model::PCAModel)(
     p::AbstractVector,
 )
     u_norm = model.P * p
+
+    # hack
+    if model.out_dim > 1
+        @warn """
+        PCAModel doesn't fully support out_dim > 1.
+        All output fields will be identical.
+        """ maxlog = 1
+        u_norm = reshape(u_norm, 1, :)
+        u_norm = repeat(u_norm, model.out_dim, 1)
+    end
+
     u = unnormalizedata(u_norm, model.ū, model.σu)
-    reshape(u, 1, :)
+    reshape(u, model.out_dim, :)
 end
 
 #===========================================================#
@@ -244,7 +268,6 @@ function (model::INRModel)(
     x::AbstractArray,
     p::AbstractVector,
 )
-
     x_norm = normalizedata(x, model.x̄, model.σx)
     u_norm = model.NN(x_norm, p, model.st)[1]
 
@@ -299,8 +322,15 @@ function (model::CAEModel)(
     p::AbstractVector,
 )
     p_resh = reshape(getdata(p), :, 1)
-    u_norm = model.NN(p_resh, model.p, model.st)[1]
-    u = unnormalizedata(u_norm, model.ū, model.σu)
-    reshape(u, 1, :)
+    u_norm = model.NN(p_resh, model.p, model.st)[1] # [grid..., out_dim]
+
+    N = prod(model.grid)
+    in_dim  = length(model.grid)
+    out_dim = size(u_norm, in_dim + 1)
+
+    u_norm = reshape(u_norm, N, out_dim) # [N, out_dim]
+    u_norm = permutedims(u_norm, (2, 1)) # [out_dim, N]
+
+    unnormalizedata(u_norm, model.ū, model.σu)
 end
 #===========================================================#

@@ -38,9 +38,11 @@ modeldir_SNL = joinpath(@__DIR__, "model_SNL$(l0)") # us (Lipschitz)
 # train_PCA(datafile, modeldir_PCA, l_pca; rng, makedata_kws, device)
 #
 # # train_CAE
-# train_params_CAE = (; E = 1400, w = 64, makedata_kws, _batchsize = 1, batchsize_ = 100)
+#### BAD : tanh, sigmoid 
+#### GOOD: relu, elu
+# train_params_CAE = (; E = 700, w = 64, act = elu, makedata_kws, _batchsize = 1, batchsize_ = 100)
 # train_CAE_compare(prob, latent, datafile, modeldir_CAE, train_params_CAE; rng, device)
-#
+
 grid = (512, 512,)
 _batchsize = prod(grid) * length(_It) ÷ 500
 batchsize_ = prod(grid) * length(_It) ÷ 500
@@ -63,7 +65,7 @@ modelfile_SNW = joinpath(modeldir_SNW, "model_08.jld2")
 modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 
 # postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
-# postprocess_CAE(prob, datafile, modelfile_CAE; rng)#, device)
+# postprocess_CAE(prob, datafile, modelfile_CAE; rng)
 # postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
 # postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 
@@ -71,11 +73,11 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 # make figures
 #==================#
 
-# casename = L"1D Viscous Burgers ($\mathit{Re} = 10\,\textit{k}$)"
-# modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNW, modeldir_SNL,)
-# labels = ("PCA ($(l_pca) modes)", "Lee & Carlberg", "SNFW (ours)", "SNFL (ours)")
-#
-# p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid)
+casename = L"2D Viscous Burgers ($\mathit{Re} = 10\,\textit{k}$)"
+modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNW, modeldir_SNL,)
+labels = ("PCA ($(2*l_pca) modes)", "Lee & Carlberg", "SNFW (ours)", "SNFL (ours)")
+
+p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid)
 
 #======================================================#
 nothing

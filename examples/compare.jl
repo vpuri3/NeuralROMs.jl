@@ -21,29 +21,7 @@ function get_makedata_kws(train_params)
     end
 end
 
-function train_CAE_compare(
-    prob::GeometryLearning.AbstractPDEProblem,
-    l::Integer, 
-    datafile::String,
-    modeldir::String,
-    train_params = (;);
-    rng::Random.AbstractRNG = Random.default_rng(),
-    device = Lux.cpu_device(),
-)
-    E   = haskey(train_params, :E  ) ? train_params.E : 1400
-    w   = haskey(train_params, :w  ) ? train_params.w : 32
-    act = haskey(train_params, :act) ? train_params.E : tanh # relu, tanh
-
-    NN = cae_network(prob, l, w, act)
-
-    ### size debugging
-    # p, st = Lux.setup(rng, NN)
-    # x = rand(Float32, 512, 512, 1, 5,)
-    # y = NN(x, p, st)[1]
-    # @show size(y)
-    # @assert false
-
-    # batchsize
+function get_batchsizes(train_params)
     bsz = (;)
 
     if haskey(train_params, :_batchsize)
@@ -54,11 +32,38 @@ function train_CAE_compare(
         bsz = (; bsz..., batchsize_ = train_params.batchsize_,)
     end
 
+    bsz
+end
+
+function train_CAE_compare(
+    prob::GeometryLearning.AbstractPDEProblem,
+    l::Integer, 
+    datafile::String,
+    modeldir::String,
+    train_params = (;);
+    rng::Random.AbstractRNG = Random.default_rng(),
+    device = Lux.cpu_device(),
+)
+    E   = haskey(train_params, :E  ) ? train_params.E   : 1400
+    w   = haskey(train_params, :w  ) ? train_params.w   : 32
+    act = haskey(train_params, :act) ? train_params.act : tanh # relu, tanh
+
+    NN = cae_network(prob, l, w, act)
+
+    ### size debugging
+    # p, st = Lux.setup(rng, NN)
+    # x = rand(Float32, 512, 512, 1, 5,)
+    # y = NN(x, p, st)[1]
+    # @show size(y)
+    # @assert false
+
+    # misc
+    batchsizes = get_batchsizes(train_params)
     makedata_kws = get_makedata_kws(train_params)
 
     isdir(modeldir) && rm(modeldir, recursive = true)
     train_CAE(datafile, modeldir, NN, E; rng,
-        makedata_kws, warmup = false, device, bsz...,
+        makedata_kws, warmup = false, device, batchsizes...,
     )
 end
 
@@ -90,23 +95,13 @@ function train_SNF_compare(
     end
 
     # batchsize
-    bsz = (;)
-
-    if haskey(train_params, :_batchsize)
-        bsz = (; bsz..., _batchsize = train_params._batchsize,)
-    end
-
-    if haskey(train_params, :batchsize_)
-        bsz = (; bsz..., batchsize_ = train_params.batchsize_,)
-    end
-
-    # makedata_kws
+    batchsizes = get_batchsizes(train_params)
     makedata_kws = get_makedata_kws(train_params)
 
     isdir(modeldir) && rm(modeldir, recursive = true)
     train_SNF(datafile, modeldir, l, hh, hd, wh, wd, E;
         rng, makedata_kws, λ2, α, weight_decays = γ, device,
-        bsz...,
+        batchsizes...,
     )
 end
 

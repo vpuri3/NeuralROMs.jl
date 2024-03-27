@@ -259,16 +259,13 @@ function evolve_PCA(
     # get initial state
     #==============#
     U0_norm = normalizedata(U0, md.ū, md.σu)
-    if out_dim > 1
-        @error "Dynamics solve works only for out_dim = 1. Got $out_dim."
-    end
     p0 = P' * U0_norm[1,:]
 
     #==============#
     # get model
     #==============#
     grid = get_prob_grid(prob)
-    model = PCAModel(P, Xdata, grid, md)
+    model = PCAModel(P, Xdata, grid, out_dim, md)
 
     #==============#
     # evolve
@@ -308,7 +305,7 @@ function evolve_PCA(
     # parameter plots
     plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
     plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
-    png(plt, joinpath(outdir, "evole_p_scatter_case$(case)"))
+    png(plt, joinpath(outdir, "evolve_p_scatter_case$(case)"))
 
     plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
     plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")

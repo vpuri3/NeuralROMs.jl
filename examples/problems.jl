@@ -140,7 +140,6 @@ function cae_network(
         )
 
         Chain(; encoder, decoder)
-
     end
 end
 
@@ -409,9 +408,9 @@ function fieldplot(
 
             Itplt = LinRange(1, Nt,  4) .|> Base.Fix1(round, Int)
 
-            for i in Itplt
-                up_re = upred_re[:, :, i]
-                ud_re = udata_re[:, :, i]
+            for (i, idx) in enumerate(Itplt)
+                up_re = upred_re[:, :, idx]
+                ud_re = udata_re[:, :, idx]
 
                 # p1 = plot()
                 # p1 = meshplt(x_re, y_re, up_re; plt = p1, c=:black, w = 1.0, kw...,)
@@ -427,6 +426,7 @@ function fieldplot(
 
                 png(p3, joinpath(outdir, "$(prefix)_u$(od)_$(case)_time_$(i)"))
                 png(p4, joinpath(outdir, "$(prefix)_u$(od)_$(case)_time_$(i)_error"))
+
             end
         else
             throw(ErrorException("in_dim = $in_dim not supported."))
@@ -434,10 +434,11 @@ function fieldplot(
 
         # e(t)
         plt = plot(;
-                   title = "Error evolution, case = $(case)",
-                   xlabel = L"Time ($s$)", ylabel = L"ε(t)", legend = false,
-                   yaxis = :log, ylims = (10^-9, 1.0),
-                   )
+            title = "Error evolution, case = $(case)",
+            xlabel = L"Time ($s$)", ylabel = L"ε(t)", legend = false,
+            yaxis = :log, ylims = (10^-9, 1.0),
+        )
+
         plot!(plt, Tdata, er; linewidth, palette,)
         png(plt, joinpath(outdir, "$(prefix)_e$(od)_case$(case)"))
     end
