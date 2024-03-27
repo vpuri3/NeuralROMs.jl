@@ -238,6 +238,9 @@ function evolve_PCA(
     md = model["metadata"]
     close(model)
 
+    in_dim  = size(Xdata, 1)
+    out_dim = size(Udata, 1)
+
     #==============#
     # subsample in space
     #==============#
@@ -256,7 +259,10 @@ function evolve_PCA(
     # get initial state
     #==============#
     U0_norm = normalizedata(U0, md.ū, md.σu)
-    p0 = P' * vec(U0_norm)
+    if out_dim > 1
+        @error "Dynamics solve works only for out_dim = 1. Got $out_dim."
+    end
+    p0 = P' * U0_norm[1,:]
 
     #==============#
     # get model

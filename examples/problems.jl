@@ -122,10 +122,10 @@ function cae_network(
     elseif prob isa BurgersViscous2D # (512, 512, 2) -> l -> (512, 512, 2)
 
         encoder = Chain(
-            Conv((8, 8), 2  => w, act; stride = 4, pad = 2), # /4
-            Conv((8, 8), w  => w, act; stride = 4, pad = 2), # /4
-            Conv((8, 8), w  => w, act; stride = 4, pad = 2), # /4
-            Conv((8, 8), w  => w, act; stride = 1, pad = 0), # /8
+            Conv((8, 8), 2  => w, act; stride = 4, pad = 2), # /4 = 128
+            Conv((8, 8), w  => w, act; stride = 4, pad = 2), # /4 = 32
+            Conv((8, 8), w  => w, act; stride = 4, pad = 2), # /4 = 8
+            Conv((8, 8), w  => w, act; stride = 1, pad = 0), # /8 = 1
             flatten,
             Dense(w, l),
         )
@@ -133,10 +133,10 @@ function cae_network(
         decoder = Chain(
             Dense(l, w, act),
             ReshapeLayer((1, 1, w)),
-            ConvTranspose((8, 8), w => w, act; stride = 1, pad = 0), # *4 = 4
-            ConvTranspose((8, 8), w => w, act; stride = 4, pad = 2), # *4 = 16
-            ConvTranspose((8, 8), w => w, act; stride = 4, pad = 2), # *4 = 64
-            ConvTranspose((8, 8), w => 2     ; stride = 4, pad = 2), # *4 = 256
+            ConvTranspose((8, 8), w => w, act; stride = 1, pad = 0), # *8 = 8
+            ConvTranspose((8, 8), w => w, act; stride = 4, pad = 2), # *4 = 32
+            ConvTranspose((8, 8), w => w, act; stride = 4, pad = 2), # *4 = 128
+            ConvTranspose((8, 8), w => 2     ; stride = 4, pad = 2), # *4 = 512
         )
 
         Chain(; encoder, decoder)
@@ -406,7 +406,7 @@ function fieldplot(
 
             Itplt = LinRange(1, Nt,  4) .|> Base.Fix1(round, Int)
 
-            for i in eachindex(Itplt)
+            for i in Itplt
                 up_re = upred_re[:, :, i]
                 ud_re = udata_re[:, :, i]
 

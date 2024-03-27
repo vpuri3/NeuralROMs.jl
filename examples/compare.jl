@@ -33,8 +33,6 @@ function train_CAE_compare(
     E   = haskey(train_params, :E  ) ? train_params.E : 1400
     w   = haskey(train_params, :w  ) ? train_params.w : 32
     act = haskey(train_params, :act) ? train_params.E : tanh # relu, tanh
-    makedata_kws = get_makedata_kws(train_params)
-    bsz = haskey(train_params, :batchsize_) ? (; batchsize_ = train_params.batchsize_,) : (;)
 
     NN = cae_network(prob, l, w, act)
 
@@ -44,6 +42,19 @@ function train_CAE_compare(
     # y = NN(x, p, st)[1]
     # @show size(y)
     # @assert false
+
+    # batchsize
+    bsz = (;)
+
+    if haskey(train_params, :_batchsize)
+        bsz = (; bsz..., _batchsize = train_params._batchsize,)
+    end
+
+    if haskey(train_params, :batchsize_)
+        bsz = (; bsz..., batchsize_ = train_params.batchsize_,)
+    end
+
+    makedata_kws = get_makedata_kws(train_params)
 
     isdir(modeldir) && rm(modeldir, recursive = true)
     train_CAE(datafile, modeldir, NN, E; rng,
@@ -79,7 +90,15 @@ function train_SNF_compare(
     end
 
     # batchsize
-    bsz = haskey(train_params, :batchsize_) ? (; batchsize_ = train_params.batchsize_,) : (;)
+    bsz = (;)
+
+    if haskey(train_params, :_batchsize)
+        bsz = (; bsz..., _batchsize = train_params._batchsize,)
+    end
+
+    if haskey(train_params, :batchsize_)
+        bsz = (; bsz..., batchsize_ = train_params.batchsize_,)
+    end
 
     # makedata_kws
     makedata_kws = get_makedata_kws(train_params)
@@ -104,8 +123,8 @@ function compare_plots(
     grid,
 )
 
-    p1 = plot(; xlabel = L"x", ylabel = L"u(x, t)", title = "$(casename) at time T/4") # t = T/4
-    p2 = plot(; xlabel = L"x", ylabel = L"u(x, t)", title = "$(casename) at time T") # t = T
+    p1 = plot(; xlabel = L"x", ylabel = L"u(x, t)", title = "$(casename) at time T/4"  ) # t = T/4
+    p2 = plot(; xlabel = L"x", ylabel = L"u(x, t)", title = "$(casename) at time T"    ) # t = T
     p3 = plot(; xlabel = L"t", ylabel = L"ε(t)"   , title = "$(casename) error vs time") # Error
 
     plot!(p3, yaxis = :log)
