@@ -401,6 +401,9 @@ function fieldplot(
             x_re = reshape(Xdata[1, :], grid)
             y_re = reshape(Xdata[2, :], grid)
 
+            xline = x_re[:, 1]
+            yline = x_re[1, :]
+
             upred_re = reshape(up, grid..., :)
             udata_re = reshape(ud, grid..., :)
 

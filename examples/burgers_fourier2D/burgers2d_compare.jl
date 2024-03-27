@@ -64,7 +64,7 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 
 # postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
 # postprocess_CAE(prob, datafile, modelfile_CAE; rng)#, device)
-postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
+# postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
 # postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 
 #==================#

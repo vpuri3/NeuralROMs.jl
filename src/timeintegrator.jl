@@ -282,6 +282,7 @@ end
 
 function evolve_integrator!(
     integrator::TimeIntegrator{T};
+    tol::T = T(1e-6),
     verbose::Bool = true,
 ) where{T}
 
@@ -299,12 +300,16 @@ function evolve_integrator!(
     end
 
     # Time loop
-    while get_time(integrator) <= get_tspan(integrator)[2]
+    _, Tfinal = get_tspan(integrator)
 
-        update_Δt_for_saving!(integrator)
+    while get_time(integrator) <= Tfinal
 
+        if abs(get_time(integrator) - Tfinal) < tol
+            break
+        end
+
+        update_Δt_for_saving!(integrator; tol, verbose)
         perform_timestep!(integrator; verbose)
-
         state = savestep!(integrator; verbose)
 
         if !isnothing(state)

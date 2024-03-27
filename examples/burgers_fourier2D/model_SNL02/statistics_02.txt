@@ -1,0 +1,21 @@
+Epoch [0 / 0]	TRAIN LOSS: 0.00016943313 || TEST LOSS: 0.00016943313
+#======================#
+TRAIN STATS
+R² score:             0.9999946
+MSE (mean SQR error): 6.528909e-6
+RMSE (Root MSE):      0.0025551731
+MAE (mean ABS error): 0.0015345111
+maxAE (max ABS error) 0.24092102
+Lipschitz bound:      255838.16
+
+#======================#
+#======================#
+TEST  STATS
+R² score:             0.9999946
+MSE (mean SQR error): 6.5289078e-6
+RMSE (Root MSE):      0.0025551727
+MAE (mean ABS error): 0.0015345109
+maxAE (max ABS error) 0.24092102
+Lipschitz bound:      255838.16
+
+#======================#
