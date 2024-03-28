@@ -221,6 +221,7 @@ function postprocess_CAE(
 
     modeldir = dirname(modelfile)
     outdir = joinpath(modeldir, "results")
+    isdir(outdir) && rm(outdir; recursive = true)
     mkpath(outdir)
 
     if makeplot
@@ -238,7 +239,7 @@ function postprocess_CAE(
         colors = (:reds, :greens, :blues, cgrad(:thermal), cgrad(:acton))
         shapes = (:circle, :square, :star,)
 
-        plt = plot(; title = "Parameter scatter plot")
+        plt = plot(; title = "") #"Parameter scatter plot")
 
         for (i, case) in enumerate(_Ib)
             _p = _ps[:, i, :]
@@ -248,7 +249,7 @@ function postprocess_CAE(
 
             # parameter evolution plot
             p2 = plot(;
-                title = "Learned parameter evolution, case $(case)",
+                title = "", # "Learned parameter evolution, case $(case)",
                 xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false
             )
             plot!(p2, Tdata, _p'; linewidth, palette)
@@ -264,7 +265,7 @@ function postprocess_CAE(
 
                 # parameter evolution plot
                 p2 = plot(;
-                    title = "Trained parameter evolution, case $(case)",
+                    title = "", # "Trained parameter evolution, case $(case)",
                     xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false
                 )
                 plot!(p2, Tdata, p_'; linewidth, palette)
@@ -319,12 +320,12 @@ function postprocess_CAE(
         @show norm(ps - _p, 2) / length(ps)
         @show norm(ps - _p, Inf)
 
-        plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
+        plt = plot(; title = "")# L"$\tilde{u}$ distribution, case " * "$(case)")
         plt = make_param_scatterplot(_p, Tdata; plt, label = "Encoder prediction", color = :reds, cbar = false)
         plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
         png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
 
-        plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+        plt = plot(; title = "") #L"$\tilde{u}$ evolution, case " * "$(case)")
         plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
         plot!(plt, Tdata, _p'; w = 4.0, label = "Encoder prediction", style = :dash, palette = :tab10)
         png(plt, joinpath(outdir, "compare_p_case$(case)"))
@@ -362,12 +363,12 @@ function postprocess_CAE(
         @show norm(ps - p_, 2) / length(ps)
         @show norm(ps - p_, Inf)
 
-        plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
+        plt = plot(; title = "")# L"$\tilde{u}$ distribution, case " * "$(case)")
         plt = make_param_scatterplot(p_, Tdata; plt, label = "Encoder prediction", color = :reds, cbar = false)
         plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
         png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
 
-        plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+        plt = plot(; title = "") # L"$\tilde{u}$ evolution, case " * "$(case)")
         plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
         plot!(plt, Tdata, p_'; w = 4.0, label = "Encoder prediction", style = :dash, palette = :tab10)
         png(plt, joinpath(outdir, "compare_p_case$(case)"))
@@ -496,11 +497,11 @@ function evolve_CAE(
     fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "evolve", case)
 
     # parameter plots
-    plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
+    plt = plot(; title = "") #L"$\tilde{u}$ distribution, case " * "$(case)")
     plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
     png(plt, joinpath(outdir, "evolve_p_scatter_case$(case)"))
 
-    plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+    plt = plot(; title = "") #L"$\tilde{u}$ evolution, case " * "$(case)")
     plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")
     png(plt, joinpath(outdir, "evolve_p_case$(case)"))
 

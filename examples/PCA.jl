@@ -172,9 +172,9 @@ function train_PCA(
             u = @view _u[:, k, :]
             v = @view _v[:, k, :]
 
-            title = "Case $(_Ib[k])"
+            title = "" #"Case $(_Ib[k])"
 
-            It = LinRange(1, size(u, 2), 4) .|> Base.Fix1(round, Int)
+            It = LinRange(1, size(u, 2), 5) .|> Base.Fix1(round, Int)
 
             plt = plot(; title, xlabel, ylabel)
             plot!(plt, _x[1,:], u[:, It], linewidth=3, c = :black)
@@ -190,9 +190,9 @@ function train_PCA(
             u = @view u_[:, k, :]
             v = @view v_[:, k, :]
 
-            title = "Case $(Ib_[k])"
+            title = "" #"Case $(Ib_[k])"
 
-            It = LinRange(1, size(u, 2), 4) .|> Base.Fix1(round, Int)
+            It = LinRange(1, size(u, 2), 5) .|> Base.Fix1(round, Int)
             
             plt = plot(; title, xlabel, ylabel)
             plot!(plt, _x[1,:], u[:, It], linewidth=3, c = :black)
@@ -303,11 +303,11 @@ function evolve_PCA(
     fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "evolve", case)
 
     # parameter plots
-    plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
+    plt = plot(; title = "") #L"$\tilde{u}$ distribution, case " * "$(case)")
     plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
     png(plt, joinpath(outdir, "evolve_p_scatter_case$(case)"))
 
-    plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+    plt = plot(; title = "") #L"$\tilde{u}$ evolution, case " * "$(case)")
     plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")
     png(plt, joinpath(outdir, "evolve_p_case$(case)"))
 

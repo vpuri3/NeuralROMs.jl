@@ -120,7 +120,7 @@ function compare_plots(
 
     p1 = plot(; xlabel = L"x", ylabel = L"u(x, t)")#, title = "$(casename) at time T/4"  ) # t = T/4
     p2 = plot(; xlabel = L"x", ylabel = L"u(x, t)")#, title = "$(casename) at time T"    ) # t = T
-    p3 = plot(; xlabel = L"t", ylabel = L"ε(t)"   )#, title = "$(casename) error vs time") # Error
+    p3 = plot(; xlabel = L"t", ylabel = L"ε^2(t)" )#, title = "$(casename) error vs time") # Error
 
     plot!(p3, yaxis = :log)
 
@@ -142,8 +142,8 @@ function compare_plots(
         out_dim = size(Ud, 1)
         Nx, Nt = size(Xd, 2), length(Td)
 
-        Itplt = LinRange(1, Nt, 4) .|> Base.Fix1(round, Int)
-        i1, i2 = Itplt[2], Itplt[4]
+        Itplt = LinRange(1, Nt, 5) .|> Base.Fix1(round, Int)
+        i1, i2 = Itplt[2], Itplt[5]
 
         up = Up[1, :, :] # Nx, Nt
         ud = Ud[1, :, :]
@@ -163,6 +163,23 @@ function compare_plots(
             plot!(p2, xd, up[:, i2]; w = 3, label = labels[i], c = colors[i], s = :dash)
 
         elseif in_dim == 2
+            x_re = reshape(Xd[1,:], grid)
+            y_re = reshape(Xd[2,:], grid)
+            xdiag = diag(x_re)
+
+            if i == 1
+                ud1 = diag(reshape(ud[:, i1], grid))
+                ud2 = diag(reshape(ud[:, i2], grid))
+
+                plot!(p1, xdiag, ud1, w = 3, label = "FOM", c = :black)
+                plot!(p2, xdiag, ud2, w = 3, label = "FOM", c = :black)
+            end
+
+            up1 = diag(reshape(up[:, i1], grid))
+            up2 = diag(reshape(up[:, i2], grid))
+
+            plot!(p1, xdiag, up1, w = 3, label = labels[i], c = colors[i], s = :dash)
+            plot!(p2, xdiag, up2, w = 3, label = labels[i], c = colors[i], s = :dash)
         end
 
         plot!(p3, Td, er; w = 3, label = labels[i], c = colors[i])

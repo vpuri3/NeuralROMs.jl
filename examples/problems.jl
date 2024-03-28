@@ -406,7 +406,7 @@ function fieldplot(
             upred_re = reshape(up, grid..., :)
             udata_re = reshape(ud, grid..., :)
 
-            Itplt = LinRange(1, Nt,  4) .|> Base.Fix1(round, Int)
+            Itplt = LinRange(1, Nt,  5) .|> Base.Fix1(round, Int)
 
             for (i, idx) in enumerate(Itplt)
                 up_re = upred_re[:, :, idx]
