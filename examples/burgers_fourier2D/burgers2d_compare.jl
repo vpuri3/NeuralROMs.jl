@@ -73,11 +73,10 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 # make figures
 #==================#
 
-casename = L"2D Viscous Burgers ($\mathit{Re} = 10\,\textit{k}$)"
+casename = "burgers2d"
 modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNW, modeldir_SNL,)
 labels = ("PCA ($(2*l_pca) modes)", "Lee & Carlberg", "SNFW (ours)", "SNFL (ours)")
 
 p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid)
-
 #======================================================#
 nothing

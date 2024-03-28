@@ -63,7 +63,7 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 # make figures
 #==================#
 grid = (128,)
-casename = "1D Advection"
+casename = "advect1d"
 modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNW, modeldir_SNL,)
 labels = ("PCA R = $(l_pca)", "Lee & Carlberg", "SNFW (ours)", "SNFL (ours)")
 

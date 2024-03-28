@@ -1,7 +1,7 @@
 #
 using GeometryLearning
 using Plots, LaTeXStrings
-using NPZ
+using HDF5
 
 joinpath(pkgdir(GeometryLearning), "examples", "PCA.jl")      |> include
 joinpath(pkgdir(GeometryLearning), "examples", "convAE.jl")   |> include
@@ -118,13 +118,17 @@ function compare_plots(
     grid,
 )
 
-    p1 = plot(; xlabel = L"x", ylabel = L"u(x, t)", title = "$(casename) at time T/4"  ) # t = T/4
-    p2 = plot(; xlabel = L"x", ylabel = L"u(x, t)", title = "$(casename) at time T"    ) # t = T
-    p3 = plot(; xlabel = L"t", ylabel = L"ε(t)"   , title = "$(casename) error vs time") # Error
+    p1 = plot(; xlabel = L"x", ylabel = L"u(x, t)")#, title = "$(casename) at time T/4"  ) # t = T/4
+    p2 = plot(; xlabel = L"x", ylabel = L"u(x, t)")#, title = "$(casename) at time T"    ) # t = T
+    p3 = plot(; xlabel = L"t", ylabel = L"ε(t)"   )#, title = "$(casename) error vs time") # Error
 
     plot!(p3, yaxis = :log)
 
+    suffix = ("PCA", "CAE", "SNW", "SNL")
     colors = (:orange, :green, :blue, :red)
+
+    h5dict = Dict()
+    h5path = joinpath(outdir, "$(casename).h5")
 
     for (i, modeldir) in enumerate(modeldirs)
         ev = jldopen(joinpath(modeldir, "results", "evolve$(case).jld2"))
@@ -147,29 +151,46 @@ function compare_plots(
         er = (up - ud) / nr
         er = sum(abs2, er; dims = 1) / size(ud, 1) |> vec
 
-        palette = :tab10
-
         if in_dim == 1
             xd = vec(Xd)
 
             if i == 1
-                plot!(p1, xd, ud[:, i1]; w = 5, palette, label = "FOM", c = :black)
-                plot!(p2, xd, ud[:, i2]; w = 5, palette, label = "FOM", c = :black)
+                plot!(p1, xd, ud[:, i1]; w = 5, label = "FOM", c = :black)
+                plot!(p2, xd, ud[:, i2]; w = 5, label = "FOM", c = :black)
             end
 
-            plot!(p1, xd, up[:, i1]; w = 3, palette, label = labels[i], c = colors[i], s = :dash)
-            plot!(p2, xd, up[:, i2]; w = 3, palette, label = labels[i], c = colors[i], s = :dash)
+            plot!(p1, xd, up[:, i1]; w = 3, label = labels[i], c = colors[i], s = :dash)
+            plot!(p2, xd, up[:, i2]; w = 3, label = labels[i], c = colors[i], s = :dash)
 
         elseif in_dim == 2
-            grid
         end
 
-        plot!(p3, Td, er; w = 3, palette, label = labels[i], c = colors[i])
+        plot!(p3, Td, er; w = 3, label = labels[i], c = colors[i])
+
+        ### save stuff to HDF5 files
+
+        td = vec(Td)
+        xd = reshape(Xd, in_dim , grid...)
+        ud = reshape(Ud, out_dim, grid..., Nt)
+        up = reshape(Up, out_dim, grid..., Nt)
+
+        if i == 1
+            h5dict = Dict(h5dict...,
+                "xFOM" => xd, "tFOM" => td, "uFOM" => ud,
+            )
+        end
+        h5dict = Dict(h5dict..., "u$(suffix[i])" => up)
     end
 
     png(p1, joinpath(outdir, "compare_t0_case$(case)"))
     png(p2, joinpath(outdir, "compare_t1_case$(case)"))
     png(p3, joinpath(outdir, "compare_er_case$(case)"))
+
+    file = h5open(h5path, "w")
+    for (k, v) in h5dict
+        write(file, k, v)
+    end
+    close(file)
 
     p1, p2, p3
 end

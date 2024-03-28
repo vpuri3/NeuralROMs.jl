@@ -15,7 +15,7 @@ device = Lux.gpu_device()
 makedata_kws = (; Ix = :, _Ib = [1,], Ib_ = [1,], _It = :, It_ = :)
 
 # latent 
-latent = 2
+latent = 1
 l_pca  = 2
 
 #==================#
@@ -63,7 +63,7 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 # make figures
 #==================#
 grid = (256,)
-casename = "1D KS"
+casename = "ks1d"
 modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNW, modeldir_SNL,)
 labels = ("PCA R = $(l_pca)", "Lee & Carlberg", "SNFW (ours)", "SNFL (ours)")
 

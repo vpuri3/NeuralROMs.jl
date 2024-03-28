@@ -379,7 +379,7 @@ function fieldplot(
 
             # u(x, t)
             plt = plot(;
-                title = "Ambient space evolution, case = $(case)",
+                # title = "Ambient space evolution, case = $(case)",
                 xlabel = L"x", ylabel = L"u(x,t)", legend = false,
             )
             plot!(plt, xd, up[:, Itplt]; linewidth, palette)
@@ -391,9 +391,9 @@ function fieldplot(
             # gif(anim, joinpath(outdir, "train$(k).gif"); fps)
 
         elseif in_dim == 2
-            xlabel = "x"
-            ylabel = "y"
-            zlabel = "u$(od)(x, t)"
+            xlabel = L"x"
+            ylabel = L"y"
+            zlabel = L"u$(od)(x, t)"
 
             kw = (; xlabel, ylabel, zlabel,)
 
