@@ -11,7 +11,7 @@ end
 
 using CUDA, LuxCUDA, LuxDeviceUtils, ComponentArrays
 using OrdinaryDiffEq, LinearSolve, LinearAlgebra, Random
-using Plots, JLD2
+using Plots, JLD2, LaTeXStrings
 
 Random.seed!(0)
 CUDA.allowscalar(false)
@@ -188,7 +188,9 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
             for (i, id) in enumerate(It)
                 _u_re = vx_re[:, :, id]
 
-                p1 = heatmap(_x, _y, _u_re'; title = "Burgers 2D Data", xlabel = "x", ylabel = "y")
+                p1 = heatmap(_x, _y, _u_re';
+                    xlabel = L"x", ylabel = L"y", cmap = :viridis,
+                )
 
                 p2 = meshplt(x_re, y_re, _u_re)
 

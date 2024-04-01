@@ -298,7 +298,6 @@ function evolve_SNF(
 
     modeldir = dirname(modelfile)
     outdir = joinpath(modeldir, "results")
-    isdir(outdir) && rm(outdir; recursive = true)
     mkpath(outdir)
 
     # field visualizations
@@ -421,7 +420,7 @@ function postprocess_SNF(
         # parameter plots
         linewidth = 2.0
         palette = :tab10
-        colors = (:reds, :greens, :blues, cgrad(:thermal), cgrad(:acton))
+        colors = (:reds, :greens, :blues, cgrad(:viridis), cgrad(:inferno))
         shapes = (:circle, :square, :star,)
 
         plt = plot(; title = "")# "Parameter scatter plot")
@@ -465,9 +464,9 @@ function postprocess_SNF(
     #==============#
     # Evolve
     #==============#
-    for case in union(_Ib, Ib_)
-        evolve_SNF(prob, datafile, modelfile, case; rng, device)
-    end
+    # for case in union(_Ib, Ib_)
+    #     evolve_SNF(prob, datafile, modelfile, case; rng, device)
+    # end
 
     #==============#
     # Compare evolution with training plots

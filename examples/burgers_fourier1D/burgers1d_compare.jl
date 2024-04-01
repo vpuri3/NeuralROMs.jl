@@ -59,23 +59,23 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 
 # postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
 # postprocess_CAE(prob, datafile, modelfile_CAE; rng)
-# postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
+postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
 # postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 
 #==================#
 # make figures
 #==================#
 
-grid = (1024,)
-casename = "burgers1d"
-modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNW, modeldir_SNL,)
-labels = ("POD ($(l_pca) modes)", "CAE", "SNFW (ours)", "SNFL (ours)")
-
-p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename * "case1", 1, grid)
-p4, p5, p6 = compare_plots(modeldirs, labels, @__DIR__, casename * "case2", 2, grid)
-p7, p8, p9 = compare_plots(modeldirs, labels, @__DIR__, casename * "case3", 3, grid)
-q1, q2, q3 = compare_plots(modeldirs, labels, @__DIR__, casename * "case4", 4, grid)
-q4, q5, q6 = compare_plots(modeldirs, labels, @__DIR__, casename * "case5", 5, grid)
+# grid = (1024,)
+# casename = "burgers1d"
+# modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
+# labels = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
+#
+# p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename * "case1", 1, grid)
+# p4, p5, p6 = compare_plots(modeldirs, labels, @__DIR__, casename * "case2", 2, grid)
+# p7, p8, p9 = compare_plots(modeldirs, labels, @__DIR__, casename * "case3", 3, grid)
+# q1, q2, q3 = compare_plots(modeldirs, labels, @__DIR__, casename * "case4", 4, grid)
+# q4, q5, q6 = compare_plots(modeldirs, labels, @__DIR__, casename * "case5", 5, grid)
 
 #======================================================#
 nothing

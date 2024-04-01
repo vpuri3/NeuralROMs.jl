@@ -406,7 +406,7 @@ function fieldplot(
             upred_re = reshape(up, grid..., :)
             udata_re = reshape(ud, grid..., :)
 
-            Itplt = LinRange(1, Nt,  5) .|> Base.Fix1(round, Int)
+            Itplt = LinRange(1, Nt, 5) .|> Base.Fix1(round, Int)
 
             for (i, idx) in enumerate(Itplt)
                 up_re = upred_re[:, :, idx]
@@ -421,8 +421,8 @@ function fieldplot(
                 # png(p1, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)"))
                 # png(p2, joinpath(outdir, "train_u$(od)_$(k)_time_$(i)_error"))
 
-                p3 = heatmap(up_re; title = "u$(od)(x, y)")
-                p4 = heatmap(up_re - ud_re; title = "u$(od)(x, y)")
+                p3 = heatmap(up_re) #; title = "u$(od)(x, y)")
+                p4 = heatmap(abs.(up_re - ud_re)) #; title = "u$(od)(x, y)")
 
                 png(p3, joinpath(outdir, "$(prefix)_u$(od)_$(case)_time_$(i)"))
                 png(p4, joinpath(outdir, "$(prefix)_u$(od)_$(case)_time_$(i)_error"))

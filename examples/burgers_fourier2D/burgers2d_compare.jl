@@ -1,4 +1,3 @@
-
 #
 using GeometryLearning
 using Plots, LaTeXStrings
@@ -74,8 +73,8 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 #==================#
 
 casename = "burgers2d"
-modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNW, modeldir_SNL,)
-labels = ("POD ($(2*l_pca) modes)", "CAE", "SNFW (ours)", "SNFL (ours)")
+modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
+labels = ("POD ($(2*l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
 
 p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid)
 #======================================================#
