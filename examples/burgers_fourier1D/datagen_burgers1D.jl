@@ -147,7 +147,7 @@ function burgers_inviscid(N, mu, tspan;
 end
 
 N = 1024
-mu = [0.500, 0.525, 0.550, 0.575, 0.600,]
+mu = [0.500, 0.525, 0.550, 0.575, 0.600, 0.625]
 tspan = (0.f0, 0.5f0)
 dir = joinpath(@__DIR__, "data_burg1D")
 device = gpu_device()

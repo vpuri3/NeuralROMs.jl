@@ -23,14 +23,18 @@ include(joinpath(pkgdir(GeometryLearning), "examples", "problems.jl"))
 #======================================================#
 function makedata_CAE(
     datafile::String;
-    Ix = Colon(), # subsample in space
+    Ix = Colon(),  # subsample in space
     _Ib = Colon(), # train/test split in batches
-    Ib_ = Colon(),
+    Ib_ = Colon(), # disregard. set to everything but _Ib
     _It = Colon(), # train/test split in time
     It_ = Colon(),
 )
     # load data
     x, t, mu, u, md_data = loaddata(datafile)
+
+    _Ib = isa(_Ib, Colon) ? (1:size(u, 3)) : _Ib
+    Ib_ = setdiff(1:size(u, 3), _Ib)
+    Ib_ = isempty(Ib_) ? _Ib : Ib_
 
     # normalize
     x, x̄, σx = normalize_x(x)
@@ -156,21 +160,22 @@ function postprocess_CAE(
     out_dim = size(Udata, 1)
 
     #==============#
-    # train/test split
-    #==============#
-    _Udata = @view Udata[:, :, md.makedata_kws._Ib, md.makedata_kws._It] # un-normalized
-    Udata_ = @view Udata[:, :, md.makedata_kws.Ib_, md.makedata_kws.It_]
-
-    #==============#
-    # from training data
+    # setup train/test split
     #==============#
     _Ib = isa(md.makedata_kws._Ib, Colon) ? (1:size(Udata, 3)) : md.makedata_kws._Ib
-    Ib_ = isa(md.makedata_kws.Ib_, Colon) ? (1:size(Udata, 3)) : md.makedata_kws.Ib_
-
     _It = isa(md.makedata_kws._It, Colon) ? (1:size(Udata, 4)) : md.makedata_kws._It
-    It_ = isa(md.makedata_kws.It_, Colon) ? (1:size(Udata, 4)) : md.makedata_kws.It_
+
+    Ib_ = setdiff(1:size(Udata, 3), _Ib)
+    Ib_ = isempty(Ib_) ? _Ib : Ib_
+    It_ = 1:size(Udata, 4)
 
     displaymetadata(md)
+
+    #==============#
+    # train/test split
+    #==============#
+    _Udata = @view Udata[:, :, _Ib, _It] # un-normalized
+    Udata_ = @view Udata[:, :, Ib_, It_]
 
     #==============#
     # get encoder / decoer
@@ -236,7 +241,7 @@ function postprocess_CAE(
         # parameter plots
         linewidth = 2.0
         palette = :tab10
-        colors = (:reds, :greens, :blues, cgrad(:thermal), cgrad(:acton))
+        colors = (:reds, :greens, :blues, cgrad(:thermal), cgrad(:acton), cgrad(:viridis))
         shapes = (:circle, :square, :star,)
 
         plt = plot(; title = "Parameter scatter plot")
@@ -406,7 +411,6 @@ function evolve_CAE(
     ϵ_xyz::Union{Real, Nothing} = 1f-2,
 
     learn_ic::Bool = false,
-    zeroinit::Bool = false,
 
     verbose::Bool = true,
     device = Lux.cpu_device(),
@@ -454,10 +458,6 @@ function evolve_CAE(
 
     p0 = encoder[1](U0_resh, encoder[2], encoder[3])[1]
     p0 = dropdims(p0; dims = 2)
-
-    if zeroinit
-        p0 *= 0
-    end
 
     #==============#
     # make model

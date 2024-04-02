@@ -1,7 +1,7 @@
 #
 using GeometryLearning
-using Plots, LaTeXStrings
-using HDF5
+using LinearAlgebra, Plots, LaTeXStrings
+using JLD2, HDF5
 
 joinpath(pkgdir(GeometryLearning), "examples", "PCA.jl")      |> include
 joinpath(pkgdir(GeometryLearning), "examples", "convAE.jl")   |> include
@@ -105,10 +105,6 @@ function train_SNF_compare(
     )
 end
 
-#======================================================#
-# main
-#======================================================#
-
 function compare_plots(
     modeldirs,
     labels,
@@ -126,10 +122,6 @@ function compare_plots(
     suffix = ("PCA", "CAE", "SNW", "SNL", "SN0")
     colors = (:orange, :green, :blue, :red, :brown,)
     styles = (:dot, :solid, :dash, :dashdotdot, :solid,)
-    mshape = (:circle, :utriangle, :diamond, :dtriangle, :star5,)
-
-    plt_kw = (; c, s, label, w = 3)
-    ctr_kw = (; cmap = :viridis, aspect_ratio = :equal, xlabel = L"x", ylabel = L"y", cbar = false)
 
     h5dict = Dict()
     h5path = joinpath(outdir, "$(casename).h5")
@@ -141,6 +133,9 @@ function compare_plots(
         Td = ev["Tdata"]
         Ud = ev["Udata"]
         Up = ev["Upred"]
+        Pp = ev["Ppred"]
+        # Ue = ev["Ulrnd"]
+        # Pe = ev["Plrnd"]
 
         in_dim  = size(Xd, 1)
         out_dim = size(Ud, 1)
@@ -157,6 +152,10 @@ function compare_plots(
 
         c = colors[i]
         s = styles[i]
+        label = labels[i]
+
+        plt_kw = (; c, s, label, w = 3)
+        ctr_kw = (; cmap = :viridis, aspect_ratio = :equal, xlabel = L"x", ylabel = L"y", cbar = false)
 
         if in_dim == 1
             xd = vec(Xd)
@@ -208,7 +207,7 @@ function compare_plots(
         plot!(p1, ylims = ylm)
         plot!(p2, ylims = ylm)
 
-        plot!(p3, ytick = 10.0 .^ .-(0:9))
+        plot!(p3, ytick = 10.0 .^ .-(0:9), ylims = (10^-9, 1))
 
         #save stuff to HDF5 files
         td = vec(Td)
@@ -222,6 +221,11 @@ function compare_plots(
             )
         end
         h5dict = Dict(h5dict..., "u$(suffix[i])" => up)
+
+        # everything but PCA
+        if i != 1
+            h5dict = Dict(h5dict..., "p$(suffix[i])" => Pp)
+        end
     end
 
     png(p1, joinpath(outdir, "compare_t0_case$(case)"))

@@ -32,9 +32,9 @@ end
 #======================================================#
 function makedata_PCA(
     datafile::String;
-    Ix = Colon(), # subsample in space
+    Ix = Colon(),  # subsample in space
     _Ib = Colon(), # train/test split in batches
-    Ib_ = Colon(),
+    Ib_ = Colon(), # disregard Ib_. set to everything but _Ib
     _It = Colon(), # train/test split in time
     It_ = Colon(),
 )
@@ -43,6 +43,8 @@ function makedata_PCA(
 
     in_dim  = size(x, 1)
     out_dim = size(u, 1)
+
+    Ib_ = setdiff(1:size(u, 3), _Ib)
 
     # normalize
     x, x̄, σx = normalize_x(x)

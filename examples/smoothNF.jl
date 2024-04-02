@@ -24,14 +24,18 @@ include(joinpath(pkgdir(GeometryLearning), "examples", "problems.jl"))
 #======================================================#
 function makedata_SNF(
     datafile::String;
-    Ix = Colon(), # subsample in space
+    Ix = Colon(),  # subsample in space
     _Ib = Colon(), # train/test split in batches
-    Ib_ = Colon(),
+    Ib_ = Colon(), # disregard. set to everything but _Ib
     _It = Colon(), # train/test split in time
     It_ = Colon(),
 )
     # load data
     x, t, mu, u, md_data = loaddata(datafile)
+
+    _Ib = isa(_Ib, Colon) ? (1:size(u, 3)) : _Ib
+    Ib_ = setdiff(1:size(u, 3), _Ib)
+    Ib_ = isempty(Ib_) ? _Ib : Ib_
 
     # normalize
     x, x̄, σx = normalize_x(x)
@@ -260,9 +264,10 @@ function evolve_SNF(
     #==============#
     # get p0
     #==============#
-    _data, _, _ = makedata_SNF(datafile; Ix = [1,], _It = [1,])
+    _data, _, _ = makedata_SNF(datafile; Ix = [1,], _Ib = [case])
     _prm = _data[1][2]
-    p0 = hyper[1](_prm[:, case], hyper[2], hyper[3])[1]
+    _ps = hyper[1](_prm, hyper[2], hyper[3])[1]
+    p0 = _ps[:, 1]
 
     #==============#
     # make model
@@ -315,7 +320,7 @@ function evolve_SNF(
 
     # save files
     filename = joinpath(outdir, "evolve$(case).jld2")
-    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps)
+    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps, Plrnd = _ps)
 
     # print error metrics
     @show sqrt(mse(Up, Ud) / mse(Ud, 0 * Ud))
@@ -342,21 +347,22 @@ function postprocess_SNF(
     model, md = loadmodel(modelfile)
 
     #==============#
-    # train/test split
-    #==============#
-    _Udata = @view Udata[:, :, md.makedata_kws._Ib, md.makedata_kws._It] # un-normalized
-    Udata_ = @view Udata[:, :, md.makedata_kws.Ib_, md.makedata_kws.It_]
-
-    #==============#
-    # from training data
+    # set up train/test split
     #==============#
     _Ib = isa(md.makedata_kws._Ib, Colon) ? (1:size(Udata, 3)) : md.makedata_kws._Ib
-    Ib_ = isa(md.makedata_kws.Ib_, Colon) ? (1:size(Udata, 3)) : md.makedata_kws.Ib_
-
     _It = isa(md.makedata_kws._It, Colon) ? (1:size(Udata, 4)) : md.makedata_kws._It
-    It_ = isa(md.makedata_kws.It_, Colon) ? (1:size(Udata, 4)) : md.makedata_kws.It_
+
+    Ib_ = setdiff(1:size(Udata, 3), _Ib)
+    Ib_ = isempty(Ib_) ? _Ib : Ib_
+    It_ = 1:size(Udata, 4)
 
     displaymetadata(md)
+
+    #==============#
+    # train/test split
+    #==============#
+    _Udata = @view Udata[:, :, _Ib, _It] # un-normalized
+    Udata_ = @view Udata[:, :, Ib_, It_]
 
     #==============#
     # Get model
@@ -420,8 +426,7 @@ function postprocess_SNF(
         # parameter plots
         linewidth = 2.0
         palette = :tab10
-        colors = (:reds, :greens, :blues, cgrad(:viridis), cgrad(:inferno))
-        shapes = (:circle, :square, :star,)
+        colors = (:reds, :greens, :blues, cgrad(:viridis), cgrad(:inferno), cgrad(:thermal))
 
         plt = plot(; title = "Parameter scatter plot")
 
@@ -464,9 +469,9 @@ function postprocess_SNF(
     #==============#
     # Evolve
     #==============#
-    # for case in union(_Ib, Ib_)
-    #     evolve_SNF(prob, datafile, modelfile, case; rng, device)
-    # end
+    for case in union(_Ib, Ib_)
+        evolve_SNF(prob, datafile, modelfile, case; rng, device)
+    end
 
     #==============#
     # Compare evolution with training plots
