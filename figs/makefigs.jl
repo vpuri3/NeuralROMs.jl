@@ -1,112 +1,192 @@
-using GeometryLearning
-
-srcdir = joinpath(pkgdir(GeometryLearning), "examples")
-figdir = joinpath(pkgdir(GeometryLearning), "figs")
-
-mkpath(figdir)
-
-e1src = joinpath(srcdir, "advect_fourier1D")
-e2src = joinpath(srcdir, "advect_fourier2D")
-e3src = joinpath(srcdir, "burgers_fourier1D")
-e4src = joinpath(srcdir, "burgers_fourier2D")
-e5src = joinpath(srcdir, "ks_fourier1D")
-
-e1dst = joinpath(figdir, "exp1")
-e2dst = joinpath(figdir, "exp2")
-e3dst = joinpath(figdir, "exp3")
-e4dst = joinpath(figdir, "exp4")
-e5dst = joinpath(figdir, "exp5")
-
-mkpath(e1dst)
-mkpath(e2dst)
-mkpath(e3dst)
-mkpath(e4dst)
-mkpath(e5dst)
-
-force = true
-
-# EXP 1
-cp(joinpath(e1src, "compare_er_case1.png"), joinpath(e1dst, "compare_er_case1.png"); force)
-cp(joinpath(e1src, "compare_t0_case1.png"), joinpath(e1dst, "compare_t0_case1.png"); force)
-cp(joinpath(e1src, "compare_t1_case1.png"), joinpath(e1dst, "compare_t1_case1.png"); force)
-
-cp(joinpath(e1src, "model_CAE02", "results", "compare_p_scatter_case1.png"), joinpath(e1dst, "CAE-p.png"); force)
-cp(joinpath(e1src, "model_SNL02", "results", "compare_p_scatter_case1.png"), joinpath(e1dst, "SNL-p.png"); force)
-cp(joinpath(e1src, "model_SNW02", "results", "compare_p_scatter_case1.png"), joinpath(e1dst, "SNW-p.png"); force)
-
-# EXP 2
-cp(joinpath(e2src, "compare_er_case1.png"), joinpath(e2dst, "compare_er_case1.png"); force)
-cp(joinpath(e2src, "compare_t0_case1.png"), joinpath(e2dst, "compare_t0_case1.png"); force)
-cp(joinpath(e2src, "compare_t1_case1.png"), joinpath(e2dst, "compare_t1_case1.png"); force)
-
-cp(joinpath(e2src, "data_advect", "heatmap_2.png"), joinpath(e2dst, "FOM-u-t0.png"); force)
-cp(joinpath(e2src, "data_advect", "heatmap_6.png"), joinpath(e2dst, "FOM-u-t1.png"); force)
-
-cp(joinpath(e2src, "model_PCA08", "results", "evolve_u1_1_time_2.png"), joinpath(e2dst, "PCA-u-t0.png"); force)
-cp(joinpath(e2src, "model_PCA08", "results", "evolve_u1_1_time_4.png"), joinpath(e2dst, "PCA-u-t1.png"); force)
-cp(joinpath(e2src, "model_PCA08", "results", "evolve_u1_1_time_2_error.png"), joinpath(e2dst, "PCA-e-t0.png"); force)
-cp(joinpath(e2src, "model_PCA08", "results", "evolve_u1_1_time_4_error.png"), joinpath(e2dst, "PCA-e-t1.png"); force)
-
-cp(joinpath(e2src, "model_CAE02", "results", "evolve_u1_1_time_2.png"), joinpath(e2dst, "CAE-u-t0.png"); force)
-cp(joinpath(e2src, "model_CAE02", "results", "evolve_u1_1_time_4.png"), joinpath(e2dst, "CAE-u-t1.png"); force)
-cp(joinpath(e2src, "model_CAE02", "results", "evolve_u1_1_time_2_error.png"), joinpath(e2dst, "CAE-e-t0.png"); force)
-cp(joinpath(e2src, "model_CAE02", "results", "evolve_u1_1_time_4_error.png"), joinpath(e2dst, "CAE-e-t1.png"); force)
-
-cp(joinpath(e2src, "model_SNL02", "results", "evolve_u1_1_time_2.png"), joinpath(e2dst, "SNL-u-t0.png"); force)
-cp(joinpath(e2src, "model_SNL02", "results", "evolve_u1_1_time_4.png"), joinpath(e2dst, "SNL-u-t1.png"); force)
-cp(joinpath(e2src, "model_SNL02", "results", "evolve_u1_1_time_2_error.png"), joinpath(e2dst, "SNL-e-t0.png"); force)
-cp(joinpath(e2src, "model_SNL02", "results", "evolve_u1_1_time_4_error.png"), joinpath(e2dst, "SNL-e-t1.png"); force)
-
-cp(joinpath(e2src, "model_SNW02", "results", "evolve_u1_1_time_2.png"), joinpath(e2dst, "SNW-u-t0.png"); force)
-cp(joinpath(e2src, "model_SNW02", "results", "evolve_u1_1_time_4.png"), joinpath(e2dst, "SNW-u-t1.png"); force)
-cp(joinpath(e2src, "model_SNW02", "results", "evolve_u1_1_time_2_error.png"), joinpath(e2dst, "SNW-e-t0.png"); force)
-cp(joinpath(e2src, "model_SNW02", "results", "evolve_u1_1_time_4_error.png"), joinpath(e2dst, "SNW-e-t1.png"); force)
-
-# EXP 3
-cp(joinpath(e3src, "compare_er_case4.png"), joinpath(e3dst, "compare_er_case4.png"); force)
-cp(joinpath(e3src, "compare_t0_case4.png"), joinpath(e3dst, "compare_t0_case4.png"); force)
-cp(joinpath(e3src, "compare_t1_case4.png"), joinpath(e3dst, "compare_t1_case4.png"); force)
-
-cp(joinpath(e3src, "compare_er_case5.png"), joinpath(e3dst, "compare_er_case5.png"); force)
-cp(joinpath(e3src, "compare_t0_case5.png"), joinpath(e3dst, "compare_t0_case5.png"); force)
-cp(joinpath(e3src, "compare_t1_case5.png"), joinpath(e3dst, "compare_t1_case5.png"); force)
-
-cp(joinpath(e3src, "model_CAE02", "results", "train_p_scatter.png"), joinpath(e3dst, "CAE-p.png"); force)
-cp(joinpath(e3src, "model_SNL02", "results", "train_p_scatter.png"), joinpath(e3dst, "SNL-p.png"); force)
-cp(joinpath(e3src, "model_SNW02", "results", "train_p_scatter.png"), joinpath(e3dst, "SNW-p.png"); force)
-
-# EXP 4
-cp(joinpath(e4src, "compare_er_case1.png"), joinpath(e4dst, "compare_er_case1.png"); force)
-cp(joinpath(e4src, "compare_t0_case1.png"), joinpath(e4dst, "compare_t0_case1.png"); force)
-cp(joinpath(e4src, "compare_t1_case1.png"), joinpath(e4dst, "compare_t1_case1.png"); force)
-
-cp(joinpath(e4src, "data_burgers2D", "heatmap_2.png"), joinpath(e4dst, "FOM-u-t0.png"); force)
-cp(joinpath(e4src, "data_burgers2D", "heatmap_4.png"), joinpath(e4dst, "FOM-u-t1.png"); force)
-
-cp(joinpath(e4src, "model_PCA08", "results", "evolve_u1_1_time_2.png"), joinpath(e4dst, "PCA-u-t0.png"); force)
-cp(joinpath(e4src, "model_PCA08", "results", "evolve_u1_1_time_4.png"), joinpath(e4dst, "PCA-u-t1.png"); force)
-cp(joinpath(e4src, "model_PCA08", "results", "evolve_u1_1_time_2_error.png"), joinpath(e4dst, "PCA-e-t0.png"); force)
-cp(joinpath(e4src, "model_PCA08", "results", "evolve_u1_1_time_4_error.png"), joinpath(e4dst, "PCA-e-t1.png"); force)
-
-cp(joinpath(e4src, "model_CAE02", "results", "evolve_u1_1_time_2.png"), joinpath(e4dst, "CAE-u-t0.png"); force)
-cp(joinpath(e4src, "model_CAE02", "results", "evolve_u1_1_time_4.png"), joinpath(e4dst, "CAE-u-t1.png"); force)
-cp(joinpath(e4src, "model_CAE02", "results", "evolve_u1_1_time_2_error.png"), joinpath(e4dst, "CAE-e-t0.png"); force)
-cp(joinpath(e4src, "model_CAE02", "results", "evolve_u1_1_time_4_error.png"), joinpath(e4dst, "CAE-e-t1.png"); force)
-
-cp(joinpath(e4src, "model_SNL02", "results", "evolve_u1_1_time_2.png"), joinpath(e4dst, "SNL-u-t0.png"); force)
-cp(joinpath(e4src, "model_SNL02", "results", "evolve_u1_1_time_4.png"), joinpath(e4dst, "SNL-u-t1.png"); force)
-cp(joinpath(e4src, "model_SNL02", "results", "evolve_u1_1_time_2_error.png"), joinpath(e4dst, "SNL-e-t0.png"); force)
-cp(joinpath(e4src, "model_SNL02", "results", "evolve_u1_1_time_4_error.png"), joinpath(e4dst, "SNL-e-t1.png"); force)
-
-cp(joinpath(e4src, "model_SNW02", "results", "evolve_u1_1_time_2.png"), joinpath(e4dst, "SNW-u-t0.png"); force)
-cp(joinpath(e4src, "model_SNW02", "results", "evolve_u1_1_time_4.png"), joinpath(e4dst, "SNW-u-t1.png"); force)
-cp(joinpath(e4src, "model_SNW02", "results", "evolve_u1_1_time_2_error.png"), joinpath(e4dst, "SNW-e-t0.png"); force)
-cp(joinpath(e4src, "model_SNW02", "results", "evolve_u1_1_time_4_error.png"), joinpath(e4dst, "SNW-e-t1.png"); force)
-
-# EXP 5
-cp(joinpath(e5src, "compare_er_case1.png"), joinpath(e5dst, "compare_er_case1.png"); force)
-cp(joinpath(e5src, "compare_t0_case1.png"), joinpath(e5dst, "compare_t0_case1.png"); force)
-cp(joinpath(e5src, "compare_t1_case1.png"), joinpath(e5dst, "compare_t1_case1.png"); force)
-
 #
+using LinearAlgebra, HDF5, LaTeXStrings
+# using Plots
+using CairoMakie
+
+function makeplots(
+    datafile,
+    outdir::String,
+    casename::AbstractString,
+)
+
+    data = h5open(datafile)
+    xFOM = data["xFOM"] |> Array # [in_dim, grid...]
+    tFOM = data["tFOM"] |> Array # [Nt]
+    uFOM = data["uFOM"] |> Array # [out_dim, grid..., Nt]
+    uPCA = data["uPCA"] |> Array
+    uCAE = data["uCAE"] |> Array
+    uSNL = data["uSNL"] |> Array
+    uSNW = data["uSNW"] |> Array
+
+    in_dim  = size(xFOM, 1)
+    out_dim = size(uFOM, 1)
+    Nt = length(tFOM)
+
+    @assert in_dim == ndims(xFOM) - 1
+    @assert size(xFOM)[2:end] == size(uFOM)[2:end-1]
+    @assert size(uFOM)[end] == length(tFOM)
+
+    Itplt = LinRange(1, Nt, 5) .|> Base.Fix1(round, Int)
+    i1, i2 = Itplt[2], Itplt[5]
+
+    # grab the first output dimension
+    ii = Tuple(Colon() for _ in 1:in_dim + 1)
+    uFOM = uFOM[1, ii...]
+    uPCA = uPCA[1, ii...]
+    uCAE = uCAE[1, ii...]
+    uSNL = uSNL[1, ii...]
+    uSNW = uSNW[1, ii...]
+
+    # normalize
+    nr = sum(abs2, uFOM) / length(uFOM) |> sqrt
+
+    ePCA = (uFOM - uPCA) / nr
+    eCAE = (uFOM - uCAE) / nr
+    eSNL = (uFOM - uSNL) / nr
+    eSNW = (uFOM - uSNW) / nr
+
+    etPCA = sum(abs2, ePCA; dims = 1:in_dim) / prod(size(uFOM)[1:in_dim]) |> vec
+    etCAE = sum(abs2, eCAE; dims = 1:in_dim) / prod(size(uFOM)[1:in_dim]) |> vec
+    etSNL = sum(abs2, eSNL; dims = 1:in_dim) / prod(size(uFOM)[1:in_dim]) |> vec
+    etSNW = sum(abs2, eSNW; dims = 1:in_dim) / prod(size(uFOM)[1:in_dim]) |> vec
+
+    upreds  = (uPCA, uCAE, uSNL, uSNW,)
+    epreds  = (ePCA, eCAE, eSNL, eSNW,)
+    etpreds = (etPCA, etCAE, etSNL, etSNW,)
+
+    figt = Figure(; size = (900, 400), backgroundcolor = :white, grid = :off)
+    fige = Figure(; backgroundcolor = :white, grid = :off)
+    figc = Figure(; size = (1000, 800), backgroundcolor = :white, grid = :off)
+
+    axt0 = Axis(figt[1,1]; xlabel = L"x", ylabel = L"u(x, t)")
+    axt1 = Axis(figt[1,2]; xlabel = L"x", ylabel = L"u(x, t)")
+    axer = Axis(fige[1,1]; xlabel = L"t", ylabel = L"ε^2(t)", yscale = log10)
+    
+    colors = (:orange, :green, :blue, :red, :brown,)
+    styles = (:solid, :dash, :dashdot, :dashdotdot,)
+    mshape = (:circle, :utriangle, :diamond, :dtriangle, :star5,)
+    labels = ("POD", "CAE", "SNFL)", "SNFW")
+
+    for (i, (up, ep, et)) in enumerate(zip(upreds, epreds, etpreds))
+
+        color = colors[i]
+        label = labels[i]
+        linestyle = styles[i]
+
+        plt_kw = (; color, label, linewidth = 3, linestyle)
+        cax_kw = (; aspect = 1, xlabel = L"x", ylabel = L"y")
+
+        if in_dim == 1
+            x = vec(xFOM)
+
+            if i == 1
+                lines!(axt0, x, uFOM[:, i1]; linewidth = 5, label = "FOM", color = :black)
+                lines!(axt1, x, uFOM[:, i2]; linewidth = 5, label = "FOM", color = :black)
+            end
+
+            lines!(axt0, x, up[:, i1]; plt_kw...)
+            lines!(axt1, x, up[:, i2]; plt_kw...)
+
+        elseif in_dim == 2
+            x, y = xFOM[1,:, :], xFOM[2, :, :]
+            xdiag = diag(x)
+
+            if i == 1
+                # contour plots
+                ax1 = Axis(figc[1,1]; cax_kw...)
+                ax2 = Axis(figc[2,1]; cax_kw...)
+
+                contourf!(ax1, xdiag, xdiag, uFOM[:, :, i1])
+                contourf!(ax2, xdiag, xdiag, uFOM[:, :, i2])
+
+                # diagonal plots
+                uddiag1 = diag(uFOM[:, :, i1])
+                uddiag2 = diag(uFOM[:, :, i2])
+
+                axt0.xlabel = L"x = y"
+                axt1.xlabel = L"x = y"
+
+                axt0.ylabel = L"u(x = y, t)"
+                axt1.ylabel = L"u(x = y, t)"
+
+                lines!(axt0, xdiag, uddiag1; linewidth = 5, label = "FOM", color = :black)
+                lines!(axt1, xdiag, uddiag2; linewidth = 5, label = "FOM", color = :black)
+            end
+
+            # t0, t1
+            if i != 3
+                j = i != 4 ? i+1 : i
+                ax1 = Axis(figc[1,j]; cax_kw...)
+                ax2 = Axis(figc[2,j]; cax_kw...)
+
+                contourf!(ax1, xdiag, xdiag, up[:, :, i1])
+                contourf!(ax2, xdiag, xdiag, up[:, :, i2])
+            end
+
+            # error
+            ax3 = Axis(figc[3,i]; cax_kw...)
+            contourf!(ax3, xdiag, xdiag, ep[:, :, i2])
+
+            # diagonal plots
+            up1 = diag(up[:, :, i1])
+            up2 = diag(up[:, :, i2])
+
+            lines!(axt0, xdiag, up1; plt_kw...)
+            lines!(axt1, xdiag, up2; plt_kw...)
+        end
+
+        lines!(axer, tFOM, et; linewidth = 3, label = labels[i], plt_kw...)
+    end
+
+    axislegend(axer; position = :lt, patchsize = (30, 10), orientation = :horizontal)
+    figt[2,:] = Legend(figt, axt1; patchsize = (35, 10), orientation = :horizontal)
+
+    if in_dim == 2
+        Colorbar(figc[1,5])# limits = clims1)
+        Colorbar(figc[2,5])# limits = clims2)
+        Colorbar(figc[3,5])# limits = climse)
+    end
+
+    linkaxes!(axt0, axt1)
+    # linkaxes!(figc.content[:]...)
+
+    # synchronize color range
+
+    save(joinpath(outdir, casename * "p1.png"), figt)
+    save(joinpath(outdir, casename * "p2.png"), fige)
+
+    if in_dim == 2
+        save(joinpath(outdir, casename * "p3.png"), figc)
+    end
+
+    nothing
+end
+
+#======================================================#
+h5dir  = joinpath(@__DIR__, "h5files")
+outdir = joinpath(@__DIR__, "results")
+
+e1file = joinpath(h5dir, "advect1d.h5")
+e2file = joinpath(h5dir, "advect2d.h5")
+e4file = joinpath(h5dir, "burgers2d.h5")
+e5file = joinpath(h5dir, "ks1d.h5")
+
+e3file1 = joinpath(h5dir, "burgers1dcase1.h5")
+e3file2 = joinpath(h5dir, "burgers1dcase2.h5")
+e3file3 = joinpath(h5dir, "burgers1dcase3.h5")
+e3file4 = joinpath(h5dir, "burgers1dcase4.h5")
+e3file5 = joinpath(h5dir, "burgers1dcase5.h5")
+
+# makeplots(e1file, outdir, "exp1")
+makeplots(e2file, outdir, "exp2")
+# makeplots(e4file, outdir, "exp4")
+# makeplots(e5file, outdir, "exp5")
+
+# makeplots(e3file1, outdir, "exp3case1")
+# makeplots(e3file2, outdir, "exp3case2")
+# makeplots(e3file3, outdir, "exp3case3")
+# makeplots(e3file4, outdir, "exp3case4")
+# makeplots(e3file5, outdir, "exp3case5")
+
+#======================================================#
 nothing
