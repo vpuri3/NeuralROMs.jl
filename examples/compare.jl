@@ -129,7 +129,6 @@ function compare_plots(
     mshape = (:circle, :utriangle, :diamond, :dtriangle, :star5,)
 
     plt_kw = (; c, s, label, w = 3)
-    sct_kw = (; c, shape, label = nothing, markersize = 6, markerstrokewidth = 0)
     ctr_kw = (; cmap = :viridis, aspect_ratio = :equal, xlabel = L"x", ylabel = L"y", cbar = false)
 
     h5dict = Dict()
@@ -158,8 +157,6 @@ function compare_plots(
 
         c = colors[i]
         s = styles[i]
-        label = labels[i]
-        shape = mshape[i]
 
         if in_dim == 1
             xd = vec(Xd)
@@ -179,7 +176,6 @@ function compare_plots(
             xdiag = diag(x_re)
 
             ud_re = reshape(ud, grid..., Nt)
-            up_re = reshape(up, grid..., Nt)
 
             Nx, Ny = grid
             @assert Nx == Ny
@@ -204,14 +200,6 @@ function compare_plots(
 
             plot!(p1, xdiag, up1; plt_kw...)
             plot!(p2, xdiag, up2; plt_kw...)
-
-            # Ix = LinRange(1, Nx, 8) .|> Base.Fix1(round, Int)
-            # Ix = Ix[1:end-1] .+ diff(Ix) .÷ 3 .* (i-2)
-            #
-            # if i != 1
-            #     scatter!(p1, xdiag[Ix], up1[Ix]; sct_kw...)
-            #     scatter!(p2, xdiag[Ix], up2[Ix]; sct_kw...)
-            # end
         end
 
         plot!(p3, Td, er; w = 3, label = labels[i], c, s)
@@ -220,34 +208,31 @@ function compare_plots(
         plot!(p1, ylims = ylm)
         plot!(p2, ylims = ylm)
 
-        # plot!(p3, ylims = (10^-9, 10^0))
         plot!(p3, ytick = 10.0 .^ .-(0:9))
 
-        # 2D comparison plots
-
-        ## save stuff to HDF5 files
-        # td = vec(Td)
-        # xd = reshape(Xd, in_dim , grid...)
-        # ud = reshape(Ud, out_dim, grid..., Nt)
-        # up = reshape(Up, out_dim, grid..., Nt)
-        #
-        # if i == 1
-        #     h5dict = Dict(h5dict...,
-        #         "xFOM" => xd, "tFOM" => td, "uFOM" => ud,
-        #     )
-        # end
-        # h5dict = Dict(h5dict..., "u$(suffix[i])" => up)
+        #save stuff to HDF5 files
+        td = vec(Td)
+        xd = reshape(Xd, in_dim , grid...)
+        ud = reshape(Ud, out_dim, grid..., Nt)
+        up = reshape(Up, out_dim, grid..., Nt)
+        
+        if i == 1
+            h5dict = Dict(h5dict...,
+                "xFOM" => xd, "tFOM" => td, "uFOM" => ud,
+            )
+        end
+        h5dict = Dict(h5dict..., "u$(suffix[i])" => up)
     end
 
     png(p1, joinpath(outdir, "compare_t0_case$(case)"))
     png(p2, joinpath(outdir, "compare_t1_case$(case)"))
     png(p3, joinpath(outdir, "compare_er_case$(case)"))
 
-    # file = h5open(h5path, "w")
-    # for (k, v) in h5dict
-    #     write(file, k, v)
-    # end
-    # close(file)
+    file = h5open(h5path, "w")
+    for (k, v) in h5dict
+        write(file, k, v)
+    end
+    close(file)
 
     p1, p2, p3
 end

@@ -68,7 +68,5 @@ modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
 labels = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
 
 p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid)
-
-
 #======================================================#
 nothing
