@@ -50,6 +50,16 @@ function makeplots(
     etSNL = sum(abs2, eSNL; dims = 1:in_dim) / prod(size(uFOM)[1:in_dim]) |> vec
     etSNW = sum(abs2, eSNW; dims = 1:in_dim) / prod(size(uFOM)[1:in_dim]) |> vec
 
+    ePCA .+= 1f-12
+    eCAE .+= 1f-12
+    eSNL .+= 1f-12
+    eSNW .+= 1f-12
+
+    etPCA = sqrt.(etPCA)
+    etCAE = sqrt.(etCAE)
+    etSNL = sqrt.(etSNL)
+    etSNW = sqrt.(etSNW)
+
     upreds  = (uPCA, uCAE, uSNL, uSNW,)
     epreds  = (ePCA, eCAE, eSNL, eSNW,)
     etpreds = (etPCA, etCAE, etSNL, etSNW,)
@@ -58,14 +68,36 @@ function makeplots(
     fige = Figure(; backgroundcolor = :white, grid = :off)
     figc = Figure(; size = (1000, 800), backgroundcolor = :white, grid = :off)
 
-    axt0 = Axis(figt[1,1]; xlabel = L"x", ylabel = L"u(x, t)")
-    axt1 = Axis(figt[1,2]; xlabel = L"x", ylabel = L"u(x, t)")
-    axer = Axis(fige[1,1]; xlabel = L"t", ylabel = L"ε^2(t)", yscale = log10)
+    axt0 = Axis(figt[1,1]; xlabel = L"x", ylabel = L"u(x, t)", xlabelsize = 20, ylabelsize = 20)
+    axt1 = Axis(figt[1,2]; xlabel = L"x", ylabel = L"u(x, t)", xlabelsize = 20, ylabelsize = 20)
+    axer = Axis(fige[1,1]; xlabel = L"t", ylabel = L"ε(t)", yscale = log10, xlabelsize = 20, ylabelsize = 20)
     
     colors = (:orange, :green, :blue, :red, :brown,)
     styles = (:solid, :dash, :dashdot, :dashdotdot,)
     mshape = (:circle, :utriangle, :diamond, :dtriangle, :star5,)
     labels = ("POD", "CAE", "SNFL)", "SNFW")
+
+    levels = if occursin("exp2", casename)
+        n = 11
+
+        l1 = range(-0.2, 1.2, n)
+        l2 = range(-0.2, 1.2, n)
+        l3 = 10.0 .^ range(-5, 0, n)
+
+        l1, l2, l3
+    elseif occursin("exp4", casename)
+        n = 11
+
+        l1 = range(-0.2, 1.0, n)
+        l2 = range(-0.2, 1.0, n)
+        l3 = 10.0 .^ range(-5, 0, n)
+
+        l1, l2, l3
+    end
+
+    l1 = (L"(a)", L"(b)", L"(c)", L"(d)")
+    l2 = (L"(e)", L"(f)", L"(g)", L"(h)")
+    l3 = (L"(i)", L"(j)", L"(k)", L"(l)")
 
     for (i, (up, ep, et)) in enumerate(zip(upreds, epreds, etpreds))
 
@@ -75,6 +107,7 @@ function makeplots(
 
         plt_kw = (; color, label, linewidth = 3, linestyle)
         cax_kw = (; aspect = 1, xlabel = L"x", ylabel = L"y")
+        ctr_kw = (; extendlow = :cyan, extendhigh = :magenta,)
 
         if in_dim == 1
             x = vec(xFOM)
@@ -94,10 +127,16 @@ function makeplots(
             if i == 1
                 # contour plots
                 ax1 = Axis(figc[1,1]; cax_kw...)
-                ax2 = Axis(figc[2,1]; cax_kw...)
+                ax2 = Axis(figc[3,1]; cax_kw...)
 
-                contourf!(ax1, xdiag, xdiag, uFOM[:, :, i1])
-                contourf!(ax2, xdiag, xdiag, uFOM[:, :, i2])
+                cf1 = contourf!(ax1, xdiag, xdiag, uFOM[:, :, i1]; ctr_kw..., levels = levels[1])
+                cf2 = contourf!(ax2, xdiag, xdiag, uFOM[:, :, i2]; ctr_kw..., levels = levels[2])
+
+                Colorbar(figc[1,5], cf1)
+                Colorbar(figc[3,5], cf2)
+
+                Label(figc[2,1], l1[1])
+                Label(figc[4,1], l2[1])
 
                 # diagonal plots
                 uddiag1 = diag(uFOM[:, :, i1])
@@ -116,16 +155,27 @@ function makeplots(
             # t0, t1
             if i != 3
                 j = i != 4 ? i+1 : i
-                ax1 = Axis(figc[1,j]; cax_kw...)
-                ax2 = Axis(figc[2,j]; cax_kw...)
 
-                contourf!(ax1, xdiag, xdiag, up[:, :, i1])
-                contourf!(ax2, xdiag, xdiag, up[:, :, i2])
+                ax1 = Axis(figc[1,j]; cax_kw...)
+                ax2 = Axis(figc[3,j]; cax_kw...)
+
+                cf1 = contourf!(ax1, xdiag, xdiag, up[:, :, i1]; ctr_kw..., levels = levels[1])
+                cf2 = contourf!(ax2, xdiag, xdiag, up[:, :, i2]; ctr_kw..., levels = levels[2])
+
+                Label(figc[2,j], l1[j])
+                Label(figc[4,j], l2[j])
             end
 
             # error
-            ax3 = Axis(figc[3,i]; cax_kw...)
-            contourf!(ax3, xdiag, xdiag, ep[:, :, i2])
+            ax3 = Axis(figc[5,i]; cax_kw...,)
+            cf3 = contourf!(ax3, xdiag, xdiag, abs.(ep[:, :, i2]); ctr_kw...,
+                colorscale = log10, levels = levels[3])
+
+            Label(figc[6,i], l3[i])
+
+            if i == 1
+                Colorbar(figc[5,5], cf3)
+            end
 
             # diagonal plots
             up1 = diag(up[:, :, i1])
@@ -139,18 +189,27 @@ function makeplots(
     end
 
     axislegend(axer; position = :lt, patchsize = (30, 10), orientation = :horizontal)
-    figt[2,:] = Legend(figt, axt1; patchsize = (35, 10), orientation = :horizontal)
+    figt[2,:] = Legend(figt, axt1; patchsize = (30, 10), orientation = :horizontal)
+
+    if occursin("exp3", casename)
+        ylims!(fige.content[1], 10^-5, 1)
+    end
 
     if in_dim == 2
-        Colorbar(figc[1,5])# limits = clims1)
-        Colorbar(figc[2,5])# limits = clims2)
-        Colorbar(figc[3,5])# limits = climse)
+        for ax in figc.content
+            if ax isa Axis
+                tightlimits!(ax)
+                hidedecorations!(ax; label = false)
+            end
+        end
+
+        colsize!(figc.layout, 1, Relative(0.25))
+        colsize!(figc.layout, 2, Relative(0.25))
+        colsize!(figc.layout, 3, Relative(0.25))
+        colsize!(figc.layout, 4, Relative(0.25))
     end
 
     linkaxes!(axt0, axt1)
-    # linkaxes!(figc.content[:]...)
-
-    # synchronize color range
 
     save(joinpath(outdir, casename * "p1.png"), figt)
     save(joinpath(outdir, casename * "p2.png"), fige)
@@ -160,6 +219,29 @@ function makeplots(
     end
 
     nothing
+end
+
+#======================================================#
+
+"""
+    sync_colorranges!(plotobjects::MakieCore.ScenePlot...)
+
+Set the colorrange of all `plotobjects` to the same value,
+namely the extrema of all z-values of all plotobjects in `plotobjects`.
+
+https://discourse.julialang.org/t/one-colorbar-for-multiple-axes/77021/8
+"""
+# function sync_colorranges!(plotobjects::Makie.MakieCore.ScenePlot...)
+function sync_colorranges!(plotobjects::Makie.Heatmap...)
+    for plt in plotobjects 
+        haskey(plt.attributes.attributes, :colorrange) || error("This function syncronizes the color range of the given plotobjects. One of the plotobjects passed has no color range.")
+    end
+    possible_extremas = [extrema(to_value(plt[3])) for plt in plotobjects]
+    global_extremas = extrema(vcat(collect.(possible_extremas)...))
+    for plt in plotobjects
+        plt.attributes.colorrange[] = global_extremas
+    end
+    return nothing
 end
 
 #======================================================#
@@ -181,7 +263,7 @@ e3file5 = joinpath(h5dir, "burgers1dcase5.h5")
 makeplots(e2file, outdir, "exp2")
 # makeplots(e4file, outdir, "exp4")
 # makeplots(e5file, outdir, "exp5")
-
+#
 # makeplots(e3file1, outdir, "exp3case1")
 # makeplots(e3file2, outdir, "exp3case2")
 # makeplots(e3file3, outdir, "exp3case3")
