@@ -233,7 +233,7 @@ function evolve_SNF(
     scheme::Union{Nothing, GeometryLearning.AbstractSolveScheme} = nothing,
     autodiff_xyz::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ_xyz::Union{Real, Nothing} = nothing,
-    learn_ic::Bool = false,
+    learn_ic::Bool = true,
     verbose::Bool = true,
     device = Lux.cpu_device(),
 )
@@ -293,8 +293,7 @@ function evolve_SNF(
 
     @time _, ps, Up = evolve_model(
         prob, model, timealg, scheme, data, p0, Δt;
-        nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz, learn_ic,
-        verbose, device,
+        adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
     )
 
     #==============#

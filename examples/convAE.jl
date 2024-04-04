@@ -399,19 +399,14 @@ function evolve_CAE(
     modelfile::String,
     case::Integer;
     rng::Random.AbstractRNG = Random.default_rng(),
-
     data_kws = (; Ix = :, It = :),
-
     Δt::Union{Real, Nothing} = nothing,
     timealg::GeometryLearning.AbstractTimeAlg = EulerForward(),
     adaptive::Bool = false,
     scheme::Union{Nothing, GeometryLearning.AbstractSolveScheme} = nothing,
-
     autodiff_xyz::ADTypes.AbstractADType = AutoFiniteDiff(),
     ϵ_xyz::Union{Real, Nothing} = 1f-2,
-
-    learn_ic::Bool = false,
-
+    learn_ic::Bool = true,
     verbose::Bool = true,
     device = Lux.cpu_device(),
 )
@@ -421,6 +416,7 @@ function evolve_CAE(
     # load model
     (NN, p, st), md = loadmodel(modelfile)
 
+    Nt = length(Tdata)
     in_dim  = size(Xdata, 1)
     out_dim = size(Udata, 1)
 
@@ -452,12 +448,17 @@ function evolve_CAE(
     #==============#
     grid = get_prob_grid(prob)
 
-    U0_norm = normalizedata(U0, md.ū, md.σu)
-    U0_perm = permutedims(U0_norm, (2, 1))
-    U0_resh = reshape(U0_perm, grid..., out_dim, 1) # [Nx, Ny, O, 1]
+    Ud_norm = normalizedata(Ud, md.ū, md.σu)
+    Ud_perm = permutedims(Ud_norm, (2, 1, 3))
+    Ud_resh = reshape(Ud_perm, grid..., out_dim, Nt) # [Nx, Ny, out_dim, Nt]
 
-    p0 = encoder[1](U0_resh, encoder[2], encoder[3])[1]
-    p0 = dropdims(p0; dims = 2)
+    _ps = encoder[1](Ud_resh, encoder[2], encoder[3])[1]
+    p0 = _ps[:, 1]
+
+    # learn_ic = true
+    # _data, _, md1 = makedata_CAE(datafile; _Ib = [case])
+    # _ps = encoder[1](_data[1], encoder[2], encoder[3])[1]
+    # p0 = _ps[:, 1]
 
     #==============#
     # make model
@@ -477,11 +478,12 @@ function evolve_CAE(
 
     if isnothing(scheme)
         scheme  = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
+        # scheme = LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, 1f-6, 1f-3, 1f-6)
     end
 
-    @time _, ps, Up = evolve_model(prob, model, timealg, scheme, data, p0, Δt;
-        nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz, learn_ic,
-        verbose, device,
+    @time _, ps, Up = evolve_model(
+        prob, model, timealg, scheme, data, p0, Δt;
+        adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
     )
 
     #==============#
@@ -507,7 +509,7 @@ function evolve_CAE(
 
     # save files
     filename = joinpath(outdir, "evolve$case.jld2")
-    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps)
+    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps, Plrnd = _ps)
 
     Xdata, Tdata, Ud, Up, ps
 end

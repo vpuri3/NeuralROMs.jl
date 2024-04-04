@@ -284,12 +284,9 @@ function evolve_PCA(
         scheme  = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
     end
 
-    learn_ic = false
-
     @time _, ps, Up = evolve_model(
         prob, model, timealg, scheme, data, p0, Δt;
-        learn_ic, nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz,
-        verbose, device,
+        adaptive, autodiff_xyz, ϵ_xyz, verbose, device,
     )
 
     #==============#

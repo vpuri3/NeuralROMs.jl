@@ -355,8 +355,9 @@ function learn_p0(
     model::AbstractNeuralModel,
     p0::AbstractVector,
     batch::NTuple{2, Any};
-    verbose::Bool = true,
+    descend::Bool = true,
     nlssolve = nothing,
+    verbose::Bool = true,
 )
     x, u0 = batch
 
@@ -365,9 +366,11 @@ function learn_p0(
         println("Time Step: $(0), Time: 0.0 - learn IC")
     end
 
-    p0, mse_norm = descend_p0(model, p0, batch, 1f-3, 1; verbose)
-    p0, mse_norm = descend_p0(model, p0, batch, 1f-4, 2; verbose)
-    p0, mse_norm = descend_p0(model, p0, batch, 1f-5, 3; verbose)
+    if descend
+        p0, mse_norm = descend_p0(model, p0, batch, 1f-3, 1; verbose)
+        p0, mse_norm = descend_p0(model, p0, batch, 1f-4, 2; verbose)
+        p0, mse_norm = descend_p0(model, p0, batch, 1f-5, 3; verbose)
+    end
 
     if isnothing(nlssolve)
         linesearch = LineSearch()
@@ -400,11 +403,9 @@ function evolve_model(
     Δt::Union{Real,Nothing} = nothing;
 
     adaptive::Bool = true,
-    learn_ic::Bool = true,
-
-    linsolve = QRFactorization(),
-    nlssolve = nothing,
-    nlsmaxiters = 10,
+    learn_ic::Bool = false,
+    descend_ic::Bool = false,
+    nlssolve_ic = nothing,
 
     autodiff_nls = AutoForwardDiff(),
     autodiff_jac = AutoForwardDiff(),
@@ -439,13 +440,12 @@ function evolve_model(
     println("Time Step: $(0), Time: 0.0")
 
     if learn_ic
-        p0, mse_norm = learn_p0(model, p0, (x, u0); verbose, nlssolve)
+        p0, mse_norm = learn_p0(model, p0, (x, u0);
+            descend = descend_ic, nlssolve = nlssolve_ic, verbose)
     end
 
     if (mse_norm > IC_TOL)
         @warn "MSE ($mse_norm) > $(IC_TOL)."
-        # err = ErrorException("MSE ($mse_norm) > $(IC_TOL).")
-        # throw(err)
     end
 
     #============================#
