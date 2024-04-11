@@ -119,7 +119,7 @@ function compare_plots(
     p3 = plot(; xlabel = L"t", ylabel = L"ε^2(t)" , legend = :topleft, framestyle = :box, yaxis = :log)
     p4 = nothing
 
-    suffix = ("PCA", "CAE", "SNW", "SNL", "SN0")
+    suffix = ("PCA", "CAE", "SNL", "SNW", "SN0")
     colors = (:orange, :green, :blue, :red, :brown,)
     styles = (:dot, :solid, :dash, :dashdotdot, :solid,)
 

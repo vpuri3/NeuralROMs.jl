@@ -46,7 +46,7 @@ modeldir_SN0 = joinpath(@__DIR__, "model_SN0$(l0)") # us (Lipschitz)
 # train_params_SNL = (; E = 1400, wd = 128, wh = 8, hh = 0, α = 1f-7, γ = 0f-0, makedata_kws,)
 # train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
 #
-# # train_SNL
+# # train ablation
 # train_params_SN0 = (; E = 1400, wd = 128, wh = 8, hh = 0, makedata_kws,)
 # train_SNF_compare(latent, datafile, modeldir_SN0, train_params_SN0; rng, device)
 

@@ -13,20 +13,12 @@ modeldir  = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
 device = Lux.gpu_device()
 
-## train
-E = 1400
-l = 2
-hh, wh = 0, 8
-hd, wd = 5, 64
-λ2, α, weight_decays = 1f-3, 0f0, 1f-2
+_It = LinRange(1, 500, 50) .|> Base.Fix1(round, Int)
+makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It, It_ = :)
 
-isdir(modeldir) && rm(modeldir, recursive = true)
-model, STATS, metadata = train_FNF(datafile, modeldir,
-    l, hh, hd, wh, wd, E;
-    rng, warmup = true, λ2, α, weight_decays, device,
-)
+train_params = (; E = 1400, wd = 64, α = 0f-0, γ = 1f-2, makedata_kws,)
+train_SNF_compare(1, datafile, modeldir, train_params; rng, device)
+postprocess_SNF(prob, datafile, modelfile; rng, device)
 
-## process
-postprocess_FNF(prob, datafile, modelfile; rng, device)
 #======================================================#
 nothing

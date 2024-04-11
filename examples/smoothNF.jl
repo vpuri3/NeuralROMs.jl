@@ -363,6 +363,9 @@ function postprocess_SNF(
     _Udata = @view Udata[:, :, _Ib, _It] # un-normalized
     Udata_ = @view Udata[:, :, Ib_, It_]
 
+    _Tdata = @view Tdata[_It]
+    Tdata_ = @view Tdata[It_]
+
     #==============#
     # Get model
     #==============#
@@ -372,7 +375,7 @@ function postprocess_SNF(
     #==============#
     # evaluate model
     #==============#
-    _data, data_, _ = makedata_SNF(datafile; makedata_kws...)
+    _data, data_, _ = makedata_SNF(datafile; md.makedata_kws...)
 
     in_dim  = size(Xdata, 1)
     out_dim, Nx, Nb, Nt = size(Udata)
@@ -409,7 +412,7 @@ function postprocess_SNF(
 
     modeldir = dirname(modelfile)
     outdir = joinpath(modeldir, "results")
-    # isdir(outdir) && rm(outdir; recursive = true)
+    isdir(outdir) && rm(outdir; recursive = true)
     mkpath(outdir)
 
     if makeplot
@@ -419,7 +422,7 @@ function postprocess_SNF(
         for case in axes(_Ib, 1)
             Ud = _Udata[:, :, case, :]
             Up = _Upred[:, :, case, :]
-            fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "train", case)
+            fieldplot(Xdata, _Tdata, Ud, Up, grid, outdir, "train", case)
         end
 
         # parameter plots
@@ -432,7 +435,7 @@ function postprocess_SNF(
         for (i, case) in enumerate(_Ib)
             _p = _ps[:, i, :]
             color = colors[i]
-            plt = make_param_scatterplot(_p, Tdata; plt,
+            plt = make_param_scatterplot(_p, _Tdata; plt,
                 label = "Case $(case)", color, cbar = false)
 
             # parameter evolution plot
@@ -440,7 +443,7 @@ function postprocess_SNF(
                 title =  "Learned parameter evolution, case $(case)",
                 xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false
             )
-            plot!(p2, Tdata, _p'; linewidth, palette)
+            plot!(p2, _Tdata, _p'; linewidth, palette)
             png(p2, joinpath(outdir, "train_p_case$(case)"))
         end
 
@@ -448,7 +451,7 @@ function postprocess_SNF(
             if case ∉ _Ib
                 p_ = ps_[:, i, :]
                 color = colors[i + length(_Ib)]
-                plt = make_param_scatterplot(p_, Tdata; plt,
+                plt = make_param_scatterplot(p_, Tdata_; plt,
                     label = "Case $(case) (Testing)", color, cbar = false)
 
                 # parameter evolution plot
@@ -456,7 +459,7 @@ function postprocess_SNF(
                     title =  "Trained parameter evolution, case $(case)",
                     xlabel = L"Time ($s$)", ylabel = L"\tilde{u}(t)", legend = false
                 )
-                plot!(p2, Tdata, p_'; linewidth, palette)
+                plot!(p2, Tdata_, p_'; linewidth, palette)
                 png(p2, joinpath(outdir, "test_p_case$(case)"))
             end
         end
@@ -480,42 +483,16 @@ function postprocess_SNF(
         ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
 
         ps = ev["Ppred"]
-        Ue = ev["Upred"]
-
         _p = _ps[:, i, :]
-        Uh = _Upred[:, :, i, :] # HyperNet prediction
-        Ud = _Udata[:, :, i, :]
-
-        fieldplot(Xdata, Tdata, Uh, Ue, grid, outdir, "compare", case)
-
-        # Compare u
-        println("#=======================#")
-        println("Dynamics Solve")
-        @show norm(Ue - Ud, 2) / length(Ud)
-        @show norm(Ue - Ud, Inf)
-
-        println("#=======================#")
-        println("HyperNet Prediction")
-        @show norm(Uh - Ud, 2) / length(Ud)
-        @show norm(Uh - Ud, Inf)
-
-        ###
-        # Compare ũ
-        ###
-
-        println("#=======================#")
-        println("Dynamics Solve vs HyperNet Prediction")
-        @show norm(ps - _p, 2) / length(ps)
-        @show norm(ps - _p, Inf)
 
         plt = plot(; title =  L"$\tilde{u}$ distribution, case " * "$(case)")
-        plt = make_param_scatterplot(_p, Tdata; plt, label = "HyperNet prediction", color = :reds, cbar = false)
+        plt = make_param_scatterplot(_p, _Tdata; plt, label = "HyperNet prediction", color = :reds, cbar = false)
         plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
         png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
 
         plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
         plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
-        plot!(plt, Tdata, _p'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
+        plot!(plt, _Tdata, _p'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
         png(plt, joinpath(outdir, "compare_p_case$(case)"))
     end
 
@@ -523,42 +500,16 @@ function postprocess_SNF(
         ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
 
         ps = ev["Ppred"]
-        Ue = ev["Upred"]
-
         p_ = ps_[:, i, :]
-        Uh = Upred_[:, :, i, :] # HyperNet prediction
-        Ud = Udata_[:, :, i, :]
-
-        fieldplot(Xdata, Tdata, Uh, Ue, grid, outdir, "compare", case)
-
-        # Compare u
-        println("#=======================#")
-        println("Dynamics Solve")
-        @show norm(Ue - Ud, 2) / length(Ud)
-        @show norm(Ue - Ud, Inf)
-
-        println("#=======================#")
-        println("HyperNet Prediction")
-        @show norm(Uh - Ud, 2) / length(Ud)
-        @show norm(Uh - Ud, Inf)
-
-        ###
-        # Compare ũ
-        ###
-
-        println("#=======================#")
-        println("Dynamics Solve vs HyperNet Prediction")
-        @show norm(ps - p_, 2) / length(ps)
-        @show norm(ps - p_, Inf)
 
         plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
-        plt = make_param_scatterplot(p_, Tdata; plt, label = "HyperNet prediction", color = :reds, cbar = false)
+        plt = make_param_scatterplot(p_, Tdata_; plt, label = "HyperNet prediction", color = :reds, cbar = false)
         plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
         png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
 
         plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
         plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
-        plot!(plt, Tdata, p_'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
+        plot!(plt, Tdata_, p_'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
         png(plt, joinpath(outdir, "compare_p_case$(case)"))
     end
 
