@@ -127,7 +127,7 @@ function makeplots(
 
         l1 = range(-0.2, 1.2, n)
         l2 = range(-0.2, 1.2, n)
-        l3 = 10.0 .^ range(-5, 0, n)
+        l3 = 10.0 .^ range(-4, 0, n)
 
         l1, l2, l3
     elseif occursin("exp4", casename)
@@ -258,14 +258,14 @@ function makeplots(
 
     linkaxes!(axt0, axt1)
 
-    save(joinpath(outdir, casename * "p1.eps"), figt)
-    save(joinpath(outdir, casename * "p2.eps"), fige)
+    save(joinpath(outdir, casename * "p1.png"), figt)
+    save(joinpath(outdir, casename * "p2.png"), fige)
 
     if in_dim == 2
-        save(joinpath(outdir, casename * "p3.eps"), figc)
+        save(joinpath(outdir, casename * "p3.png"), figc)
     end
 
-    save(joinpath(outdir, casename * "p4.eps"), figp)
+    save(joinpath(outdir, casename * "p4.png"), figp)
 
     nothing
 end
@@ -365,8 +365,8 @@ e3file5 = joinpath(h5dir, "burgers1dcase5.h5")
 e3file6 = joinpath(h5dir, "burgers1dcase6.h5")
 
 # makeplots(e1file, outdir, "exp1")
-# makeplots(e2file, outdir, "exp2")
-# makeplots(e4file, outdir, "exp4")
+makeplots(e2file, outdir, "exp2")
+makeplots(e4file, outdir, "exp4")
 # makeplots(e5file, outdir, "exp5")
 #
 # makeplots(e3file1, outdir, "exp3case1")
@@ -376,7 +376,7 @@ e3file6 = joinpath(h5dir, "burgers1dcase6.h5")
 # makeplots(e3file5, outdir, "exp3case5")
 # makeplots(e3file6, outdir, "exp3case6")
 
-makeplot_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
+# makeplot_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
 
 #======================================================#
 nothing
