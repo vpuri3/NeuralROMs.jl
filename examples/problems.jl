@@ -367,7 +367,7 @@ function fieldplot(
         ud = Udata[od, :, :]
         nr = sum(abs2, ud) / length(ud) |> sqrt
         er = (up - ud) / nr
-        er = sum(abs2, er; dims = 1) / size(ud, 1) |> vec
+        er = sum(abs2, er; dims = 1) / size(ud, 1) .|> sqrt |> vec
 
         Nx, Nt = size(Xdata, 2), length(Tdata)
 
@@ -436,10 +436,10 @@ function fieldplot(
         plt = plot(;
             title = "Error evolution, case = $(case)",
             xlabel = L"Time ($s$)", ylabel = L"ε(t)", legend = false,
-            yaxis = :log, ylims = (10^-9, 1.0),
+            yaxis = :log, ylims = (10^-5, 1.0),
         )
 
-        plot!(plt, Tdata, er; linewidth, palette,)
+        plot!(plt, Tdata, er; linewidth, palette, ylabel = "ε(t)")
         png(plt, joinpath(outdir, "$(prefix)_e$(od)_case$(case)"))
     end
     

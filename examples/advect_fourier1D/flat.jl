@@ -14,10 +14,10 @@ modelfile = joinpath(modeldir, "model_08.jld2")
 device = Lux.gpu_device()
 
 _It = LinRange(1, 500, 50) .|> Base.Fix1(round, Int)
-makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It, It_ = :)
-
+makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It, It_ = :,)
 train_params = (; E = 1400, wd = 64, α = 0f-0, γ = 1f-2, makedata_kws,)
-train_SNF_compare(1, datafile, modeldir, train_params; rng, device)
+
+train_SNF_compare(2, datafile, modeldir, train_params; rng, device)
 postprocess_SNF(prob, datafile, modelfile; rng, device)
 
 #======================================================#
