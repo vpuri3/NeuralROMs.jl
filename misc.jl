@@ -35,7 +35,7 @@
 # f = x -> x .^ 5
 # x = [1.0, 10.0]
 #
-# # using GeometryLearning
+# # using NeuralROMs
 # # fwd = forwarddiff_deriv4(f, x)
 # # fd = finitediff_deriv4(f, x)
 #

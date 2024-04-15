@@ -1,11 +1,11 @@
 #
-using GeometryLearning
+using NeuralROMs
 using JLD2, TSne
 using Plots, ColorSchemes, LaTeXStrings
 
 #======================================================#
 
-function get_prob_grid(prob::GeometryLearning.AbstractPDEProblem)
+function get_prob_grid(prob::NeuralROMs.AbstractPDEProblem)
     if prob isa Advection1D
         (128,)
     elseif prob isa BurgersViscous1D
@@ -24,7 +24,7 @@ end
 #======================================================#
 
 function cae_network(
-    prob::GeometryLearning.AbstractPDEProblem,
+    prob::NeuralROMs.AbstractPDEProblem,
     l::Integer,
     w::Integer,
     act,
@@ -165,7 +165,7 @@ function inr_decoder(l, h, w, in_dim, out_dim)
 end
 
 function convINR_network(
-    prob::GeometryLearning.AbstractPDEProblem,
+    prob::NeuralROMs.AbstractPDEProblem,
     l::Integer,
     h::Integer,
     we::Integer,
@@ -286,7 +286,7 @@ end
 
 #===========================================================#
 function eval_model(
-    model::GeometryLearning.AbstractNeuralModel,
+    model::NeuralROMs.AbstractNeuralModel,
     x::AbstractArray,
     p::AbstractArray;
     batchsize = numobs(x) ÷ 100,

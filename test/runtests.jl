@@ -1,6 +1,6 @@
-using GeometryLearning
+using NeuralROMs
 using Test
 
-@testset "GeometryLearning.jl" begin
+@testset "NeuralROMs.jl" begin
     # Write your tests here.
 end

@@ -1,7 +1,7 @@
 #
-using GeometryLearning
-include(joinpath(pkgdir(GeometryLearning), "examples", "smoothNF.jl"))
-include(joinpath(pkgdir(GeometryLearning), "examples", "problems.jl"))
+using NeuralROMs
+include(joinpath(pkgdir(NeuralROMs), "examples", "cases.jl"))
+include(joinpath(pkgdir(NeuralROMs), "examples", "autodecode.jl"))
 #======================================================#
 
 rng = Random.default_rng()

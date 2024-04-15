@@ -1,5 +1,5 @@
 #
-using GeometryLearning
+using NeuralROMs
 using LinearAlgebra, ComponentArrays              # arrays
 using Random, Lux, MLUtils, ParameterSchedulers   # ML
 using OptimizationOptimJL, OptimizationOptimisers # opt
@@ -19,7 +19,7 @@ begin
     # FFTW.set_num_threads(nt)
 end
 
-include(joinpath(pkgdir(GeometryLearning), "examples", "problems.jl"))
+include(joinpath(pkgdir(NeuralROMs), "examples", "cases.jl"))
 
 #======================================================#
 function makedata_ADE(
@@ -270,9 +270,9 @@ function evolve_ADE(
     data_kws = (; Ix = :, It = :),
 
     Δt::Union{Real, Nothing} = nothing,
-    timealg::GeometryLearning.AbstractTimeAlg = EulerForward(),
+    timealg::NeuralROMs.AbstractTimeAlg = EulerForward(),
     adaptive::Bool = false,
-    scheme::Union{Nothing, GeometryLearning.AbstractSolveScheme} = nothing,
+    scheme::Union{Nothing, NeuralROMs.AbstractSolveScheme} = nothing,
 
     autodiff_xyz::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ_xyz::Union{Real, Nothing} = nothing,
@@ -309,7 +309,7 @@ function evolve_ADE(
     # get decoer
     #==============#
 
-    decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    decoder, _code = NeuralROMs.get_autodecoder(NN, p, st)
 
     #==============#
     # make model
@@ -492,7 +492,7 @@ function postprocess_ADE(
     #==============#
 
     # # get decoder
-    # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    # decoder, _code = NeuralROMs.get_autodecoder(NN, p, st)
 
     # # make model
     # p0 = _code[2].weight[:, 1]
@@ -514,14 +514,14 @@ function postprocess_ADE(
     # plot!(plt, Xdata[1,:], Up[1,:,end  ], w = 4, c = :red  , label = "pred")
     # display(plt)
 
-    # decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    # decoder, _code = NeuralROMs.get_autodecoder(NN, p, st)
     # p0 = _code[2].weight[:, 1]
 
     #==============#
     # check derivative
     #==============#
     # begin
-    #     decoder, _code = GeometryLearning.get_autodecoder(NN, p, st)
+    #     decoder, _code = NeuralROMs.get_autodecoder(NN, p, st)
     #     ncodes = size(_code[2].weight, 2)
     #     idx = LinRange(1, ncodes, 4) .|> Base.Fix1(round, Int)
     #

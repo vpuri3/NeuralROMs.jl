@@ -1,5 +1,5 @@
 #
-using GeometryLearning
+using NeuralROMs
 
 # PDE stack
 using FourierSpaces, LinearAlgebra
@@ -49,7 +49,7 @@ function main()
 
     p, st = Lux.setup(rng, NN) |> dev
     _, _loss, _ = model_setup(NN, data)
-    cb = (p, st, iter, maxiter) -> GeometryLearning.callback(p, st; _loss, iter, maxiter, step = 1)
+    cb = (p, st, iter, maxiter) -> NeuralROMs.callback(p, st; _loss, iter, maxiter, step = 1)
 
     CUDA.@time p, st, _ = optimize(_loss, p, st, E; cb)
     # CUDA.@profile CUDA.@time p, st, _ = optimize(_loss, p, st, E; cb)

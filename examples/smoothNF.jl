@@ -1,5 +1,5 @@
 #
-using GeometryLearning
+using NeuralROMs
 using LinearAlgebra, ComponentArrays              # arrays
 using Random, Lux, MLUtils, ParameterSchedulers   # ML
 using OptimizationOptimJL, OptimizationOptimisers # opt
@@ -19,7 +19,7 @@ begin
     # FFTW.set_num_threads(nt)
 end
 
-include(joinpath(pkgdir(GeometryLearning), "examples", "problems.jl"))
+include(joinpath(pkgdir(NeuralROMs), "examples", "cases.jl"))
 
 #======================================================#
 function makedata_SNF(
@@ -192,7 +192,7 @@ function train_SNF(
     _batchsize = isnothing(_batchsize) ? numobs(_data) ÷ 100 : _batchsize
     batchsize_ = isnothing(batchsize_) ? numobs(_data) ÷ 1   : batchsize_
 
-    lossfun = GeometryLearning.regularize_flatdecoder(mse; α, λ2)
+    lossfun = NeuralROMs.regularize_flatdecoder(mse; α, λ2)
 
     idx = ps_W_indices(NN, :decoder; rng)
     weightdecay = IdxWeightDecay(0f0, idx)
@@ -228,9 +228,9 @@ function evolve_SNF(
     rng::Random.AbstractRNG = Random.default_rng(),
     data_kws = (; Ix = :, It = :),
     Δt::Union{Real, Nothing} = nothing,
-    timealg::GeometryLearning.AbstractTimeAlg = EulerForward(),
+    timealg::NeuralROMs.AbstractTimeAlg = EulerForward(),
     adaptive::Bool = false,
-    scheme::Union{Nothing, GeometryLearning.AbstractSolveScheme} = nothing,
+    scheme::Union{Nothing, NeuralROMs.AbstractSolveScheme} = nothing,
     autodiff_xyz::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ_xyz::Union{Real, Nothing} = nothing,
     learn_ic::Bool = true,

@@ -3,7 +3,7 @@
 Train an autoencoder on 1D advection data
 """
 
-using GeometryLearning
+using NeuralROMs
 using LinearAlgebra, ComponentArrays              # arrays
 using Random, Lux, MLUtils, ParameterSchedulers   # ML
 using OptimizationOptimJL, OptimizationOptimisers # opt

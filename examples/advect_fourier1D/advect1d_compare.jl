@@ -1,8 +1,8 @@
 #
-using GeometryLearning
+using NeuralROMs
 using Plots, LaTeXStrings
 
-joinpath(pkgdir(GeometryLearning), "examples", "compare.jl") |> include
+joinpath(pkgdir(NeuralROMs), "examples", "compare.jl") |> include
 #======================================================#
 
 rng = Random.default_rng()

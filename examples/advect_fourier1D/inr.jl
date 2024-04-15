@@ -1,10 +1,6 @@
 #
-#======================================================#
-using GeometryLearning
-begin
-    path = joinpath(pkgdir(GeometryLearning), "examples", "convINR.jl")
-    include(path)
-end
+using NeuralROMs
+include(joinpath(pkgdir(NeuralROMs), "examples", "convINR.jl"))
 
 #======================================================#
 rng = Random.default_rng()

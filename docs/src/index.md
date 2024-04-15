@@ -1,14 +1,14 @@
 ```@meta
-CurrentModule = GeometryLearning
+CurrentModule = NeuralROMs
 ```
 
-# GeometryLearning
+# NeuralROMs
 
-Documentation for [GeometryLearning](https://github.com/vpuri3/GeometryLearning.jl).
+Documentation for [NeuralROMs](https://github.com/vpuri3/NeuralROMs.jl).
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [GeometryLearning]
+Modules = [NeuralROMs]
 ```

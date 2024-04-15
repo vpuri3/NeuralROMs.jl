@@ -10,7 +10,7 @@ test bed for Fourier Neural Operator experiments where
 forcing is learned separately.
 """
 
-using GeometryLearning
+using NeuralROMs
 
 # PDE stack
 using LinearAlgebra

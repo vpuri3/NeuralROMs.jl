@@ -1,5 +1,5 @@
 #
-using GeometryLearning
+using NeuralROMs
 using LinearAlgebra, ComponentArrays              # arrays
 using Random, Lux, MLUtils, ParameterSchedulers   # ML
 using OptimizationOptimJL, OptimizationOptimisers # opt
@@ -18,7 +18,7 @@ begin
     # FFTW.set_num_threads(nt)
 end
 
-include(joinpath(pkgdir(GeometryLearning), "examples", "problems.jl"))
+include(joinpath(pkgdir(NeuralROMs), "examples", "cases.jl"))
 
 #======================================================#
 function makedata_CAE(
@@ -181,10 +181,10 @@ function postprocess_CAE(
     # get encoder / decoer
     #==============#
     encoder = NN.layers.encoder, p.encoder, st.encoder
-    encoder = GeometryLearning.remake_ca_in_model(encoder...)
+    encoder = NeuralROMs.remake_ca_in_model(encoder...)
 
     decoder = NN.layers.decoder, p.decoder, st.decoder
-    decoder = GeometryLearning.remake_ca_in_model(decoder...)
+    decoder = NeuralROMs.remake_ca_in_model(decoder...)
 
     grid = get_prob_grid(prob)
 
@@ -401,9 +401,9 @@ function evolve_CAE(
     rng::Random.AbstractRNG = Random.default_rng(),
     data_kws = (; Ix = :, It = :),
     Δt::Union{Real, Nothing} = nothing,
-    timealg::GeometryLearning.AbstractTimeAlg = EulerForward(),
+    timealg::NeuralROMs.AbstractTimeAlg = EulerForward(),
     adaptive::Bool = false,
-    scheme::Union{Nothing, GeometryLearning.AbstractSolveScheme} = nothing,
+    scheme::Union{Nothing, NeuralROMs.AbstractSolveScheme} = nothing,
     autodiff_xyz::ADTypes.AbstractADType = AutoFiniteDiff(),
     ϵ_xyz::Union{Real, Nothing} = 1f-2,
     learn_ic::Bool = true,
@@ -438,10 +438,10 @@ function evolve_CAE(
     # get encoder / decoer
     #==============#
     encoder = NN.layers.encoder, p.encoder, st.encoder
-    encoder = GeometryLearning.remake_ca_in_model(encoder...)
+    encoder = NeuralROMs.remake_ca_in_model(encoder...)
 
     decoder = NN.layers.decoder, p.decoder, st.decoder
-    decoder = GeometryLearning.remake_ca_in_model(decoder...)
+    decoder = NeuralROMs.remake_ca_in_model(decoder...)
 
     #==============#
     # get initial state

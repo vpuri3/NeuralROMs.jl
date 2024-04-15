@@ -1,7 +1,6 @@
 #
-using GeometryLearning
-
-include(joinpath(pkgdir(GeometryLearning), "examples", "PCA.jl"))
+using NeuralROMs
+include(joinpath(pkgdir(NeuralROMs), "examples", "PCA.jl"))
 #======================================================#
 
 rng = Random.default_rng()

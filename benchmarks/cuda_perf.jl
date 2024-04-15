@@ -565,8 +565,8 @@ end
 
   9.635 ms (168 allocations: 8.38 KiB)
   338.507 ms (423 allocations: 20.88 KiB)
-(#= /home/vedantpu/.julia/dev/GeometryLearning.jl/examples/cuda_perf.jl:579 =# CUDA.@allocated(grad(f, W, X, Y)) / 1024) / 1024 = 44.125
-(#= /home/vedantpu/.julia/dev/GeometryLearning.jl/examples/cuda_perf.jl:580 =# CUDA.@allocated(f(W, X, Y)) / 1024) / 1024 = 1.5625
+(#= /home/vedantpu/.julia/dev/NeuralROMs.jl/examples/cuda_perf.jl:579 =# CUDA.@allocated(grad(f, W, X, Y)) / 1024) / 1024 = 44.125
+(#= /home/vedantpu/.julia/dev/NeuralROMs.jl/examples/cuda_perf.jl:580 =# CUDA.@allocated(f(W, X, Y)) / 1024) / 1024 = 1.5625
 """
 
 if false

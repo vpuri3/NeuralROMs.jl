@@ -1,4 +1,4 @@
-module GeometryLearning
+module NeuralROMs
 
 using DocStringExtensions
 

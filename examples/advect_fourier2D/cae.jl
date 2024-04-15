@@ -1,8 +1,7 @@
 #
-using GeometryLearning
+using NeuralROMs
+include(joinpath(pkgdir(NeuralROMs), "examples", "convAE.jl"))
 
-include(joinpath(pkgdir(GeometryLearning), "examples", "convAE.jl"))
-include(joinpath(pkgdir(GeometryLearning), "examples", "problems.jl"))
 #======================================================#
 
 rng = Random.default_rng()

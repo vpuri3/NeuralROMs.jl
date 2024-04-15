@@ -1,16 +1,16 @@
 #
-using GeometryLearning
+using NeuralROMs
 using LinearAlgebra, Plots, LaTeXStrings
 using JLD2, HDF5
 
-joinpath(pkgdir(GeometryLearning), "examples", "PCA.jl")      |> include
-joinpath(pkgdir(GeometryLearning), "examples", "convAE.jl")   |> include
-joinpath(pkgdir(GeometryLearning), "examples", "smoothNF.jl") |> include
-joinpath(pkgdir(GeometryLearning), "examples", "problems.jl") |> include
+joinpath(pkgdir(NeuralROMs), "examples", "PCA.jl")      |> include
+joinpath(pkgdir(NeuralROMs), "examples", "convAE.jl")   |> include
+joinpath(pkgdir(NeuralROMs), "examples", "smoothNF.jl") |> include
+joinpath(pkgdir(NeuralROMs), "examples", "cases.jl")    |> include
 
 ## comparison untenable with C-ROM due to large num-epochs
-# joinpath(pkgdir(GeometryLearning), "examples", "convINR.jl")  |> include
-# joinpath(pkgdir(GeometryLearning), "examples", "autodecode.jl")  |> include
+# joinpath(pkgdir(NeuralROMs), "examples", "convINR.jl")  |> include
+# joinpath(pkgdir(NeuralROMs), "examples", "autodecode.jl")  |> include
 
 #======================================================#
 function get_makedata_kws(train_params)
@@ -36,7 +36,7 @@ function get_batchsizes(train_params)
 end
 
 function train_CAE_compare(
-    prob::GeometryLearning.AbstractPDEProblem,
+    prob::NeuralROMs.AbstractPDEProblem,
     l::Integer, 
     datafile::String,
     modeldir::String,

@@ -58,6 +58,6 @@ jobs:
       - run: |
           julia --project=docs -e '
             using Documenter: DocMeta, doctest
-            using GeometryLearning
-            DocMeta.setdocmeta!(GeometryLearning, :DocTestSetup, :(using GeometryLearning); recursive=true)
-            doctest(GeometryLearning)'
+            using NeuralROMs
+            DocMeta.setdocmeta!(NeuralROMs, :DocTestSetup, :(using NeuralROMs); recursive=true)
+            doctest(NeuralROMs)'
