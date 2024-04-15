@@ -220,8 +220,6 @@ function solve_timestep(
     @unpack autodiff_jac, autodiff_xyz, ϵ_jac, ϵ_xyz = integrator
     @unpack Δt, pprevs, uprevs, tprevs, fprevs, f̃prevs = integrator
 
-    t0, p0, _, _, _ = get_state(integrator)
-
     p1 = if isimplicit(timealg)
         @error """GalerkinProjection with implicit time-integrator is
         not implemetned"""
@@ -237,7 +235,7 @@ function solve_timestep(
     end
 
     # get new states
-    t1 = t0 + Δt
+    t1 = get_time(integrator) + Δt
     u1 = model(x, p1)
     f1 = dudtRHS(prob, model, x, p1, t1; autodiff = autodiff_xyz, ϵ = ϵ_xyz)
     f̃1 = compute_f̃(f1, p1, x, model, scheme; autodiff_jac, ϵ_jac)
