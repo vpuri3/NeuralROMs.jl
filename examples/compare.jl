@@ -5,11 +5,10 @@ using JLD2, HDF5
 
 joinpath(pkgdir(NeuralROMs), "examples", "PCA.jl")      |> include
 joinpath(pkgdir(NeuralROMs), "examples", "convAE.jl")   |> include
+joinpath(pkgdir(NeuralROMs), "examples", "convINR.jl")  |> include
 joinpath(pkgdir(NeuralROMs), "examples", "smoothNF.jl") |> include
 joinpath(pkgdir(NeuralROMs), "examples", "cases.jl")    |> include
 
-## comparison untenable with C-ROM due to large num-epochs
-# joinpath(pkgdir(NeuralROMs), "examples", "convINR.jl")  |> include
 # joinpath(pkgdir(NeuralROMs), "examples", "autodecode.jl")  |> include
 
 #======================================================#
@@ -46,7 +45,7 @@ function train_CAE_compare(
 )
     E   = haskey(train_params, :E  ) ? train_params.E   : 1400
     w   = haskey(train_params, :w  ) ? train_params.w   : 32
-    act = haskey(train_params, :act) ? train_params.act : tanh # relu, tanh
+    act = haskey(train_params, :act) ? train_params.act : tanh # relu, tanh, elu
 
     NN = cae_network(prob, l, w, act)
 
@@ -63,6 +62,40 @@ function train_CAE_compare(
 
     isdir(modeldir) && rm(modeldir, recursive = true)
     train_CAE(datafile, modeldir, NN, E; rng,
+        makedata_kws, warmup = false, device, batchsizes...,
+    )
+end
+
+function train_CINR_compare(
+    prob::NeuralROMs.AbstractPDEProblem,
+    l::Integer, 
+    datafile::String,
+    modeldir::String,
+    train_params = (;);
+    rng::Random.AbstractRNG = Random.default_rng(),
+    device = Lux.cpu_device(),
+)
+    E   = haskey(train_params, :E  ) ? train_params.E   : 1400
+    h   = haskey(train_params, :h  ) ? train_params.we  : 5
+    we  = haskey(train_params, :we ) ? train_params.we  : 32
+    wd  = haskey(train_params, :wd ) ? train_params.we  : 64
+    act = haskey(train_params, :act) ? train_params.act : tanh # relu, tanh, elu
+
+    NN = convINR_network(prob, l, h, we, wd, act)
+
+    ### size debugging
+    # p, st = Lux.setup(rng, NN)
+    # x = rand(Float32, 512, 512, 1, 5,)
+    # y = NN(x, p, st)[1]
+    # @show size(y)
+    # @assert false
+
+    # misc
+    batchsizes = get_batchsizes(train_params)
+    makedata_kws = get_makedata_kws(train_params)
+
+    isdir(modeldir) && rm(modeldir, recursive = true)
+    train_CINR(datafile, modeldir, NN, E; rng,
         makedata_kws, warmup = false, device, batchsizes...,
     )
 end
@@ -121,7 +154,7 @@ function compare_plots(
 
     suffix = ("PCA", "CAE", "SNL", "SNW", "SN0")
     colors = (:orange, :green, :blue, :red, :brown,)
-    styles = (:dot, :solid, :dash, :dashdotdot, :solid,)
+    styles = (:solid, :solid, :solid, :solid, :solid,)
 
     h5dict = Dict()
     h5path = joinpath(outdir, "$(casename).h5")

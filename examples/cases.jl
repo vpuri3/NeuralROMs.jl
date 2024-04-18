@@ -144,8 +144,8 @@ function cae_network(
 end
 
 #======================================================#
-function inr_decoder(l, h, w, in_dim, out_dim)
-    init_wt_in = scaled_siren_init(3f1)
+function inr_decoder(l, h, wd, in_dim, out_dim)
+    init_wt_in = scaled_siren_init(1f1)
     init_wt_hd = scaled_siren_init(1f0)
     init_wt_fn = glorot_uniform
 
@@ -157,9 +157,9 @@ function inr_decoder(l, h, w, in_dim, out_dim)
     wi = l + in_dim
     wo = out_dim
 
-    in_layer = Dense(wi, w , act; init_weight = init_wt_in, init_bias)
-    hd_layer = Dense(w , w , act; init_weight = init_wt_hd, init_bias)
-    fn_layer = Dense(w , wo     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
+    in_layer = Dense(wi, wd, act; init_weight = init_wt_in, init_bias)
+    hd_layer = Dense(wd, wd, act; init_weight = init_wt_hd, init_bias)
+    fn_layer = Dense(wd, wo     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
 
     Chain(in_layer, fill(hd_layer, h)..., fn_layer)
 end

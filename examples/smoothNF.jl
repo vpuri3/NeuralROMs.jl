@@ -338,6 +338,7 @@ function postprocess_SNF(
     verbose::Bool = true,
     fps::Int = 300,
     device = Lux.cpu_device(),
+    evolve_kw::NamedTuple = (;),
 )
     # load data
     Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
@@ -472,7 +473,7 @@ function postprocess_SNF(
     # Evolve
     #==============#
     for case in union(_Ib, Ib_)
-        evolve_SNF(prob, datafile, modelfile, case; rng, device)
+        evolve_SNF(prob, datafile, modelfile, case; evolve_kw..., rng, device)
     end
 
     #==============#

@@ -29,49 +29,19 @@ function makedata_INR(
     _It = Colon(), # train/test split in time
     It_ = Colon(),
 )
-    #==============#
     # load data
-    #==============#
-    data = jldopen(datafile)
-    t  = data["t"]
-    x  = data["x"]
-    u  = data["u"] # [Nx, Nb, Nt] or [out_dim, Nx, Nb, Nt]
-    mu = data["mu"]
-    md_data = data["metadata"]
-    close(data)
-    
-    @assert ndims(u) ∈ (3,4,)
-    @assert x isa AbstractVecOrMat
-    x = x isa AbstractVector ? reshape(x, 1, :) : x # (Dim, Npoints)
-    
-    if ndims(u) == 3 # [Nx, Nb, Nt]
-        u = reshape(u, 1, size(u)...) # [1, Nx, Nb, Nt]
-    end
-    
-    in_dim  = size(x, 1)
-    out_dim = size(u, 1)
-    
-    println("input size $in_dim with $(size(x, 2)) points per trajectory.")
-    println("output size $out_dim.")
-    
-    @assert eltype(x) === Float32
-    @assert eltype(u) === Float32
-    
-    #==============#
-    # normalize
-    #==============#
-    
-    ū  = sum(u, dims = (2,3,4)) / (length(u) ÷ out_dim) |> vec
-    σu = sum(abs2, u .- ū, dims = (2,3,4)) / (length(u) ÷ out_dim) .|> sqrt |> vec
-    u  = normalizedata(u, ū, σu)
-    
-    x̄  = sum(x, dims = 2) / size(x, 2) |> vec
-    σx = sum(abs2, x .- x̄, dims = 2) / size(x, 2) .|> sqrt |> vec
-    x  = normalizedata(x, x̄, σx)
+    x, t, mu, u, md_data = loaddata(datafile)
 
-    #==============#
+    _Ib = isa(_Ib, Colon) ? (1:size(u, 3)) : _Ib
+    Ib_ = setdiff(1:size(u, 3), _Ib)
+    Ib_ = isempty(Ib_) ? _Ib : Ib_
+
+    # normalize
+    x, x̄, σx = normalize_x(x)
+    u, ū, σu = normalize_u(u)
+    t, t̄, σt = normalize_t(t)
+
     # subsample, test/train split
-    #==============#
     _x = @view x[:, Ix]
     x_ = @view x[:, Ix]
 
@@ -79,24 +49,26 @@ function makedata_INR(
     u_ = @view u[:, Ix, Ib_, It_]
 
     Nx = size(_x, 2)
-    @assert size(_u, 2) == size(_x, 2) "size(_u): $(size(_u)), size(_x): $(size(_x))"
+    @assert size(_u, 2) == size(_x, 2)
 
-    println("Using $Nx sample points per trajectory.")
+    # get dimensinos
+    in_dim  = size(x, 1)
+    out_dim = size(u, 1)
 
-    _Ns = size(_u, 3) * size(_u, 4) # number of codes i.e. # trajectories
+    _Ns = size(_u, 3) * size(_u, 4)
     Ns_ = size(u_, 3) * size(u_, 4)
 
+    println("Using $Nx sample points per trajectory.")
     println("$_Ns / $Ns_ trajectories in train/test sets.")
 
-    readme = "Train/test on the same trajectory."
+    grid = if in_dim == 1
+        (Nx,)
+    elseif in_dim == 2
+        md_data.grid
+    end
 
-    #==============#
     # make arrays
-    #==============#
-
-    @assert in_dim == 1 "work on Burgers 2D later"
-
-    _uperm = permutedims(_u, (2, 1, 3, 4)) # [Nx, out_dim, Nb, Nt]
+    _uperm = permutedims(_u, (2, 1, 3, 4)) # [Nx, out_dim, Nbatch, Ntime]
     uperm_ = permutedims(u_, (2, 1, 3, 4))
 
     _uperm = reshape(_uperm, Nx, in_dim, _Ns)
@@ -114,16 +86,10 @@ function makedata_INR(
     _X[:, in_dim+1:end, :] = _uperm
     X_[:, in_dim+1:end, :] = uperm_
 
-    grid = if in_dim == 1
-        (Nx,)
-    elseif in_dim == 2
-        md_data.grid
-    end
-
     _U = reshape(_u, out_dim, grid..., _Ns)
     U_ = reshape(u_, out_dim, grid..., Ns_)
 
-    readme = "Train/test on 0.0-0.5."
+    readme = ""
     makedata_kws = (; Ix, _Ib, Ib_, _It, It_,)
     metadata = (; ū, σu, x̄, σx,
         Nx, _Ns, Ns_,
@@ -165,34 +131,13 @@ function train_CINR(
     #--------------------------------------------#
     # optimizer
     #--------------------------------------------#
-    lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
-    Nlrs = length(lrs)
-
-    opts = Tuple(Optimisers.Adam(lr) for lr in lrs)
-
-    nepochs = (round.(Int, E / (Nlrs) * ones(Nlrs))...,)
-    schedules = Step.(lrs, 1f0, Inf32)
-    early_stoppings = (fill(true, Nlrs)...,)
-
-    if warmup
-        opt_warmup = Optimisers.Adam(1f-2)
-        nepochs_warmup = 10
-        schedule_warmup = Step(1f-2, 1f0, Inf32)
-        early_stopping_warmup = true
-        
-        ######################
-        opts = (opt_warmup, opts...,)
-        nepochs = (nepochs_warmup, nepochs...,)
-        schedules = (schedule_warmup, schedules...,)
-        early_stoppings = (early_stopping_warmup, early_stoppings...,)
-    end
-
-    #--------------------------------------------#
+    opts, nepochs, schedules, early_stoppings = make_optimizer(E, warmup)
 
     train_args = (; E, _batchsize,)
     metadata   = (; metadata..., train_args)
 
-    @show metadata
+    display(NN)
+    displaymetadata(metadata)
 
     @time model, ST = train_model(NN, _data; rng,
         _batchsize, batchsize_, 
@@ -201,12 +146,91 @@ function train_CINR(
         cb_epoch,
     )
 
-    @show metadata
+    displaymetadata(metadata)
 
     plot_training(ST...) |> display
 
     model, ST, metadata
 end
+#======================================================#
+function postprocess_CINR(
+    prob::AbstractPDEProblem,
+    datafile::String,
+    modelfile::String;
+    rng::Random.AbstractRNG = Random.default_rng(),
+    makeplot::Bool = true,
+    verbose::Bool = true,
+    fps::Int = 300,
+    device = Lux.cpu_device(),
+    # evolve_kw::NamedTuple = (;),
+)
+    # load data
+    Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
+
+    # load model
+    (NN, p, st), md = loadmodel(modelfile)
+
+    in_dim  = size(Xdata, 1)
+    out_dim = size(Udata, 1)
+
+    #==============#
+    # setup train/test split
+    #==============#
+    _Ib = isa(md.makedata_kws._Ib, Colon) ? (1:size(Udata, 3)) : md.makedata_kws._Ib
+    _It = isa(md.makedata_kws._It, Colon) ? (1:size(Udata, 4)) : md.makedata_kws._It
+
+    Ib_ = setdiff(1:size(Udata, 3), _Ib)
+    Ib_ = isempty(Ib_) ? _Ib : Ib_
+    It_ = 1:size(Udata, 4)
+
+    displaymetadata(md)
+
+    #==============#
+    # train/test split
+    #==============#
+    _Udata = @view Udata[:, :, _Ib, _It] # un-normalized
+    Udata_ = @view Udata[:, :, Ib_, It_]
+
+    #==============#
+    # get encoder / decoer
+    #==============#
+    encoder, decoder = NeuralROMs.get_encoder_decoder(NN, p, st)
+    grid = get_prob_grid(prob)
+
+    #==============#
+    # evaluate model
+    #==============#
+
+    modeldir = dirname(modelfile)
+    outdir = joinpath(modeldir, "results")
+    isdir(outdir) && rm(outdir; recursive = true)
+    mkpath(outdir)
+
+
+    #==============#
+    # Evolve
+    #==============#
+    for case in union(_Ib, Ib_)
+        evolve_CINR(prob, datafile, modelfile, case; rng, device)
+    end
+
+    #==============#
+    # Compare evolution with training plots
+    #==============#
+
+    #==============#
+    # Done
+    #==============#
+    if haskey(md, :readme)
+        RM = joinpath(outdir, "README.md")
+        RM = open(RM, "w")
+        write(RM, md.readme)
+        close(RM)
+    end
+
+    nothing
+end
+#
 #======================================================#
 
 function evolve_CINR(
@@ -215,53 +239,26 @@ function evolve_CINR(
     modelfile::String,
     case::Integer;
     rng::Random.AbstractRNG = Random.default_rng(),
-
     data_kws = (; Ix = :, It = :),
-
     Δt::Union{Real, Nothing} = nothing,
     timealg::NeuralROMs.AbstractTimeAlg = EulerForward(),
     adaptive::Bool = false,
     scheme::Union{Nothing, NeuralROMs.AbstractSolveScheme} = nothing,
-
     autodiff_xyz::ADTypes.AbstractADType = AutoFiniteDiff(),
     ϵ_xyz::Union{Real, Nothing} = 1f-2,
-
+    learn_ic::Bool = true,
     verbose::Bool = true,
     device = Lux.cpu_device(),
 )
-
-    #==============#
     # load data
-    #==============#
-    data = jldopen(datafile)
-    Tdata = data["t"]
-    Xdata = data["x"]
-    Udata = data["u"]
-    mu = data["mu"]
+    Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
 
-    close(data)
+    # load model
+    (NN, p, st), md = loadmodel(modelfile)
 
-    @assert ndims(Udata) ∈ (3,4,)
-    @assert Xdata isa AbstractVecOrMat
-    Xdata = Xdata isa AbstractVector ? reshape(Xdata, 1, :) : Xdata # (Dim, Npoints)
-
-    if ndims(Udata) == 3 # [Nx, Nb, Nt]
-        Udata = reshape(Udata, 1, size(Udata)...) # [out_dim, Nx, Nb, Nt]
-    end
-
+    Nt = length(Tdata)
     in_dim  = size(Xdata, 1)
     out_dim = size(Udata, 1)
-
-    mu = isnothing(mu) ? fill(nothing, Nb) |> Tuple : mu
-    mu = isa(mu, AbstractArray) ? vec(mu) : mu
-
-    #==============#
-    # load model
-    #==============#
-    model = jldopen(modelfile)
-    NN, p, st = model["model"]
-    md = model["metadata"]
-    close(model)
 
     #==============#
     # subsample in space
@@ -283,52 +280,72 @@ function evolve_CINR(
     encoder, decoder = NeuralROMs.get_encoder_decoder(NN, p, st)
 
     #==============#
-    # get initial state
+    # get p0
     #==============#
-    grid = if in_dim == 1
-        (Nx,)
-    elseif in_dim == 2
-        md_data.grid
-    end
+    grid = get_prob_grid(prob)
 
-    U0_norm = normalizedata(U0, md.ū, md.σu)
-    U0_perm = permutedims(U0_norm, (2, 1))
-    U0_resh = reshape(U0_perm, grid..., out_dim, 1)
+    Ud_norm = normalizedata(Ud, md.ū, md.σu)
+    Ud_perm = permutedims(Ud_norm, (2, 1, 3))
+    Ud_resh = reshape(Ud_perm, grid..., out_dim, Nt) # [Nx, Ny, out_dim, Nt]
 
-    p0 = encoder[1](U0_resh, encoder[2], encoder[3])[1]
-    p0 = dropdims(p0; dims = 2)
-
-    #==============#
-    # freeze decoder weights
-    #==============#
-    decoder = freeze_decoder(decoder, length(p0); rng, p0)
-    p0 = ComponentArray(p0, getaxes(decoder[2]))
+    _ps = encoder[1](Ud_resh, encoder[2], encoder[3])[1]
+    p0 = _ps[:, 1]
 
     #==============#
     # make model
     #==============#
-    grid = get_prob_grid(prob)
-    model = INRModel(decoder[1], decoder[3], grid, md)
+    decoder = freeze_decoder(decoder, length(p0); rng, p0)
+    p0 = ComponentArray(p0, getaxes(decoder[2]))
+
+    # model = NeuralModel(decoder[1], decoder[3], md)
+    model = INRModel(decoder[1], decoder[3], Xdata, grid, md)
 
     #==============#
     # evolve
     #==============#
-    linsolve = QRFactorization()
     autodiff = AutoForwardDiff()
+    linsolve = QRFactorization()
     linesearch = LineSearch()
     nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
-    nlsmaxiters = 10
+    nlsmaxiters = 20
 
     Δt = isnothing(Δt) ? -(-(extrema(Tdata)...)) / 100.0f0 : Δt
 
     if isnothing(scheme)
         scheme  = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
+        # scheme = LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, 1f-6, 1f-3, 1f-6)
     end
 
-    @time _, ps, Up = evolve_model(prob, model, timealg, scheme, data, p0, Δt;
-        nlssolve, nlsmaxiters, adaptive, autodiff_xyz, ϵ_xyz,
-        verbose, device,
+    @time _, ps, Up = evolve_model(
+        prob, model, timealg, scheme, data, p0, Δt;
+        adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
     )
+
+    #==============#
+    # visualization
+    #==============#
+
+    modeldir = dirname(modelfile)
+    outdir = joinpath(modeldir, "results")
+    mkpath(outdir)
+
+
+    # field visualizations
+    grid = get_prob_grid(prob)
+    fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "evolve", case)
+
+    # parameter plots
+    plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
+    plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
+    png(plt, joinpath(outdir, "evolve_p_scatter_case$(case)"))
+
+    plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+    plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")
+    png(plt, joinpath(outdir, "evolve_p_case$(case)"))
+
+    # save files
+    filename = joinpath(outdir, "evolve$case.jld2")
+    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps, Plrnd = _ps)
 
     Xdata, Tdata, Ud, Up, ps
 end

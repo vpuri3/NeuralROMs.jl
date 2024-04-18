@@ -55,9 +55,6 @@ function makedata_CAE(
     in_dim  = size(x, 1)
     out_dim = size(u, 1)
 
-    _u = permutedims(_u, (2, 1, 3, 4)) # [Nx, out_dim, Nbatch, Ntime]
-    u_ = permutedims(_u, (2, 1, 3, 4))
-
     _Ns = size(_u, 3) * size(_u, 4)
     Ns_ = size(u_, 3) * size(u_, 4)
 
@@ -71,6 +68,9 @@ function makedata_CAE(
     end
 
     # make arrays
+    _u = permutedims(_u, (2, 1, 3, 4)) # [Nx, out_dim, Nbatch, Ntime]
+    u_ = permutedims(_u, (2, 1, 3, 4))
+
     _u = reshape(_u, grid..., out_dim, _Ns)
     u_ = reshape(u_, grid..., out_dim, Ns_)
 
@@ -85,7 +85,6 @@ function makedata_CAE(
 end
 
 #======================================================#
-
 function train_CAE(
     datafile::String,
     modeldir::String,
@@ -444,7 +443,7 @@ function evolve_CAE(
     decoder = NeuralROMs.remake_ca_in_model(decoder...)
 
     #==============#
-    # get initial state
+    # get p0
     #==============#
     grid = get_prob_grid(prob)
 
@@ -454,11 +453,6 @@ function evolve_CAE(
 
     _ps = encoder[1](Ud_resh, encoder[2], encoder[3])[1]
     p0 = _ps[:, 1]
-
-    # learn_ic = true
-    # _data, _, md1 = makedata_CAE(datafile; _Ib = [case])
-    # _ps = encoder[1](_data[1], encoder[2], encoder[3])[1]
-    # p0 = _ps[:, 1]
 
     #==============#
     # make model
@@ -514,5 +508,3 @@ function evolve_CAE(
     Xdata, Tdata, Ud, Up, ps
 end
 #======================================================#
-nothing
-#
