@@ -162,7 +162,7 @@ function postprocess_CINR(
     verbose::Bool = true,
     fps::Int = 300,
     device = Lux.cpu_device(),
-    # evolve_kw::NamedTuple = (;),
+    evolve_kw::NamedTuple = (;),
 )
     # load data
     Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
@@ -206,12 +206,11 @@ function postprocess_CINR(
     isdir(outdir) && rm(outdir; recursive = true)
     mkpath(outdir)
 
-
     #==============#
     # Evolve
     #==============#
     for case in union(_Ib, Ib_)
-        evolve_CINR(prob, datafile, modelfile, case; rng, device)
+        evolve_CINR(prob, datafile, modelfile, case; rng, device, evolve_kw...,)
     end
 
     #==============#
@@ -328,7 +327,6 @@ function evolve_CINR(
     modeldir = dirname(modelfile)
     outdir = joinpath(modeldir, "results")
     mkpath(outdir)
-
 
     # field visualizations
     grid = get_prob_grid(prob)

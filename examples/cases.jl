@@ -10,6 +10,7 @@ function get_prob_grid(prob::NeuralROMs.AbstractPDEProblem)
         (128,)
     elseif prob isa BurgersViscous1D
         (1024,)
+        # (2048,)
     elseif prob isa KuramotoSivashinsky1D
         (256,)
     elseif prob isa Advection2D
@@ -62,7 +63,7 @@ function cae_network(
             flatten,
             Dense(w, l),
         )
-
+        
         decoder = Chain(
             Dense(l, w, act),
             ReshapeLayer((1, w)),
@@ -74,6 +75,28 @@ function cae_network(
         )
         
         Chain(; encoder, decoder)
+
+        # encoder = Chain( # 2048
+        #     Conv((8,), 1 => w, act; stride = 4, pad = 2), # /4 = 512
+        #     Conv((8,), w => w, act; stride = 4, pad = 2), # /4 = 128
+        #     Conv((8,), w => w, act; stride = 4, pad = 2), # /4 = 32
+        #     Conv((8,), w => w, act; stride = 4, pad = 2), # /4 = 8
+        #     Conv((8,), w => w, act; stride = 1, pad = 0), # /4 = 1
+        #     flatten,
+        #     Dense(w, l),
+        # )
+        #
+        # decoder = Chain(
+        #     Dense(l, w, act),
+        #     ReshapeLayer((1, w)),
+        #     ConvTranspose((8,), w => w, act; stride = 1, pad = 0), # *8 = 8
+        #     ConvTranspose((8,), w => w, act; stride = 4, pad = 2), # *4 = 16
+        #     ConvTranspose((8,), w => w, act; stride = 4, pad = 2), # *4 = 64
+        #     ConvTranspose((8,), w => w, act; stride = 4, pad = 2), # *4 = 256
+        #     ConvTranspose((8,), w => 1     ; stride = 4, pad = 2), # *4 = 1024
+        # )
+        #
+        # Chain(; encoder, decoder)
 
     elseif prob isa KuramotoSivashinsky1D # 256 -> l -> 256
 
@@ -500,7 +523,11 @@ function make_optimizer(
     early_stoppings = (fill(true, Nlrs)...,)
 
     if warmup
-        opt_warmup = OptimiserChain(Optimisers.Adam(1f-2), weightdecay,)
+        opt_warmup = if isnothing(weightdecay)
+            Optimisers.Adam(1f-2)
+        else
+            OptimiserChain(Optimisers.Adam(1f-2), weightdecay,)
+        end
         nepochs_warmup = 10
         schedule_warmup = Step(1f-2, 1f0, Inf32)
         early_stopping_warmup = true

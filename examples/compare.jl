@@ -96,7 +96,7 @@ function train_CINR_compare(
 
     isdir(modeldir) && rm(modeldir, recursive = true)
     train_CINR(datafile, modeldir, NN, E; rng,
-        makedata_kws, warmup = false, device, batchsizes...,
+        makedata_kws, warmup = true, device, batchsizes...,
     )
 end
 
@@ -152,7 +152,7 @@ function compare_plots(
     p3 = plot(; xlabel = L"t", ylabel = L"ε^2(t)" , legend = :topleft, framestyle = :box, yaxis = :log)
     p4 = nothing
 
-    suffix = ("PCA", "CAE", "SNL", "SNW", "SN0")
+    suffix = ("PCA", "CAE", "SNL", "SNW", "CRM")
     colors = (:orange, :green, :blue, :red, :brown,)
     styles = (:solid, :solid, :solid, :solid, :solid,)
 
@@ -168,7 +168,7 @@ function compare_plots(
         Up = ev["Upred"]
         Pp = ev["Ppred"]
         # Ue = ev["Ulrnd"]
-        # Pe = ev["Plrnd"]
+        Pe = isone(i) ? Pp : ev["Plrnd"]
 
         in_dim  = size(Xd, 1)
         out_dim = size(Ud, 1)
@@ -258,6 +258,7 @@ function compare_plots(
         # everything but PCA
         if i != 1
             h5dict = Dict(h5dict..., "p$(suffix[i])" => Pp)
+            h5dict = Dict(h5dict..., "q$(suffix[i])" => Pe)
         end
     end
 
