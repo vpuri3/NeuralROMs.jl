@@ -6,3 +6,4 @@ Manifest.toml
 *.jld2
 *.hdf5
 *.h5
+*.eps

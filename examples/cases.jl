@@ -1,6 +1,7 @@
 #
 using NeuralROMs
 using JLD2, TSne
+using Random, Lux, NNlib, MLUtils
 using Plots, ColorSchemes, LaTeXStrings
 
 #======================================================#
