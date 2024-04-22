@@ -226,6 +226,7 @@ function evolve_SNF(
     modelfile::String,
     case::Integer; # batch
     rng::Random.AbstractRNG = Random.default_rng(),
+    outdir::String = joinpath(dirname(modelfile), "results"),
     data_kws = (; Ix = :, It = :),
     Δt::Union{Real, Nothing} = nothing,
     timealg::NeuralROMs.AbstractTimeAlg = EulerForward(),
@@ -300,8 +301,6 @@ function evolve_SNF(
     # visualization
     #==============#
 
-    modeldir = dirname(modelfile)
-    outdir = joinpath(modeldir, "results")
     mkpath(outdir)
 
     # field visualizations
@@ -335,10 +334,9 @@ function postprocess_SNF(
     modelfile::String;
     rng::Random.AbstractRNG = Random.default_rng(),
     makeplot::Bool = true,
-    verbose::Bool = true,
-    fps::Int = 300,
-    device = Lux.cpu_device(),
     evolve_kw::NamedTuple = (;),
+    outdir::String = joinpath(dirname(modelfile), "results"),
+    device = Lux.cpu_device(),
 )
     # load data
     Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
@@ -408,11 +406,6 @@ function postprocess_SNF(
     _ps = _code[:, 1, :, :] # [code_len, _Nb, _Nt]
     ps_ = code_[:, 1, :, :] # [code_len, Nb_, Nt_]
 
-    modeldir = dirname(modelfile)
-    jldsave(joinpath(modeldir, "train_codes.jld2"); _code = _ps, code_ = ps_)
-
-    modeldir = dirname(modelfile)
-    outdir = joinpath(modeldir, "results")
     isdir(outdir) && rm(outdir; recursive = true)
     mkpath(outdir)
 
@@ -473,7 +466,7 @@ function postprocess_SNF(
     # Evolve
     #==============#
     for case in union(_Ib, Ib_)
-        evolve_SNF(prob, datafile, modelfile, case; evolve_kw..., rng, device)
+        evolve_SNF(prob, datafile, modelfile, case; rng, outdir, evolve_kw..., device)
     end
 
     #==============#

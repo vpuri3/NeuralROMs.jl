@@ -12,7 +12,7 @@ prob = BurgersViscous1D(1f-4)
 datafile = joinpath(@__DIR__, "data_burg1D", "data.jld2")
 device = Lux.gpu_device()
 
-_Ib, Ib_ = [1, 3, 5,], [2, 4]
+_Ib, Ib_ = [1, 3, 5,], [2, 4, 6]
 Ix  = Colon()
 _It = Colon()
 makedata_kws = (; Ix, _Ib, Ib_, _It, It_ = :)
@@ -33,20 +33,20 @@ modeldir_CAE = joinpath(@__DIR__, "model_CAE$(l0)") # Lee, Carlberg
 modeldir_SNW = joinpath(@__DIR__, "model_SNW$(l0)") # us (Weight decay)
 modeldir_SNL = joinpath(@__DIR__, "model_SNL$(l0)") # us (Lipschitz)
 
-# # train PCA
-# train_PCA(datafile, modeldir_PCA, l_pca; rng, makedata_kws, device)
-#
-# # train_CAE
-# train_params_CAE = (; E = 1400, w = 64, makedata_kws,)
-# train_CAE_compare(prob, latent, datafile, modeldir_CAE, train_params_CAE; rng, device)
-#
-# # train_SNW
-# train_params_SNW = (; E = 1400, wd = 128, α = 0f-0, γ = 1f-2, makedata_kws)#, batchsize_)
-# train_SNF_compare(latent, datafile, modeldir_SNW, train_params_SNW; rng, device)
-#
-# # train_SNL
-# train_params_SNL = (; E = 1400, wd = 128, α = 1f-4, γ = 0f-0, makedata_kws)#, batchsize_)
-# train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
+# train PCA
+train_PCA(datafile, modeldir_PCA, l_pca; rng, makedata_kws, device)
+
+# train_CAE
+train_params_CAE = (; E = 1400, w = 64, makedata_kws,)
+train_CAE_compare(prob, latent, datafile, modeldir_CAE, train_params_CAE; rng, device)
+
+# train_SNW
+train_params_SNW = (; E = 1400, wd = 128, α = 0f-0, γ = 1f-2, makedata_kws)#, batchsize_)
+train_SNF_compare(latent, datafile, modeldir_SNW, train_params_SNW; rng, device)
+
+# train_SNL
+train_params_SNL = (; E = 1400, wd = 128, α = 1f-4, γ = 0f-0, makedata_kws)#, batchsize_)
+train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
 
 #==================#
 # postprocess
@@ -57,10 +57,13 @@ modelfile_CAE = joinpath(modeldir_CAE, "model_07.jld2")
 modelfile_SNW = joinpath(modeldir_SNW, "model_08.jld2")
 modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 
-# postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
-# postprocess_CAE(prob, datafile, modelfile_CAE; rng)
-# postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
-# postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
+evolve_kw = (;)
+# evolve_kw = (; adaptive = true)
+
+postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
+postprocess_CAE(prob, datafile, modelfile_CAE; rng, evolve_kw)
+postprocess_SNF(prob, datafile, modelfile_SNW; rng, evolve_kw, device)
+postprocess_SNF(prob, datafile, modelfile_SNL; rng, evolve_kw, device)
 
 #==================#
 # make figures

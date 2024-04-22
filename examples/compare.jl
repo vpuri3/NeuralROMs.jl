@@ -144,7 +144,8 @@ function compare_plots(
     outdir::String,
     casename::AbstractString,
     case::Integer,
-    grid,
+    grid;
+    ifdt::Bool = false,
 )
 
     p1 = plot(; xlabel = L"x", ylabel = L"u(x, t)", legend = :topleft, framestyle = :box)
@@ -256,11 +257,21 @@ function compare_plots(
         h5dict = Dict(h5dict..., "u$(suffix[i])" => up)
 
         # everything but PCA
+
+        # save p
         if i != 1
             h5dict = Dict(h5dict..., "p$(suffix[i])" => Pp)
             h5dict = Dict(h5dict..., "q$(suffix[i])" => Pe)
+
+            # small dt
+            if ifdt
+                e = jldopen(joinpath(modeldir, "dt", "evolve$(case).jld2"))
+                pdt = e["Ppred"]
+                h5dict = Dict(h5dict..., "pdt$(suffix[i])" => pdt)
+            end
         end
     end
+
 
     png(p1, joinpath(outdir, "compare_t0_case$(case)"))
     png(p2, joinpath(outdir, "compare_t1_case$(case)"))

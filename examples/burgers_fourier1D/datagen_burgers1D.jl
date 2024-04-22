@@ -40,7 +40,7 @@ end
 
 function burgers_inviscid(N, mu, tspan;
     p = nothing,
-    ntsave=1000,
+    ntsave=500,
     odealg=SSPRK43(),
     odekw = (;),
     device = cpu_device(),

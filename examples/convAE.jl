@@ -145,8 +145,8 @@ function postprocess_CAE(
     modelfile::String;
     rng::Random.AbstractRNG = Random.default_rng(),
     makeplot::Bool = true,
-    verbose::Bool = true,
-    fps::Int = 300,
+    evolve_kw::NamedTuple = (;),
+    outdir::String = joinpath(dirname(modelfile), "results"),
     device = Lux.cpu_device(),
 )
     # load data
@@ -217,14 +217,9 @@ function postprocess_CAE(
     @show mse(_Upred, _Udata) / mse(_Udata, 0 * _Udata)
     @show mse(Upred_, Udata_) / mse(Udata_, 0 * Udata_)
 
-    modeldir = dirname(modelfile)
-    jldsave(joinpath(modeldir, "train_codes.jld2"); _code, code_)
-
     _ps = reshape(_code, size(_code, 1), length(_Ib), length(_It)) # [code_len, _Nb, _Nt]
     ps_ = reshape(code_, size(code_, 1), length(Ib_), length(It_)) # [code_len, Nb_, Nt_]
 
-    modeldir = dirname(modelfile)
-    outdir = joinpath(modeldir, "results")
     isdir(outdir) && rm(outdir; recursive = true)
     mkpath(outdir)
 
@@ -285,7 +280,7 @@ function postprocess_CAE(
     # Evolve
     #==============#
     for case in union(_Ib, Ib_)
-        evolve_CAE(prob, datafile, modelfile, case; rng, device)
+        evolve_CAE(prob, datafile, modelfile, case; rng, outdir, evolve_kw..., device)
     end
 
     #==============#
@@ -398,6 +393,7 @@ function evolve_CAE(
     modelfile::String,
     case::Integer;
     rng::Random.AbstractRNG = Random.default_rng(),
+    outdir::String = joinpath(dirname(modelfile), "results"),
     data_kws = (; Ix = :, It = :),
     Δt::Union{Real, Nothing} = nothing,
     timealg::NeuralROMs.AbstractTimeAlg = EulerForward(),
@@ -415,7 +411,6 @@ function evolve_CAE(
     # load model
     (NN, p, st), md = loadmodel(modelfile)
 
-    Nt = length(Tdata)
     in_dim  = size(Xdata, 1)
     out_dim = size(Udata, 1)
 
@@ -425,7 +420,9 @@ function evolve_CAE(
     Udata = @view Udata[:, data_kws.Ix, :, data_kws.It]
     Xdata = @view Xdata[:, data_kws.Ix]
     Tdata = @view Tdata[data_kws.It]
+
     Nx = size(Xdata, 2)
+    Nt = length(Tdata)
 
     Ud = Udata[:, :, case, :]
     U0 = Ud[:, :, 1]
@@ -484,8 +481,6 @@ function evolve_CAE(
     # visualization
     #==============#
 
-    modeldir = dirname(modelfile)
-    outdir = joinpath(modeldir, "results")
     mkpath(outdir)
 
     # field visualizations
