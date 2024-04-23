@@ -120,6 +120,7 @@ function makeplots(
     figc = Figure(; size = (1000, 800), backgroundcolor = :white, grid = :off)
     fige = Figure(; size = ( 600, 400), backgroundcolor = :white, grid = :off)
     figp = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
+    figq = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
 
     axt0 = Axis(figt[1,1]; xlabel = L"x", ylabel = L"u(x, t)", xlabelsize = 20, ylabelsize = 20)
     axt1 = Axis(figt[1,2]; xlabel = L"x", ylabel = L"u(x, t)", xlabelsize = 20, ylabelsize = 20)
@@ -132,38 +133,92 @@ function makeplots(
     # FIGP
     #===============================#
 
-    sckwq = (; color = :black, markersize = 25, marker = :star5 , label = L"$\tilde{u}(t=0)$ prediction")
-    lnkwq = (; color = :red  , linewidth = 4, linestyle = :solid, label = L"\text{Prediction}")
-    lnkwp = (; color = :blue , linewidth = 6, linestyle = :dot  , label = L"\text{Dynamics solve}")
-    lnkwt = (; color = :green, linewidth = 6, linestyle = :dash , label = L"\text{Dynamics solve (Large }\Delta t)")
+    if size(pCAE, 1) == 2
+        axkwp = (; xlabel = L"\tilde{u}_1(t)", ylabel = L"\tilde{u}_2(t)", xlabelsize = 20, ylabelsize = 20)
 
-    axkwp = if size(pCAE, 1) == 2
-        (; xlabel = L"\tilde{u}_1(t)", ylabel = L"\tilde{u}_2(t)", xlabelsize = 20, ylabelsize = 20)
-    elseif size(pCAE, 1) == 1
-        axkwp = (; xlabel = L"t", ylabel = L"\tilde{u}(t)", xlabelsize = 20, ylabelsize = 20)
+        axp1 = Axis(figp[1,1]; axkwp...)
+        axp2 = Axis(figp[1,2]; axkwp...)
+        axp3 = Axis(figp[1,3]; axkwp...)
+
+        sckwq = (; color = :black, markersize = 20,)
+        lnkwq = (; color = :red  , linewidth = 4,)
+        lnkwp = (; color = :blue , linewidth = 6,)
+        lnkwt = (; color = :green, linewidth = 6,)
+
+        kwCAE = (; ifdt, sckwq, lnkwq, lnkwp, lnkwt)
+        kwSNF = (; ifdt, sckwq, lnkwq, lnkwp, lnkwt)
+
+        sq, lq, lp, lt = pplot!(axp1, tFOM, pCAE, qCAE, pdtCAE; kwCAE...)
+        sq, lq, lp, lt = pplot!(axp2, tFOM, pSNL, qSNL, pdtSNL; kwSNF...)
+        sq, lq, lp, lt = pplot!(axp3, tFOM, pSNW, qSNW, pdtSNW; kwSNF...)
+
+        Label(figp[2,1], L"(a)")
+        Label(figp[2,2], L"(b)")
+        Label(figp[2,3], L"(c)")
+
+        colsize!(figp.layout, 1, Relative(0.33))
+        colsize!(figp.layout, 2, Relative(0.33))
+        colsize!(figp.layout, 3, Relative(0.33))
+
+        eq = [
+            LineElement(; linestyle = :solid, lnkwq...),
+            MarkerElement(; marker = :star5, sckwq..., points = Point2f[(0.1,0.5)])
+        ]
+
+        elems  = [eq, lp, lt]
+        labels = [L"\text{Learned prediction}", L"\text{Dynamics solve}", L"\text{Dynamics solve (Large }\Delta t)"]
+
+        if !ifdt
+            elems  = elems[1:2]
+            labels = labels[1:2]
+        end
+
+        Legend(figp[3,:], elems, labels; orientation = :horizontal, patchsize = (50, 10))
     end
 
-    axp1 = Axis(figp[1,1]; axkwp...)
-    axp2 = Axis(figp[1,2]; axkwp...)
-    axp3 = Axis(figp[1,3]; axkwp...)
 
-    pplot!(axp1, tFOM, pCAE, qCAE, pdtCAE; ifdt, sckwq, lnkwq, lnkwp, lnkwt)
-    pplot!(axp2, tFOM, pSNL, qSNL, pdtSNL; ifdt, sckwq, lnkwq, lnkwp, lnkwt)
-    pplot!(axp3, tFOM, pSNW, qSNW, pdtSNW; ifdt, sckwq, lnkwq, lnkwp, lnkwt)
+    #===============================#
+    # FIGQ
+    #===============================#
 
-    Label(figp[2,1], L"(a)")
-    Label(figp[2,2], L"(b)")
-    Label(figp[2,3], L"(c)")
+    axkwp = (; xlabel = L"t", ylabel = L"\tilde{u}(t)", xlabelsize = 20, ylabelsize = 20)
 
-    colsize!(figp.layout, 1, Relative(0.33))
-    colsize!(figp.layout, 2, Relative(0.33))
-    colsize!(figp.layout, 3, Relative(0.33))
+    axp1 = Axis(figq[1,1]; axkwp...)
+    axp2 = Axis(figq[1,2]; axkwp...)
+    axp3 = Axis(figq[1,3]; axkwp...)
 
-    # axislegend(axp1)
-    # axislegend(axp2)
-    # axislegend(axp3)
+    lnkwq = (; linewidth = 3, solid_color = [:red   , :blue     ])
+    lnkwp = (; linewidth = 7, solid_color = [:green , :purple   ])
+    lnkwt = (; linewidth = 5, solid_color = [:orange, :turquoise])
 
-    figp[3,:] = Legend(figp, axp1; orientation = :horizontal, patchsize = (50, 10))
+    kwCAE = (; ifdt, lnkwq, lnkwp, lnkwt)
+    kwSNF = (; ifdt, lnkwq, lnkwp, lnkwt)
+
+    lq, lp, lt = ptplot!(axp1, tFOM, pCAE, qCAE, pdtCAE; kwCAE...)
+    lq, lp, lt = ptplot!(axp2, tFOM, pSNL, qSNL, pdtSNL; kwSNF...)
+    lq, lp, lt = ptplot!(axp3, tFOM, pSNW, qSNW, pdtSNW; kwSNF...)
+
+    Label(figq[2,1], L"(a)")
+    Label(figq[2,2], L"(b)")
+    Label(figq[2,3], L"(c)")
+
+    colsize!(figq.layout, 1, Relative(0.33))
+    colsize!(figq.layout, 2, Relative(0.33))
+    colsize!(figq.layout, 3, Relative(0.33))
+
+    elems  = [
+        LineElement(; linestyle = :solid, linewidth = 3, color = :black,),
+        LineElement(; linestyle = :dot  , linewidth = 7, color = :black,),
+        LineElement(; linestyle = :dash , linewidth = 5, color = :black,),
+    ]
+    labels = [L"\text{Learned prediction}", L"\text{Dynamics solve}", L"\text{Dynamics solve (Large }\Delta t)"]
+
+    if !ifdt
+        elems  = elems[1:2]
+        labels = labels[1:2]
+    end
+
+    Legend(figq[3,:], elems, labels; orientation = :horizontal, patchsize = (50, 10))
 
     #===============================#
     # FIGT, FIGE, FIGC
@@ -317,6 +372,7 @@ function makeplots(
     # end
 
     save(joinpath(outdir, casename * "p4.png"), figp)
+    save(joinpath(outdir, casename * "p5.png"), figq)
 
     nothing
 end
@@ -397,23 +453,35 @@ function pplot!(ax, t, p, q, pdt = nothing;
     lnkwt = (;),
 )
     if size(p, 1) == 2
-        scatter!(ax, q[:, 1:1]; sckwq...)
-        lines!(ax, q; lnkwq...)
-        lines!(ax, p; lnkwp...)
-        if ifdt
-            lines!(ax, pdt; lnkwt...)
-        end
-    elseif size(p, 1) == 1
-        scatter!(ax, [0f0,], q[:, 1]; sckwq...)
-        lines!(ax, t, vec(q); lnkwq...)
-        lines!(ax, t, vec(p); lnkwp...)
-
-        if ifdt
-            lines!(ax, t, vec(pdt); lnkwt...)
-        end
+        sq = scatter!(ax, q[:, 1:1]; marker = :star5, sckwq...)
+        lq = lines!(ax, q; linestyle = :solid, lnkwq...)
+        lp = lines!(ax, p; linestyle = :dot  , lnkwp...)
+        lt = ifdt ? lines!(ax, pdt; linestyle = :dash, lnkwt...) : nothing
     else
-        @error "latent size size(p, 1) == $(size(p, 1)) not supported."
+        @warn "latent size size(p, 1) == $(size(p, 1)) not supported."
+        return nothing, nothing, nothing, nothing
     end
+
+    sq, lq, lp, lt
+end
+
+function ptplot!(ax, t, p, q, pdt = nothing;
+    ifdt = false, 
+    lnkwq = (;),
+    lnkwp = (;),
+    lnkwt = (;),
+)
+    lq = series!(ax, t, q; linestyle = :solid, lnkwq...)
+    lp = series!(ax, t, p; linestyle = :dot  , lnkwp...)
+    lt = if ifdt
+        idt = LinRange(1, length(t), size(pdt, 2)) .|> Base.Fix1(round, Int)
+        tdt = t[idt]
+        series!(ax, tdt, pdt; linestyle = :dash, lnkwt...)
+    else
+        nothing
+    end
+
+    lq, lp, lt
 end
 
 #======================================================#
@@ -456,16 +524,16 @@ e3file5 = joinpath(h5dir, "burgers1dcase5.h5")
 e3file6 = joinpath(h5dir, "burgers1dcase6.h5")
 
 makeplots(e1file, outdir, "exp1"; ifdt = true)
-# makeplots(e2file, outdir, "exp2")
-# makeplots(e4file, outdir, "exp4")
-# makeplots(e5file, outdir, "exp5")
-#
-# # makeplots(e3file1, outdir, "exp3case1")
-# # makeplots(e3file3, outdir, "exp3case3")
-# # makeplots(e3file2, outdir, "exp3case2")
-# makeplots(e3file4, outdir, "exp3case4")
-# makeplots(e3file5, outdir, "exp3case5")
-# makeplots(e3file6, outdir, "exp3case6")
+makeplots(e2file, outdir, "exp2")
+makeplots(e4file, outdir, "exp4")
+makeplots(e5file, outdir, "exp5")
+
+# makeplots(e3file1, outdir, "exp3case1")
+# makeplots(e3file3, outdir, "exp3case3")
+# makeplots(e3file2, outdir, "exp3case2")
+makeplots(e3file4, outdir, "exp3case4")
+makeplots(e3file5, outdir, "exp3case5")
+makeplots(e3file6, outdir, "exp3case6")
 
 makeplot_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
 
