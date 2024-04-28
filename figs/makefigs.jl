@@ -1,6 +1,5 @@
 #
 using LinearAlgebra, HDF5, LaTeXStrings
-# using Plots
 using CairoMakie
 
 function makeplots(
@@ -140,7 +139,7 @@ function makeplots(
         axp2 = Axis(figp[1,2]; axkwp...)
         axp3 = Axis(figp[1,3]; axkwp...)
 
-        sckwq = (; color = :black, markersize = 20,)
+        sckwq = (; color = :red  , markersize = 20,)
         lnkwq = (; color = :red  , linewidth = 4,)
         lnkwp = (; color = :blue , linewidth = 6,)
         lnkwt = (; color = :green, linewidth = 6,)
@@ -152,9 +151,9 @@ function makeplots(
         sq, lq, lp, lt = pplot!(axp2, tFOM, pSNL, qSNL, pdtSNL; kwSNF...)
         sq, lq, lp, lt = pplot!(axp3, tFOM, pSNW, qSNW, pdtSNW; kwSNF...)
 
-        Label(figp[2,1], L"(a)")
-        Label(figp[2,2], L"(b)")
-        Label(figp[2,3], L"(c)")
+        Label(figp[2,1], L"\text{(a)}")
+        Label(figp[2,2], L"\text{(b)}")
+        Label(figp[2,3], L"\text{(c)}")
 
         colsize!(figp.layout, 1, Relative(0.33))
         colsize!(figp.layout, 2, Relative(0.33))
@@ -162,18 +161,18 @@ function makeplots(
 
         eq = [
             LineElement(; linestyle = :solid, lnkwq...),
-            MarkerElement(; marker = :star5, sckwq..., points = Point2f[(0.1,0.5)])
+            MarkerElement(; marker = :star5, sckwq..., points = Point2f[(0.05,0.5)])
         ]
 
         elems  = [eq, lp, lt]
-        labels = [L"\text{Learned prediction}", L"\text{Dynamics solve}", L"\text{Dynamics solve (Large }\Delta t)"]
+        labels = [L"\text{Learned prediction}", L"\text{Dynamics solve}", L"\text{Dynamics solve (larger }\Delta t)"]
 
         if !ifdt
             elems  = elems[1:2]
             labels = labels[1:2]
         end
 
-        Legend(figp[3,:], elems, labels; orientation = :horizontal, patchsize = (50, 10))
+        Legend(figp[0,:], elems, labels; orientation = :horizontal, patchsize = (50, 10), framevisible = false)
     end
 
 
@@ -198,27 +197,36 @@ function makeplots(
     lq, lp, lt = ptplot!(axp2, tFOM, pSNL, qSNL, pdtSNL; kwSNF...)
     lq, lp, lt = ptplot!(axp3, tFOM, pSNW, qSNW, pdtSNW; kwSNF...)
 
-    Label(figq[2,1], L"(a)")
-    Label(figq[2,2], L"(b)")
-    Label(figq[2,3], L"(c)")
+    Label(figq[2,1], L"\text{(a)}")
+    Label(figq[2,2], L"\text{(b)}")
+    Label(figq[2,3], L"\text{(c)}")
 
     colsize!(figq.layout, 1, Relative(0.33))
     colsize!(figq.layout, 2, Relative(0.33))
     colsize!(figq.layout, 3, Relative(0.33))
 
-    elems  = [
+    elems = [
         LineElement(; linestyle = :solid, linewidth = 3, color = :black,),
         LineElement(; linestyle = :dot  , linewidth = 7, color = :black,),
         LineElement(; linestyle = :dash , linewidth = 5, color = :black,),
     ]
-    labels = [L"\text{Learned prediction}", L"\text{Dynamics solve}", L"\text{Dynamics solve (Large }\Delta t)"]
+    labels = [L"\text{Dynamics solve}", L"\text{Dynamics solve }(10\times\Delta t)"]
 
     if !ifdt
         elems  = elems[1:2]
-        labels = labels[1:2]
+        labels = labels[1:1]
     end
 
-    Legend(figq[3,:], elems, labels; orientation = :horizontal, patchsize = (50, 10))
+    l1 = L"e_{θ_e}(ū(t; \mathbf{\mu}))"
+    l2 = L"\phi_\eta(t, \mathbf{\mu}) "
+
+    axislegend(axp1, elems, [l1, labels...]; position = :lt, patchsize = (50, 10))
+    axislegend(axp2, elems, [l2, labels...]; position = :lb, patchsize = (50, 10))
+    axislegend(axp3, elems, [l2, labels...]; position = :lb, patchsize = (50, 10))
+
+    if casename == "exp1" # hack to make legend fit
+        ylims!(axp1, -30, 30)
+    end
 
     #===============================#
     # FIGT, FIGE, FIGC
@@ -246,9 +254,9 @@ function makeplots(
         l1, l2, l3
     end
 
-    l1 = (L"(a)", L"(b)", L"(c)", L"(d)")
-    l2 = (L"(e)", L"(f)", L"(g)", L"(h)")
-    l3 = (L"(i)", L"(j)", L"(k)", L"(l)")
+    l1 = (L"\text{(a)}", L"\text{(b)}", L"(\text{c)}", L"\text{(d)}")
+    l2 = (L"\text{(e)}", L"\text{(f)}", L"(\text{g)}", L"\text{(h)}")
+    l3 = (L"\text{(i)}", L"\text{(j)}", L"(\text{k)}", L"\text{(l)}")
 
     for (i, (up, ep, eit, e2t)) in enumerate(zip(upreds, epreds, eitpreds, e2tpreds))
 
@@ -313,8 +321,8 @@ function makeplots(
                 cf1 = contourf!(axc1, xdiag, xdiag, up[:, :, i1]; ctr_kw..., levels = levels[1])
                 cf2 = contourf!(axc2, xdiag, xdiag, up[:, :, i2]; ctr_kw..., levels = levels[2])
 
-                Label(figc[2,j], l1[j])
-                Label(figc[4,j], l2[j])
+                Label(figc[2,j], l1[j], fontsize = 16)
+                Label(figc[4,j], l2[j], fontsize = 16)
             end
 
             ## color plot (error)
@@ -322,7 +330,7 @@ function makeplots(
             cf3 = contourf!(axc3, xdiag, xdiag, abs.(ep[:, :, i2]); ctr_kw...,
                 colorscale = log10, levels = levels[3])
 
-            Label(figc[6,i], l3[i])
+            Label(figc[6,i], l3[i], fontsize = 16)
 
             if i == 1
                 Colorbar(figc[5,5], cf3)
@@ -342,7 +350,7 @@ function makeplots(
     end
 
     axislegend(axe1; position = :lt, patchsize = (30, 10), orientation = :horizontal)
-    figt[2,:] = Legend(figt, axt1; patchsize = (30, 10), orientation = :horizontal)
+    figt[0,:] = Legend(figt, axt1; patchsize = (30, 10), orientation = :horizontal, framevisible = false)
 
     if occursin("exp3", casename)
         ylims!(fige.content[1], 10^-5, 10^-1)
@@ -364,15 +372,11 @@ function makeplots(
 
     linkaxes!(axt0, axt1)
 
-    # save(joinpath(outdir, casename * "p1.eps"), figt)
-    # save(joinpath(outdir, casename * "p2.eps"), fige)
-    #
-    # if in_dim == 2
-    #     save(joinpath(outdir, casename * "p3.eps"), figc)
-    # end
-
-    save(joinpath(outdir, casename * "p4.png"), figp)
-    save(joinpath(outdir, casename * "p5.png"), figq)
+    save(joinpath(outdir, casename * "p1.eps"), figt) # T
+    save(joinpath(outdir, casename * "p2.eps"), fige) # E
+    in_dim == 2 && save(joinpath(outdir, casename * "p3.eps"), figc) # C
+    size(pCAE, 1) == 2 && save(joinpath(outdir, casename * "p4.eps"), figp) # P vs P
+    save(joinpath(outdir, casename * "p5.eps"), figq) # P vs T
 
     nothing
 end
@@ -422,8 +426,8 @@ function makeplot_exp3(
 
         color = colors[i]
         label = labels[i]
-        sckwq = (; color = :black, markersize = 15, marker = :star5,)
-        lnkwq = (; color, label, linewidth = 4, linestyle = :solid,)
+        sckwq = (; color, markersize = 15, marker = :star5,)
+        lnkwq = (; color, label, linewidth = 3, linestyle = :solid,)
         lnkwp = (; color, linewidth = 6, linestyle = :dot,)
 
         pplot!(axp1, tFOM, pCAE, qCAE; sckwq, lnkwq, lnkwp)
@@ -431,17 +435,34 @@ function makeplot_exp3(
         pplot!(axp3, tFOM, pSNW, qSNW; sckwq, lnkwq, lnkwp)
     end
 
-    Label(figp[2,1], L"(a)")
-    Label(figp[2,2], L"(b)")
-    Label(figp[2,3], L"(c)")
+    Label(figp[2,1], L"\text{(a)}", fontsize = 16)
+    Label(figp[2,2], L"\text{(b)}", fontsize = 16)
+    Label(figp[2,3], L"\text{(c)}", fontsize = 16)
 
     colsize!(figp.layout, 1, Relative(0.33))
     colsize!(figp.layout, 2, Relative(0.33))
     colsize!(figp.layout, 3, Relative(0.33))
 
-    figp[3,:] = Legend(figp, axp1; orientation = :horizontal,) # patchsize = (100, 10))
+    figp[0,:] = Legend(figp, axp1; orientation = :horizontal, framevisible = false)
+
+    elems = [
+        [
+            LineElement(; linestyle = :solid, color = :black, linewidth = 3),
+            MarkerElement(; marker = :star5, color = :black, markersize = 15, points = Point2f[(0.05,0.5)])
+        ],
+        LineElement(; linestyle = :dot, color = :black, linewidth = 6),
+    ]
+
+    l1 = [L"e_{θ_e}(ū(t; \mathbf{\mu}))", L"\text{Dynamics solve}"]
+    l2 = [L"\phi_\eta(t, \mathbf{\mu}) ", L"\text{Dynamics solve}"]
+
+    axislegend(axp1, elems, l1; position = :lb, patchsize = (50, 10))
+    axislegend(axp2, elems, l2; position = :lt, patchsize = (50, 10))
+    axislegend(axp3, elems, l2; position = :lt, patchsize = (50, 10))
 
     save(joinpath(outdir, "exp3p.eps"), figp)
+
+    nothing
 end
 
 #======================================================#
@@ -485,29 +506,6 @@ function ptplot!(ax, t, p, q, pdt = nothing;
 end
 
 #======================================================#
-
-"""
-    sync_colorranges!(plotobjects::MakieCore.ScenePlot...)
-
-Set the colorrange of all `plotobjects` to the same value,
-namely the extrema of all z-values of all plotobjects in `plotobjects`.
-
-https://discourse.julialang.org/t/one-colorbar-for-multiple-axes/77021/8
-"""
-# function sync_colorranges!(plotobjects::Makie.MakieCore.ScenePlot...)
-function sync_colorranges!(plotobjects::Makie.Heatmap...)
-    for plt in plotobjects 
-        haskey(plt.attributes.attributes, :colorrange) || error("This function syncronizes the color range of the given plotobjects. One of the plotobjects passed has no color range.")
-    end
-    possible_extremas = [extrema(to_value(plt[3])) for plt in plotobjects]
-    global_extremas = extrema(vcat(collect.(possible_extremas)...))
-    for plt in plotobjects
-        plt.attributes.colorrange[] = global_extremas
-    end
-    return nothing
-end
-
-#======================================================#
 h5dir  = joinpath(@__DIR__, "h5files")
 outdir = joinpath(@__DIR__, "results")
 
@@ -523,17 +521,17 @@ e3file4 = joinpath(h5dir, "burgers1dcase4.h5")
 e3file5 = joinpath(h5dir, "burgers1dcase5.h5")
 e3file6 = joinpath(h5dir, "burgers1dcase6.h5")
 
-makeplots(e1file, outdir, "exp1"; ifdt = true)
-makeplots(e2file, outdir, "exp2")
-makeplots(e4file, outdir, "exp4")
-makeplots(e5file, outdir, "exp5")
-
-# makeplots(e3file1, outdir, "exp3case1")
-# makeplots(e3file3, outdir, "exp3case3")
-# makeplots(e3file2, outdir, "exp3case2")
-makeplots(e3file4, outdir, "exp3case4")
-makeplots(e3file5, outdir, "exp3case5")
-makeplots(e3file6, outdir, "exp3case6")
+# makeplots(e1file, outdir, "exp1"; ifdt = true)
+# makeplots(e2file, outdir, "exp2")
+# makeplots(e4file, outdir, "exp4")
+# makeplots(e5file, outdir, "exp5")
+#
+# # makeplots(e3file1, outdir, "exp3case1")
+# # makeplots(e3file3, outdir, "exp3case3")
+# # makeplots(e3file2, outdir, "exp3case2")
+# makeplots(e3file4, outdir, "exp3case4")
+# makeplots(e3file5, outdir, "exp3case5")
+# makeplots(e3file6, outdir, "exp3case6")
 
 makeplot_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
 
