@@ -372,11 +372,11 @@ function makeplots(
 
     linkaxes!(axt0, axt1)
 
-    save(joinpath(outdir, casename * "p1.eps"), figt) # T
-    save(joinpath(outdir, casename * "p2.eps"), fige) # E
-    in_dim == 2 && save(joinpath(outdir, casename * "p3.eps"), figc) # C
-    size(pCAE, 1) == 2 && save(joinpath(outdir, casename * "p4.eps"), figp) # P vs P
-    save(joinpath(outdir, casename * "p5.eps"), figq) # P vs T
+    save(joinpath(outdir, casename * "p1.pdf"), figt) # T
+    save(joinpath(outdir, casename * "p2.pdf"), fige) # E
+    in_dim == 2 && save(joinpath(outdir, casename * "p3.pdf"), figc) # C
+    size(pCAE, 1) == 2 && save(joinpath(outdir, casename * "p4.pdf"), figp) # P vs P
+    save(joinpath(outdir, casename * "p5.pdf"), figq) # P vs T
 
     nothing
 end
@@ -460,7 +460,7 @@ function makeplot_exp3(
     axislegend(axp2, elems, l2; position = :lt, patchsize = (50, 10))
     axislegend(axp3, elems, l2; position = :lt, patchsize = (50, 10))
 
-    save(joinpath(outdir, "exp3p.eps"), figp)
+    save(joinpath(outdir, "exp3p.pdf"), figp)
 
     nothing
 end
@@ -521,17 +521,17 @@ e3file4 = joinpath(h5dir, "burgers1dcase4.h5")
 e3file5 = joinpath(h5dir, "burgers1dcase5.h5")
 e3file6 = joinpath(h5dir, "burgers1dcase6.h5")
 
-# makeplots(e1file, outdir, "exp1"; ifdt = true)
-# makeplots(e2file, outdir, "exp2")
-# makeplots(e4file, outdir, "exp4")
-# makeplots(e5file, outdir, "exp5")
-#
-# # makeplots(e3file1, outdir, "exp3case1")
-# # makeplots(e3file3, outdir, "exp3case3")
-# # makeplots(e3file2, outdir, "exp3case2")
-# makeplots(e3file4, outdir, "exp3case4")
-# makeplots(e3file5, outdir, "exp3case5")
-# makeplots(e3file6, outdir, "exp3case6")
+makeplots(e1file, outdir, "exp1"; ifdt = true)
+makeplots(e2file, outdir, "exp2")
+makeplots(e4file, outdir, "exp4")
+makeplots(e5file, outdir, "exp5")
+
+# makeplots(e3file1, outdir, "exp3case1")
+# makeplots(e3file3, outdir, "exp3case3")
+# makeplots(e3file2, outdir, "exp3case2")
+makeplots(e3file4, outdir, "exp3case4")
+makeplots(e3file5, outdir, "exp3case5")
+makeplots(e3file6, outdir, "exp3case6")
 
 makeplot_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
 
