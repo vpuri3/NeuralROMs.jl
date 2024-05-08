@@ -50,6 +50,19 @@ function makeplots(
         nothing, nothing, nothing
     end
 
+    tdtFOM, udtFOM, udtCAE, udtSNL, udtSNW = if ifdt
+        tdtFOM = data["tdtFOM"] |> Array
+        udtFOM = data["udtFOM"] |> Array
+        udtCAE = data["udtCAE"] |> Array
+        udtCAE = data["udtCAE"] |> Array
+        udtSNL = data["udtSNL"] |> Array
+        udtSNW = data["udtSNW"] |> Array
+
+        tdtFOM, udtFOM, udtCAE, udtSNL, udtSNW
+    else
+        nothing, nothing, nothing, nothing, nothing
+    end
+
     #======================================================#
 
     in_dim  = size(xFOM, 1)
@@ -103,6 +116,27 @@ function makeplots(
     eitSNW = collect(norm(eSNW[idx..., i]) for i in 1:Nt)
     eitCRM = collect(norm(eCRM[idx..., i]) for i in 1:Nt)
 
+    if ifdt
+        udtFOM = udtFOM[1, ii...]
+        udtCAE = udtCAE[1, ii...]
+        udtSNL = udtSNL[1, ii...]
+        udtSNW = udtSNW[1, ii...]
+
+        nrdt = sum(abs2, udtFOM; dims = 1:in_dim) ./ prod(size(uFOM)[1:in_dim]) .|> sqrt
+
+        edtCAE = (udtFOM - udtCAE) ./ nrdt
+        edtSNL = (udtFOM - udtSNL) ./ nrdt
+        edtSNW = (udtFOM - udtSNW) ./ nrdt
+
+        e2tdtCAE = sum(abs2, edtCAE; dims = 1:in_dim) / Nxyz |> vec
+        e2tdtSNL = sum(abs2, edtSNL; dims = 1:in_dim) / Nxyz |> vec
+        e2tdtSNW = sum(abs2, edtSNW; dims = 1:in_dim) / Nxyz |> vec
+
+        e2tdtCAE = sqrt.(e2tdtCAE) .+ 1f-12
+        e2tdtSNL = sqrt.(e2tdtSNL) .+ 1f-12
+        e2tdtSNW = sqrt.(e2tdtSNW) .+ 1f-12
+    end
+
     upreds   = (uPCA, uCAE, uSNL, uSNW,)
     epreds   = (ePCA, eCAE, eSNL, eSNW,)
     eitpreds = (eitPCA, eitCAE, eitSNL, eitSNW,)
@@ -121,28 +155,31 @@ function makeplots(
     figp = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
     figq = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
 
-    axt0 = Axis(figt[1,1]; xlabel = L"x", ylabel = L"u(x, t)", xlabelsize = 20, ylabelsize = 20)
-    axt1 = Axis(figt[1,2]; xlabel = L"x", ylabel = L"u(x, t)", xlabelsize = 20, ylabelsize = 20)
+    axt0 = Axis(figt[1,1]; xlabel = L"x", ylabel = L"u(x, t)", xlabelsize = 16, ylabelsize = 16)
+    axt1 = Axis(figt[1,2]; xlabel = L"x", ylabel = L"u(x, t)", xlabelsize = 16, ylabelsize = 16)
+    axe1 = Axis(fige[1,1]; xlabel = L"t", ylabel = L"ε(t)", yscale = log10, xlabelsize = 16, ylabelsize = 16)
 
-    axe1 = Axis(fige[1,1]; xlabel = L"t", ylabel = L"ε(t)", yscale = log10, xlabelsize = 20, ylabelsize = 20)
-    # axe2 = Axis(fige[1,2]; xlabel = L"t", ylabel = L"ε_\infty(t)", yscale = log10, xlabelsize = 20, ylabelsize = 20)
-    axe2 = Axis(Figure()[1,1])
+    if ifdt
+        fige = Figure(; size = (900, 400), backgroundcolor = :white, grid = :off)
+        axe1 = Axis(fige[1,1]; xlabel = L"t", ylabel = L"ε(t)", yscale = log10, xlabelsize = 16, ylabelsize = 16)
+        axe2 = Axis(fige[1,2]; xlabel = L"t", ylabel = L"ε(t)", yscale = log10, xlabelsize = 16, ylabelsize = 16)
+    end
 
     #===============================#
     # FIGP
     #===============================#
 
     if size(pCAE, 1) == 2
-        axkwp = (; xlabel = L"\tilde{u}_1(t)", ylabel = L"\tilde{u}_2(t)", xlabelsize = 20, ylabelsize = 20)
+        axkwp = (; xlabel = L"\tilde{u}_1(t)", ylabel = L"\tilde{u}_2(t)", xlabelsize = 16, ylabelsize = 16)
 
         axp1 = Axis(figp[1,1]; axkwp...)
         axp2 = Axis(figp[1,2]; axkwp...)
         axp3 = Axis(figp[1,3]; axkwp...)
 
         sckwq = (; color = :red  , markersize = 20,)
-        lnkwq = (; color = :red  , linewidth = 4,)
-        lnkwp = (; color = :blue , linewidth = 6,)
-        lnkwt = (; color = :green, linewidth = 6,)
+        lnkwq = (; color = :red  , linewidth = 2.5,)
+        lnkwp = (; color = :blue , linewidth = 4.0,)
+        lnkwt = (; color = :green, linewidth = 4.0,)
 
         kwCAE = (; ifdt, sckwq, lnkwq, lnkwp, lnkwt)
         kwSNF = (; ifdt, sckwq, lnkwq, lnkwp, lnkwt)
@@ -151,9 +188,9 @@ function makeplots(
         sq, lq, lp, lt = pplot!(axp2, tFOM, pSNL, qSNL, pdtSNL; kwSNF...)
         sq, lq, lp, lt = pplot!(axp3, tFOM, pSNW, qSNW, pdtSNW; kwSNF...)
 
-        Label(figp[2,1], L"\text{(a)}")
-        Label(figp[2,2], L"\text{(b)}")
-        Label(figp[2,3], L"\text{(c)}")
+        Label(figp[2,1], L"(a) CAE-ROM$$", fontsize = 16)
+        Label(figp[2,2], L"(b) SNFL-ROM$$", fontsize = 16)
+        Label(figp[2,3], L"(c) SNFW-ROM$$", fontsize = 16)
 
         colsize!(figp.layout, 1, Relative(0.33))
         colsize!(figp.layout, 2, Relative(0.33))
@@ -165,7 +202,7 @@ function makeplots(
         ]
 
         elems  = [eq, lp, lt]
-        labels = [L"\text{Learned prediction}", L"\text{Dynamics solve}", L"\text{Dynamics solve (larger }\Delta t)"]
+        labels = [L"\text{Learned prediction}", L"\text{Dynamics evaluation}", L"\text{Dynamics evaluation }(10\times\Delta t)"]
 
         if !ifdt
             elems  = elems[1:2]
@@ -180,15 +217,15 @@ function makeplots(
     # FIGQ
     #===============================#
 
-    axkwp = (; xlabel = L"t", ylabel = L"\tilde{u}(t)", xlabelsize = 20, ylabelsize = 20)
+    axkwp = (; xlabel = L"t", ylabel = L"\tilde{u}(t)", xlabelsize = 16, ylabelsize = 16)
 
     axp1 = Axis(figq[1,1]; axkwp...)
     axp2 = Axis(figq[1,2]; axkwp...)
     axp3 = Axis(figq[1,3]; axkwp...)
 
-    lnkwq = (; linewidth = 3, solid_color = [:red   , :blue     ])
-    lnkwp = (; linewidth = 7, solid_color = [:green , :purple   ])
-    lnkwt = (; linewidth = 5, solid_color = [:orange, :turquoise])
+    lnkwq = (; linewidth = 2.5, solid_color = [:red    , :blue  ])
+    lnkwp = (; linewidth = 4.0, solid_color = [:magenta, :cyan  ])
+    lnkwt = (; linewidth = 4.0, solid_color = [:pink   , :purple])
 
     kwCAE = (; ifdt, lnkwq, lnkwp, lnkwt)
     kwSNF = (; ifdt, lnkwq, lnkwp, lnkwt)
@@ -197,35 +234,35 @@ function makeplots(
     lq, lp, lt = ptplot!(axp2, tFOM, pSNL, qSNL, pdtSNL; kwSNF...)
     lq, lp, lt = ptplot!(axp3, tFOM, pSNW, qSNW, pdtSNW; kwSNF...)
 
-    Label(figq[2,1], L"\text{(a)}")
-    Label(figq[2,2], L"\text{(b)}")
-    Label(figq[2,3], L"\text{(c)}")
+    Label(figq[2,1], L"(a) CAE-ROM$$", fontsize = 16)
+    Label(figq[2,2], L"(b) SNFL-ROM$$", fontsize = 16)
+    Label(figq[2,3], L"(c) SNFW-ROM$$", fontsize = 16)
 
     colsize!(figq.layout, 1, Relative(0.33))
     colsize!(figq.layout, 2, Relative(0.33))
     colsize!(figq.layout, 3, Relative(0.33))
 
     elems = [
-        LineElement(; linestyle = :solid, linewidth = 3, color = :black,),
-        LineElement(; linestyle = :dot  , linewidth = 7, color = :black,),
-        LineElement(; linestyle = :dash , linewidth = 5, color = :black,),
+        LineElement(; linestyle = :solid, linewidth = 2.5, color = :black,),
+        LineElement(; linestyle = :dot  , linewidth = 4.0, color = :black,),
+        LineElement(; linestyle = :dash , linewidth = 4.0, color = :black,),
     ]
-    labels = [L"\text{Dynamics solve}", L"\text{Dynamics solve }(10\times\Delta t)"]
+    labels = [L"\text{Dynamics evaluation}", L"\text{Dynamics evaluation }(10\times\Delta t)"]
 
     if !ifdt
         elems  = elems[1:2]
         labels = labels[1:1]
     end
 
-    l1 = L"e_{θ_e}(ū(t; \mathbf{\mu}))"
-    l2 = L"\phi_\eta(t, \mathbf{\mu}) "
+    l1 = L"Learned prediction $e_{θ_e}(ū(t; \mathbf{\mu}))$"
+    l2 = L"Learned prediction $\phi_\eta(t, \mathbf{\mu})$"
 
-    axislegend(axp1, elems, [l1, labels...]; position = :lt, patchsize = (50, 10))
-    axislegend(axp2, elems, [l2, labels...]; position = :lb, patchsize = (50, 10))
-    axislegend(axp3, elems, [l2, labels...]; position = :lb, patchsize = (50, 10))
+    axislegend(axp1, elems, [l1, labels...]; position = :lt, patchsize = (40, 10))
+    axislegend(axp2, elems, [l2, labels...]; position = :lb, patchsize = (40, 10))
+    axislegend(axp3, elems, [l2, labels...]; position = :lb, patchsize = (40, 10))
 
     if casename == "exp1" # hack to make legend fit
-        ylims!(axp1, -30, 30)
+        ylims!(axp1, -30, 35)
     end
 
     #===============================#
@@ -234,7 +271,7 @@ function makeplots(
 
     colors = (:orange, :green, :blue, :red, :brown,)
     styles = (:solid, :dash, :dashdot, :dashdotdot, :dot)
-    labels = ("POD", "CAE", "SNFL", "SNFW", "CROM")
+    labels = (L"POD-ROM$$", L"CAE-ROM$$", L"SNFL-ROM$$", L"SNFW-ROM$$",)
 
     levels = if occursin("exp2", casename)
         n = 11
@@ -254,9 +291,9 @@ function makeplots(
         l1, l2, l3
     end
 
-    l1 = (L"\text{(a)}", L"\text{(b)}", L"(\text{c)}", L"\text{(d)}")
-    l2 = (L"\text{(e)}", L"\text{(f)}", L"(\text{g)}", L"\text{(h)}")
-    l3 = (L"\text{(i)}", L"\text{(j)}", L"(\text{k)}", L"\text{(l)}")
+    l1 = (L"(a) FOM$$"    , L"(b) POD-ROM$$", L"(c) CAE-ROM$$" , L"(d) SNFW-ROM$$")
+    l2 = (L"(e) FOM$$"    , L"(f) POD-ROM$$", L"(g) CAE-ROM$$" , L"(h) SNFW-ROM$$")
+    l3 = (L"(i) POD-ROM$$", L"(j) CAE-ROM$$", L"(k) SNFL-ROM$$", L"(l) SNFW-ROM$$")
 
     for (i, (up, ep, eit, e2t)) in enumerate(zip(upreds, epreds, eitpreds, e2tpreds))
 
@@ -272,8 +309,8 @@ function makeplots(
             x = vec(xFOM)
 
             if i == 1
-                lines!(axt0, x, uFOM[:, i1]; linewidth = 5, label = "FOM", color = :black)
-                lines!(axt1, x, uFOM[:, i2]; linewidth = 5, label = "FOM", color = :black)
+                lines!(axt0, x, uFOM[:, i1]; linewidth = 3, label = L"FOM$$", color = :black)
+                lines!(axt1, x, uFOM[:, i2]; linewidth = 3, label = L"FOM$$", color = :black)
             end
 
             lines!(axt0, x, up[:, i1]; plt_kw...)
@@ -294,8 +331,8 @@ function makeplots(
                 Colorbar(figc[1,5], cf1)
                 Colorbar(figc[3,5], cf2)
 
-                Label(figc[2,1], l1[1])
-                Label(figc[4,1], l2[1])
+                Label(figc[2,1], l1[1], fontsize = 16)
+                Label(figc[4,1], l2[1], fontsize = 16)
 
                 ## diagonal line plots
                 uddiag1 = diag(uFOM[:, :, i1])
@@ -307,8 +344,8 @@ function makeplots(
                 axt0.ylabel = L"u(x = y, t)"
                 axt1.ylabel = L"u(x = y, t)"
 
-                lines!(axt0, xdiag, uddiag1; linewidth = 5, label = "FOM", color = :black)
-                lines!(axt1, xdiag, uddiag2; linewidth = 5, label = "FOM", color = :black)
+                lines!(axt0, xdiag, uddiag1; linewidth = 3, label = L"FOM$$", color = :black)
+                lines!(axt1, xdiag, uddiag2; linewidth = 3, label = L"FOM$$", color = :black)
             end
 
             ## color plot (t0, t1)
@@ -346,11 +383,32 @@ function makeplots(
 
         ## error plot
         lines!(axe1, tFOM, e2t; linewidth = 3, label = labels[i], plt_kw...)
-        lines!(axe2, tFOM, eit; linewidth = 3, label = labels[i], plt_kw...)
     end
 
-    axislegend(axe1; position = :lt, patchsize = (30, 10), orientation = :horizontal)
+    if ifdt
+        lines!(axe2, tdtFOM, e2tdtCAE; linewidth = 3, label = labels[2], color = colors[2], linestyle = styles[2])
+        lines!(axe2, tdtFOM, e2tdtSNL; linewidth = 3, label = labels[3], color = colors[3], linestyle = styles[3])
+        lines!(axe2, tdtFOM, e2tdtSNW; linewidth = 3, label = labels[4], color = colors[4], linestyle = styles[4])
+
+        linkaxes!(axe1, axe2)
+
+        Label(fige[2,1], L"(a) Dynamics evaluation $$", fontsize = 16)
+        Label(fige[2,2], L"(b) Dynamics evaluation $(10×Δt)$", fontsize = 16)
+        colsize!(fige.layout, 1, Relative(0.50))
+        colsize!(fige.layout, 2, Relative(0.50))
+    end
+
+    # axislegend(axe1; position = :lt, patchsize = (30, 10), orientation = :horizontal)
+    fige[0,:] = Legend(fige, axe1, patchsize = (30, 10), orientation = :horizontal, framevisible = false)
     figt[0,:] = Legend(figt, axt1; patchsize = (30, 10), orientation = :horizontal, framevisible = false)
+
+    t1 = round(sigdigits=3, tFOM[i1])
+    t2 = round(sigdigits=3, tFOM[i2])
+
+    Label(figt[2,1], L"(a) $t = %$(t1)$", fontsize = 16)
+    Label(figt[2,2], L"(b) $t = %$(t2)$", fontsize = 16)
+    colsize!(figt.layout, 1, Relative(0.50))
+    colsize!(figt.layout, 2, Relative(0.50))
 
     if occursin("exp3", casename)
         ylims!(fige.content[1], 10^-5, 10^-1)
@@ -388,19 +446,35 @@ function makeplot_exp3(
     ifdt::Bool = false,
 )
     figp = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
+    fige = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
 
     axkwp = (;
         xlabel = L"\tilde{u}_1(t)",
         ylabel = L"\tilde{u}_2(t)",
-        xlabelsize = 20,
-        ylabelsize = 20,
+        xlabelsize = 16,
+        ylabelsize = 16,
     )
 
     axp1 = Axis(figp[1,1]; axkwp...)
     axp2 = Axis(figp[1,2]; axkwp...)
     axp3 = Axis(figp[1,3]; axkwp...)
 
-    # is there a 2D colormap ??
+    axkwe = (;
+        xlabel = L"t",
+        ylabel = L"ε(t)",
+        yscale = log10,
+        xlabelsize = 16,
+        ylabelsize = 16,
+    )
+
+    axe1 = Axis(fige[1,1]; axkwe...)
+    axe2 = Axis(fige[1,2]; axkwe...)
+    axe3 = Axis(fige[1,3]; axkwe...)
+
+    #===============================#
+    # FIGP
+    #===============================#
+
     labels = (
         L"$\mu = 0.500$ (Training)",
         L"$\mu = 0.525$ (Interpolation)",
@@ -427,17 +501,17 @@ function makeplot_exp3(
         color = colors[i]
         label = labels[i]
         sckwq = (; color, markersize = 15, marker = :star5,)
-        lnkwq = (; color, label, linewidth = 3, linestyle = :solid,)
-        lnkwp = (; color, linewidth = 6, linestyle = :dot,)
+        lnkwq = (; color, label, linewidth = 2.5, linestyle = :solid,)
+        lnkwp = (; color, linewidth = 4, linestyle = :dot,)
 
         pplot!(axp1, tFOM, pCAE, qCAE; sckwq, lnkwq, lnkwp)
         pplot!(axp2, tFOM, pSNL, qSNL; sckwq, lnkwq, lnkwp)
         pplot!(axp3, tFOM, pSNW, qSNW; sckwq, lnkwq, lnkwp)
     end
 
-    Label(figp[2,1], L"\text{(a)}", fontsize = 16)
-    Label(figp[2,2], L"\text{(b)}", fontsize = 16)
-    Label(figp[2,3], L"\text{(c)}", fontsize = 16)
+    Label(figp[2,1], L"(a) CAE-ROM$$" , fontsize = 16)
+    Label(figp[2,2], L"(b) SNFL-ROM$$", fontsize = 16)
+    Label(figp[2,3], L"(c) SNFW-ROM$$", fontsize = 16)
 
     colsize!(figp.layout, 1, Relative(0.33))
     colsize!(figp.layout, 2, Relative(0.33))
@@ -453,14 +527,89 @@ function makeplot_exp3(
         LineElement(; linestyle = :dot, color = :black, linewidth = 6),
     ]
 
-    l1 = [L"e_{θ_e}(ū(t; \mathbf{\mu}))", L"\text{Dynamics solve}"]
-    l2 = [L"\phi_\eta(t, \mathbf{\mu}) ", L"\text{Dynamics solve}"]
+    l1 = [L"Learned prediction $e_{θ_e}(ū(t; \mathbf{\mu}))$", L"\text{Dynamics evaluation}"]
+    l2 = [L"Learned prediction $\phi_\eta(t, \mathbf{\mu})$" , L"\text{Dynamics evaluation}"]
 
-    axislegend(axp1, elems, l1; position = :lb, patchsize = (50, 10))
-    axislegend(axp2, elems, l2; position = :lt, patchsize = (50, 10))
-    axislegend(axp3, elems, l2; position = :lt, patchsize = (50, 10))
+    axislegend(axp1, elems, l1; position = :lt, patchsize = (40, 10))
+    axislegend(axp2, elems, l2; position = :lt, patchsize = (40, 10))
+    axislegend(axp3, elems, l2; position = :lt, patchsize = (40, 10))
+
+    ylims!(axp1, -8, 20)
 
     save(joinpath(outdir, "exp3p.pdf"), figp)
+
+    #===============================#
+    # FIGE
+    #===============================#
+
+    colors = (:orange, :green, :blue, :red, :brown,)
+    styles = (:solid, :dash, :dashdot, :dashdotdot, :dot)
+    labels = (L"POD-ROM$$", L"CAE-ROM$$", L"SNFL-ROM$$", L"SNFW-ROM$$",)
+
+    in_dim, out_dim = 1, 1
+    Nxyz = 1024
+
+    for (j, datafile) in enumerate(datafiles[4:6])
+        data = h5open(datafile)
+        tFOM = Array(data["tFOM"])
+        uFOM = Array(data["uFOM"])[1, :, :]
+        uPCA = Array(data["uPCA"])[1, :, :]
+        uCAE = Array(data["uCAE"])[1, :, :]
+        uSNL = Array(data["uSNL"])[1, :, :]
+        uSNW = Array(data["uSNW"])[1, :, :]
+
+        nr = sum(abs2, uFOM; dims = 1:in_dim) ./ prod(size(uFOM)[1:in_dim]) .|> sqrt
+
+        ePCA = (uFOM - uPCA) ./ nr
+        eCAE = (uFOM - uCAE) ./ nr
+        eSNL = (uFOM - uSNL) ./ nr
+        eSNW = (uFOM - uSNW) ./ nr
+
+        e2tPCA = sum(abs2, ePCA; dims = 1:in_dim) / Nxyz |> vec
+        e2tCAE = sum(abs2, eCAE; dims = 1:in_dim) / Nxyz |> vec
+        e2tSNL = sum(abs2, eSNL; dims = 1:in_dim) / Nxyz |> vec
+        e2tSNW = sum(abs2, eSNW; dims = 1:in_dim) / Nxyz |> vec
+
+        e2tPCA = sqrt.(e2tPCA) .+ 1f-12
+        e2tCAE = sqrt.(e2tCAE) .+ 1f-12
+        e2tSNL = sqrt.(e2tSNL) .+ 1f-12
+        e2tSNW = sqrt.(e2tSNW) .+ 1f-12
+
+        plt_kw = Tuple(
+            (; linewidth = 3, color = colors[i], linestyle = styles[i], label = labels[i])
+            for i in 1:4
+        )
+
+        if j == 1     # interpolation
+            lines!(axe2, tFOM, e2tPCA; plt_kw[1]...)
+            lines!(axe2, tFOM, e2tCAE; plt_kw[2]...)
+            lines!(axe2, tFOM, e2tSNL; plt_kw[3]...)
+            lines!(axe2, tFOM, e2tSNW; plt_kw[4]...)
+        elseif j == 2 # training
+            lines!(axe1, tFOM, e2tPCA; plt_kw[1]...)
+            lines!(axe1, tFOM, e2tCAE; plt_kw[2]...)
+            lines!(axe1, tFOM, e2tSNL; plt_kw[3]...)
+            lines!(axe1, tFOM, e2tSNW; plt_kw[4]...)
+        elseif j == 3 # extrapolation
+            lines!(axe3, tFOM, e2tPCA; plt_kw[1]...)
+            lines!(axe3, tFOM, e2tCAE; plt_kw[2]...)
+            lines!(axe3, tFOM, e2tSNL; plt_kw[3]...)
+            lines!(axe3, tFOM, e2tSNW; plt_kw[4]...)
+        end
+    end
+
+    linkaxes!(axe1, axe2, axe3)
+    fige[0,:] = Legend(fige, axe1, patchsize = (30, 10), orientation = :horizontal, framevisible = false)
+
+    Label(fige[2,1], L"(a) $μ=0.600$ (training)"     , fontsize = 16)
+    Label(fige[2,2], L"(b) $μ=0.575$ (interpolation)", fontsize = 16)
+    Label(fige[2,3], L"(c) $μ=0.625$ (extrapolation)", fontsize = 16)
+
+    colsize!(fige.layout, 1, Relative(0.33))
+    colsize!(fige.layout, 2, Relative(0.33))
+    colsize!(fige.layout, 3, Relative(0.33))
+
+    save(joinpath(outdir, "exp3e.pdf"), fige)
 
     nothing
 end
@@ -522,16 +671,16 @@ e3file5 = joinpath(h5dir, "burgers1dcase5.h5")
 e3file6 = joinpath(h5dir, "burgers1dcase6.h5")
 
 makeplots(e1file, outdir, "exp1"; ifdt = true)
-makeplots(e2file, outdir, "exp2")
+makeplots(e2file, outdir, "exp2"; ifdt = true)
 makeplots(e4file, outdir, "exp4")
 makeplots(e5file, outdir, "exp5")
 
 # makeplots(e3file1, outdir, "exp3case1")
 # makeplots(e3file3, outdir, "exp3case3")
 # makeplots(e3file2, outdir, "exp3case2")
-makeplots(e3file4, outdir, "exp3case4")
+# makeplots(e3file4, outdir, "exp3case4")
 makeplots(e3file5, outdir, "exp3case5")
-makeplots(e3file6, outdir, "exp3case6")
+# makeplots(e3file6, outdir, "exp3case6")
 
 makeplot_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
 
