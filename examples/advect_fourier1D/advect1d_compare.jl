@@ -84,9 +84,9 @@ outdir_SNW = joinpath(modeldir_SNW, "dt")
 outdir_SNL = joinpath(modeldir_SNL, "dt")
 outdir_CAE = joinpath(modeldir_CAE, "dt")
 
-evolve_SNF(prob, datafile, modelfile_SNW, 1; rng, outdir = outdir_SNW, evolve_kw..., device)
-# evolve_SNF(prob, datafile, modelfile_SNL, 1; rng, outdir = outdir_SNL, evolve_kw..., device)
 # evolve_CAE(prob, datafile, modelfile_CAE, 1; rng, outdir = outdir_CAE, evolve_kw...,)
+# evolve_SNF(prob, datafile, modelfile_SNL, 1; rng, outdir = outdir_SNL, evolve_kw..., device)
+# evolve_SNF(prob, datafile, modelfile_SNW, 1; rng, outdir = outdir_SNW, evolve_kw..., device)
 
 # #==================#
 # # make figures

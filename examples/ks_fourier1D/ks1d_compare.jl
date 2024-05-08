@@ -46,10 +46,10 @@ modeldir_INR = joinpath(@__DIR__, "model_INR$(l0)") # C-ROM
 # train_params_SNL = (; E = 1400, wd = 128, α = 1f-7, makedata_kws,)
 # train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
 #
-# # train conv INR
-# train_params_INR = (; E = 1400, we = 64, wd = 128, act = elu, makedata_kws,)
-# train_CINR_compare(prob, latent, datafile, modeldir_INR, train_params_INR; rng, device,)
-#
+# # # train conv INR
+# # train_params_INR = (; E = 1400, we = 64, wd = 128, act = elu, makedata_kws,)
+# # train_CINR_compare(prob, latent, datafile, modeldir_INR, train_params_INR; rng, device,)
+
 #==================#
 # postprocess
 #==================#
@@ -65,17 +65,28 @@ modelfile_INR = joinpath(modeldir_INR, "model_07.jld2")
 # postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
 # postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 
-# evolve_kw = (; autodiff_xyz = AutoFiniteDiff(), ϵ_xyz = 0.05f0,)
-# postprocess_CINR(prob, datafile, modelfile_INR; rng, device, evolve_kw,)
+# T  = 0.1f0
+# Nt = 1000
+# It = LinRange(1, Nt, 5) .|> Base.Fix1(round, Int)
+# data_kws = (; Ix = :, It)
+# evolve_kw = (; Δt = T, data_kws, adaptive = false)
+#
+# outdir_SNW = joinpath(modeldir_SNW, "dt")
+# outdir_SNL = joinpath(modeldir_SNL, "dt")
+# outdir_CAE = joinpath(modeldir_CAE, "dt")
+#
+# evolve_CAE(prob, datafile, modelfile_CAE, 1; rng, outdir = outdir_CAE, evolve_kw...,)
+# evolve_SNF(prob, datafile, modelfile_SNL, 1; rng, outdir = outdir_SNL, evolve_kw..., device)
+# evolve_SNF(prob, datafile, modelfile_SNW, 1; rng, outdir = outdir_SNW, evolve_kw..., device)
 
 #==================#
 # make figures
 #==================#
 grid = (256,)
 casename = "ks1d"
-modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW, modeldir_INR)
-labels = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)", "CROM")
+modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
+labels = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)",)
 
-p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid)
+p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid; ifdt = true)
 #======================================================#
 nothing
