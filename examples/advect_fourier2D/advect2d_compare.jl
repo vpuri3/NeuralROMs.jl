@@ -64,8 +64,8 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 
 # postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
 # postprocess_CAE(prob, datafile, modelfile_CAE; rng)#, device)
-postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
-postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
+# postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
+# postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 
 #==================#
 # small DT
@@ -82,8 +82,8 @@ outdir_SNL = joinpath(modeldir_SNL, "dt")
 outdir_SNW = joinpath(modeldir_SNW, "dt")
 
 # evolve_CAE(prob, datafile, modelfile_CAE, 1; rng, outdir = outdir_CAE, evolve_kw...,)
-evolve_SNF(prob, datafile, modelfile_SNL, 1; rng, outdir = outdir_SNL, evolve_kw..., device)
-evolve_SNF(prob, datafile, modelfile_SNW, 1; rng, outdir = outdir_SNW, evolve_kw..., device)
+# evolve_SNF(prob, datafile, modelfile_SNL, 1; rng, outdir = outdir_SNL, evolve_kw..., device)
+# evolve_SNF(prob, datafile, modelfile_SNW, 1; rng, outdir = outdir_SNW, evolve_kw..., device)
 
 #==================#
 # make figures

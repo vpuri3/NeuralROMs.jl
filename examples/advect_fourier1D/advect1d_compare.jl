@@ -91,10 +91,10 @@ outdir_CAE = joinpath(modeldir_CAE, "dt")
 # #==================#
 # # make figures
 # #==================#
-# grid = (128,)
-# casename = "advect1d"
-# modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW)
-# label = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
-#
-# p1, p2, p3 = compare_plots(modeldirs, label, @__DIR__, casename, 1, grid; ifdt = true)
+grid = (128,)
+casename = "advect1d"
+modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW)
+label = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
+
+p1, p2, p3 = compare_plots(modeldirs, label, @__DIR__, casename, 1, grid; ifdt = true)
 #======================================================#

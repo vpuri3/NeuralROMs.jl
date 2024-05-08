@@ -263,15 +263,27 @@ function compare_plots(
             h5dict = Dict(h5dict..., "p$(suffix[i])" => Pp)
             h5dict = Dict(h5dict..., "q$(suffix[i])" => Pe)
 
-            # small dt
+            # large dt
             if ifdt
                 e = jldopen(joinpath(modeldir, "dt", "evolve$(case).jld2"))
                 pdt = e["Ppred"]
+                udt = e["Upred"]
+                Ntdt = size(udt)[3]
+                udt = reshape(udt, (out_dim, grid..., Ntdt))
+
+                if i == 2
+                    tdtFOM = e["Tdata"] |> Array
+                    udtFOM = reshape(e["Udata"], (out_dim, grid..., Ntdt))
+
+                    h5dict = Dict(h5dict..., "tdtFOM" => tdtFOM)
+                    h5dict = Dict(h5dict..., "udtFOM" => udtFOM)
+                end
+
                 h5dict = Dict(h5dict..., "pdt$(suffix[i])" => pdt)
+                h5dict = Dict(h5dict..., "udt$(suffix[i])" => udt)
             end
         end
     end
-
 
     png(p1, joinpath(outdir, "compare_t0_case$(case)"))
     png(p2, joinpath(outdir, "compare_t1_case$(case)"))
