@@ -1,5 +1,6 @@
 #
 #======================================================#
+using Lux: initialstates
 """
     ImplicitEncoderDecoder
 
@@ -305,6 +306,74 @@ function (hn::HyperNet)((x, y)::T, ps, st::NamedTuple) where {T <: Tuple}
     @set! st.evaluator = st_
     return pred, st
 end
+
+#======================================================#
+# Kolmogorov-Arnold Layer
+# https://github.com/mintisan/awesome-kan
+# https://github.com/ZiyaoLi/fast-kan/tree/master
+#======================================================#
+# function rbf(x, z, h)
+#     exp(-((x - z)/h)^2)
+# end
+#
+# export KDense
+# @concrete struct KDense <: Lux.AbstractExplicitLayer
+#     in_dims::Int
+#     out_dims::Int
+#     grid_len::Int
+#     denominator
+#     normalizer
+#     init_W1
+#     init_W2
+#     base_act
+#     use_base_activation
+# end
+#
+# function KDense(
+#     in_dims::Int,
+#     out_dims::Int
+#     grid_len::Int;
+#     denominator = Float32(2 / (grid_len - 1)),
+#     init_W1 = glorot_uniform,
+#     init_W2 = glorot_uniform,
+#     use_base_activation = true,
+#     use_fast_activation::Bool = true,
+# )
+#     normalizer = use_fast_activation ? tanh_fast : tanh
+#
+#     KDense(
+#         in_dims, out_dims, grid_len, denominator, init_W, normalizer,
+#     )
+# end
+#
+# function initialparameters(rng::AbstractRNG, l::KDense,)
+#     (;
+#         W1 = l.init_weight(l.out_dims, l.grid_len * l.in_dims),
+#         W2 = l.init_weight(l.out_dims, l.in_dims),
+#     )
+# end
+#
+# function initialstates(rng::AbstractRNG, l::KDense,)
+#     (; grid = collect(LinRange(-1, 1, l.grid_len)),)
+# end
+#
+# function (l::KDense)(x::AbstractVecOrMat, p, st)
+#     K = size(x, 2)              # [I, K]
+#     x_resh = reshape(x, 1, :)   # [1, I * K]
+#     x_norm = normalizer(x_resh) # ∈ [-1, 1]
+#
+#     basis = rbf(x, st.grid, l.denominator)            # [G, I * K]
+#     basis = reshape(basis, l.grid_len * l.in_dims, K) # [G * I, K]
+#     spline = p.W1 * basis                             # [O, K]
+#
+#     y = if use_base_activation
+#         spline + p.W2 * l.base_act(x)
+#     else
+#         spline
+#     end
+#
+#     y, st
+# end 
 
 #======================================================#
 # Sine Layer

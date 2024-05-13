@@ -269,14 +269,16 @@ function normalize_x(x::AbstractMatrix)
 end
 
 """
-Input size `[out_dim, Npoints, Nparam, Ntime]`
+Input size `[out_dim, ...]`
 """
-function normalize_u(u::AbstractArray{T,4}) where{T}
+function normalize_u(u::AbstractArray{T,N}) where{T} where{N}
 
     out_dim = size(u, 1)
+    dims = 2:N
+    den  = prod(size(u)[dims])
 
-    ū  = sum(u, dims = (2,3,4)) / (length(u) ÷ out_dim) |> vec
-    σu = sum(abs2, u .- ū, dims = (2,3,4)) / (length(u) ÷ out_dim) .|> sqrt |> vec
+    ū  = sum(u; dims) / den |> vec
+    σu = sum(abs2, u .- ū; dims) / den .|> sqrt |> vec
     u  = normalizedata(u, ū, σu)
 
     u, ū, σu
@@ -557,7 +559,9 @@ function ps_indices(NN, property::Symbol;
     idx
 end
 
-function ps_W_indices(NN, property::Symbol;
+function ps_W_indices(
+    NN,
+    property::Union{Symbol, Nothing} = nothing;
     rng::Random.AbstractRNG = Random.default_rng(),
 )
     p = Lux.setup(copy(rng), NN)[1]
@@ -565,7 +569,7 @@ function ps_W_indices(NN, property::Symbol;
 
     idx = Int32[]
 
-    pprop = getproperty(p, property)
+    pprop = isnothing(property) ? p : getproperty(p, property)
 
     for lname in propertynames(pprop)
         w = getproperty(pprop, lname).weight # reshaped array

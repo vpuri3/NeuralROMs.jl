@@ -670,19 +670,19 @@ e3file4 = joinpath(h5dir, "burgers1dcase4.h5")
 e3file5 = joinpath(h5dir, "burgers1dcase5.h5")
 e3file6 = joinpath(h5dir, "burgers1dcase6.h5")
 
-makeplots(e1file, outdir, "exp1"; ifdt = true)
-makeplots(e2file, outdir, "exp2"; ifdt = true)
-makeplots(e4file, outdir, "exp4")
-makeplots(e5file, outdir, "exp5")
-
-# makeplots(e3file1, outdir, "exp3case1")
-# makeplots(e3file3, outdir, "exp3case3")
-# makeplots(e3file2, outdir, "exp3case2")
-# makeplots(e3file4, outdir, "exp3case4")
-makeplots(e3file5, outdir, "exp3case5")
-# makeplots(e3file6, outdir, "exp3case6")
-
-makeplot_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
+# makeplots(e1file, outdir, "exp1"; ifdt = true)
+makeplots(e2file, outdir, "exp2"; ifdt = false)
+# makeplots(e4file, outdir, "exp4")
+# makeplots(e5file, outdir, "exp5")
+#
+# # makeplots(e3file1, outdir, "exp3case1")
+# # makeplots(e3file3, outdir, "exp3case3")
+# # makeplots(e3file2, outdir, "exp3case2")
+# # makeplots(e3file4, outdir, "exp3case4")
+# makeplots(e3file5, outdir, "exp3case5")
+# # makeplots(e3file6, outdir, "exp3case6")
+#
+# makeplot_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
 
 #======================================================#
 nothing

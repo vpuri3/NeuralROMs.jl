@@ -176,6 +176,76 @@ end
 #=====================================================================#
 
 """
+    regularize_decoder(lossfun, σ, λ1, λ2, property)(NN, p, st, batch) -> l, st, stats
+
+code reg loss, L1/L2 on decoder
+`lossfun(..) + 1/σ² ||ũ||₂² + L1/L2 on decoder + Lipschitz reg. on decoder`
+"""
+function regularize_decoder(
+    lossfun;
+    α::T = 0f0,
+    λ1::T = 0f0,
+    λ2::T = 0f0,
+    lname::Symbol = :mse,
+) where{T<:Real}
+
+    function regularize_decoder_internal(NN, p, st::NamedTuple, batch::Tuple)
+        @assert eltype(p) == T
+        N = numobs(batch)
+        l, st_new, stats = lossfun(NN, p, st, batch)
+
+        if p isa AbstractArray
+            @assert eltype(p) === T "got $(eltype(p)) === $(T)."
+            @assert eltype(l) === T "got $(eltype(l)) === $(T)."
+        end
+
+        lstats = NamedTuple{(lname,)}((l,))
+        stats = (; stats..., lstats...)
+
+        ###
+        # Lipschitz reg
+        ###
+
+        lcond, stats = if iszero(α)
+            zero(T), stats
+        else
+            cbound = compute_cbound(NN, p, st)
+            lcond  = cbound * α / N
+            lcond, (; stats..., cbound, lcond)
+        end
+
+        ###
+        # elastic reg
+        ###
+
+        N = length(p)
+
+        l1, stats = if iszero(λ1)
+            zero(T), stats
+        else
+            l1 = λ1 * sum(abs , p) / N 
+            l1, (; stats..., l1,)
+        end
+
+        l2, stats = if iszero(λ2)
+            zero(T), stats
+        else
+            l2 = T(0.5) * λ2 * sum(abs2, p) / N
+            l2, (; stats..., l2,)
+        end
+
+        ###
+        # sum
+        ###
+
+        loss = l + lcond + l1 + l2
+
+        loss, st_new, stats
+    end
+end
+#=====================================================================#
+
+"""
     regularize_autodecoder(lossfun, σ, λ1, λ2, property)(NN, p, st, batch) -> l, st, stats
 
 code reg loss, L1/L2 on decoder

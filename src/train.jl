@@ -83,7 +83,7 @@ function train_model(
 
     p, st = (p, st) |> device
 
-    @assert eltype(p) ∈ (Float32, ComplexF32)
+    @assert eltype(p) ∈ (Float32, ComplexF32) "eltype(p) = $(eltype(p))"
     # @assert eltype(first(_loader))
     # @assert eltype(data) ∈ (Bool, Int8, Int16, Int32, Float32, ComplexF32)
 
@@ -674,8 +674,7 @@ function optimize(
         dsize = numobs(__loader)
         bsize = numobs(first(__loader))
 
-        @info "Using optimizer " * string(opt) * " with batchsize $bsize" *
-            " with data set of $dsize samples."
+        @info "Using batchsize $bsize with data set of $dsize samples."
 
         @assert length(__loader) == 1 "__loader must have exactly one minibatch."
 
@@ -704,12 +703,10 @@ function optimize(
     #======================#
 
     function optloss(optx, optp, batch...)
-        p, st = optx, state[]
-
-        lossfun(NN, p, st, batch)..., batch
+        lossfun(NN, optx, state[], batch)..., batch
     end
 
-    function optcb(p, l, st, stats, batch)
+    function optcb(optx, l, st, stats, batch)
         count[] += 1
         nextepoch = iszero(count[] % num_batches)
 
@@ -718,11 +715,12 @@ function optimize(
 
         if nextepoch
             println(io, "Epoch [$(epoch[]) / $(nepoch)]\tBatch Loss: $(ll)")
+            # println(io, "Iter: $(optx.iter), Objective: $(optx.objective)")
 
             println(io, "#=======================#")
 
-            _, l_ = cb(p, st; epoch = epoch[], nepoch, io)
-            minconfig, ifbreak = update_minconfig(mincfg[], l_, p, st, opt_st; io)
+            _, l_ = cb(optx.u, st; epoch = epoch[], nepoch, io)
+            minconfig, ifbreak = update_minconfig(mincfg[], l_, optx.u, st, opt_st; io)
             mincfg[] = minconfig
             epoch[] += 1
 
@@ -743,11 +741,8 @@ function optimize(
 
     @time optsol = solve(optprob, opt, ncycle(_loader, nepoch); callback = optcb)
 
-    obj = round(optsol.objective; sigdigits = 8)
-    tim = round(optsol.solve_time; sigdigits = 8)
     println(io, "#=======================#")
     @show optsol.retcode
-    println(io, "Achieved objective value $(obj) in time $(tim)s.")
     println(io, "#=======================#")
 
     mincfg[].p, mincfg[].st, mincfg[].opt_st
