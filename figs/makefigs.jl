@@ -5,7 +5,7 @@ using CairoMakie
 function makeplots(
     datafile,
     outdir::String,
-    casename::AbstractString;
+    casename::String;
     ifcrom::Bool = false,
     ifdt::Bool = false,
 )
@@ -155,14 +155,20 @@ function makeplots(
     figp = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
     figq = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
 
-    axt0 = Axis(figt[1,1]; xlabel = L"x", ylabel = L"u(x, t)", xlabelsize = 16, ylabelsize = 16)
-    axt1 = Axis(figt[1,2]; xlabel = L"x", ylabel = L"u(x, t)", xlabelsize = 16, ylabelsize = 16)
-    axe1 = Axis(fige[1,1]; xlabel = L"t", ylabel = L"ε(t)", yscale = log10, xlabelsize = 16, ylabelsize = 16)
+    ylabel_t, ylabel_e = if occursin("exp3", casename)
+        L"u(x, t; \mathbf{μ})", L"ε(t; \mathbf{μ})"
+    else
+        L"u(x, t)", L"ε(t)"
+    end
+
+    axt0 = Axis(figt[1,1]; xlabel = L"x", ylabel = ylabel_t, xlabelsize = 16, ylabelsize = 16)
+    axt1 = Axis(figt[1,2]; xlabel = L"x", ylabel = ylabel_t, xlabelsize = 16, ylabelsize = 16)
+    axe1 = Axis(fige[1,1]; xlabel = L"t", ylabel = ylabel_e, yscale = log10, xlabelsize = 16, ylabelsize = 16)
 
     if ifdt
         fige = Figure(; size = (900, 400), backgroundcolor = :white, grid = :off)
-        axe1 = Axis(fige[1,1]; xlabel = L"t", ylabel = L"ε(t)", yscale = log10, xlabelsize = 16, ylabelsize = 16)
-        axe2 = Axis(fige[1,2]; xlabel = L"t", ylabel = L"ε(t)", yscale = log10, xlabelsize = 16, ylabelsize = 16)
+        axe1 = Axis(fige[1,1]; xlabel = L"t", ylabel = ylabel_e, yscale = log10, xlabelsize = 16, ylabelsize = 16)
+        axe2 = Axis(fige[1,2]; xlabel = L"t", ylabel = ylabel_e, yscale = log10, xlabelsize = 16, ylabelsize = 16)
     end
 
     #===============================#
@@ -254,8 +260,14 @@ function makeplots(
         labels = labels[1:1]
     end
 
-    l1 = L"Learned prediction $e_{θ_e}(ū(t; \mathbf{\mu}))$"
-    l2 = L"Learned prediction $\phi_\eta(t, \mathbf{\mu})$"
+
+    if occursin("exp3", casename)
+        l1 = L"Learned prediction $e_{θ_e}(ū(t; \mathbf{\mu}))$"
+        l2 = L"Learned prediction $\Xi_\varrho(t, \mathbf{\mu})$"
+    else
+        l1 = L"Learned prediction $e_{θ_e}(ū(t))$"
+        l2 = L"Learned prediction $\Xi_\varrho(t)$"
+    end
 
     axislegend(axp1, elems, [l1, labels...]; position = :lt, patchsize = (40, 10))
     axislegend(axp2, elems, [l2, labels...]; position = :lb, patchsize = (40, 10))
@@ -440,7 +452,7 @@ function makeplots(
 end
 #======================================================#
 
-function makeplot_exp3(
+function makeplots_exp3(
     datafiles::String...;
     outdir::String,
     ifdt::Bool = false,
@@ -449,8 +461,8 @@ function makeplot_exp3(
     fige = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
 
     axkwp = (;
-        xlabel = L"\tilde{u}_1(t)",
-        ylabel = L"\tilde{u}_2(t)",
+        xlabel = L"\tilde{u}_1(t; \mathbf{μ})",
+        ylabel = L"\tilde{u}_2(t; \mathbf{μ})",
         xlabelsize = 16,
         ylabelsize = 16,
     )
@@ -461,7 +473,7 @@ function makeplot_exp3(
 
     axkwe = (;
         xlabel = L"t",
-        ylabel = L"ε(t)",
+        ylabel = L"ε(t; \mathbf{μ})",
         yscale = log10,
         xlabelsize = 16,
         ylabelsize = 16,
@@ -528,7 +540,7 @@ function makeplot_exp3(
     ]
 
     l1 = [L"Learned prediction $e_{θ_e}(ū(t; \mathbf{\mu}))$", L"\text{Dynamics evaluation}"]
-    l2 = [L"Learned prediction $\phi_\eta(t, \mathbf{\mu})$" , L"\text{Dynamics evaluation}"]
+    l2 = [L"Learned prediction $\Xi_\varrho(t, \mathbf{\mu})$" , L"\text{Dynamics evaluation}"]
 
     axislegend(axp1, elems, l1; position = :lt, patchsize = (40, 10))
     axislegend(axp2, elems, l2; position = :lt, patchsize = (40, 10))
@@ -671,8 +683,8 @@ e3file5 = joinpath(h5dir, "burgers1dcase5.h5")
 e3file6 = joinpath(h5dir, "burgers1dcase6.h5")
 
 # makeplots(e1file, outdir, "exp1"; ifdt = true)
-makeplots(e2file, outdir, "exp2"; ifdt = false)
-# makeplots(e4file, outdir, "exp4")
+# makeplots(e2file, outdir, "exp2"; ifdt = false)
+makeplots(e4file, outdir, "exp4")
 # makeplots(e5file, outdir, "exp5")
 #
 # # makeplots(e3file1, outdir, "exp3case1")
@@ -682,7 +694,7 @@ makeplots(e2file, outdir, "exp2"; ifdt = false)
 # makeplots(e3file5, outdir, "exp3case5")
 # # makeplots(e3file6, outdir, "exp3case6")
 #
-# makeplot_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
+# makeplots_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
 
 #======================================================#
 nothing

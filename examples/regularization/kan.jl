@@ -151,7 +151,7 @@ function train_kan(
     wi, wo = 1, 1
 
     G  = 5
-    h  = 2
+    h  = 3
     wh = 10
 
     in_layer = KDense(wi, wh, G; use_base_act = false)
@@ -212,7 +212,7 @@ Random.seed!(rng, 123)
 
 datafile = joinpath(@__DIR__, "data_reg.jld2")
 modeldir = joinpath(@__DIR__, "kan")
-modelfile = joinpath(modeldir, "model_04.jld2")
+modelfile = joinpath(modeldir, "model_07.jld2")
 device = Lux.gpu_device()
 
 E = 100
