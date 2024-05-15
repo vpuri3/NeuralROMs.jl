@@ -71,6 +71,7 @@ function makeplots(
 
     grid = size(uFOM)[2:in_dim+1]
     Nxyz = prod(grid)
+    Nfom = Nxyz * out_dim
 
     @assert in_dim == ndims(xFOM) - 1
     @assert size(xFOM)[2:end] == size(uFOM)[2:end-1]
@@ -79,17 +80,8 @@ function makeplots(
     Itplt = LinRange(1, Nt, 5) .|> Base.Fix1(round, Int)
     i1, i2 = Itplt[2], Itplt[5]
 
-    ## grab the first output dimension
-    ii = Tuple(Colon() for _ in 1:in_dim + 1)
-    uFOM = uFOM[1, ii...]
-    uPCA = uPCA[1, ii...]
-    uCAE = uCAE[1, ii...]
-    uSNL = uSNL[1, ii...]
-    uSNW = uSNW[1, ii...]
-    uCRM = uCRM[1, ii...]
-
     ## normalize
-    nr = sum(abs2, uFOM; dims = 1:in_dim) ./ prod(size(uFOM)[1:in_dim]) .|> sqrt
+    nr = sum(abs2, uFOM; dims = 2:in_dim+1) ./ Nxyz .|> sqrt
 
     ePCA = (uFOM - uPCA) ./ nr
     eCAE = (uFOM - uCAE) ./ nr
@@ -97,11 +89,11 @@ function makeplots(
     eSNW = (uFOM - uSNW) ./ nr
     eCRM = (uFOM - uCRM) ./ nr
 
-    e2tPCA = sum(abs2, ePCA; dims = 1:in_dim) / Nxyz |> vec
-    e2tCAE = sum(abs2, eCAE; dims = 1:in_dim) / Nxyz |> vec
-    e2tSNL = sum(abs2, eSNL; dims = 1:in_dim) / Nxyz |> vec
-    e2tSNW = sum(abs2, eSNW; dims = 1:in_dim) / Nxyz |> vec
-    e2tCRM = sum(abs2, eCRM; dims = 1:in_dim) / Nxyz |> vec
+    e2tPCA = sum(abs2, ePCA; dims = 1:in_dim+1) / Nfom |> vec
+    e2tCAE = sum(abs2, eCAE; dims = 1:in_dim+1) / Nfom |> vec
+    e2tSNL = sum(abs2, eSNL; dims = 1:in_dim+1) / Nfom |> vec
+    e2tSNW = sum(abs2, eSNW; dims = 1:in_dim+1) / Nfom |> vec
+    e2tCRM = sum(abs2, eCRM; dims = 1:in_dim+1) / Nfom |> vec
 
     e2tPCA = sqrt.(e2tPCA) .+ 1f-12
     e2tCAE = sqrt.(e2tCAE) .+ 1f-12
@@ -109,7 +101,7 @@ function makeplots(
     e2tSNW = sqrt.(e2tSNW) .+ 1f-12
     e2tCRM = sqrt.(e2tCRM) .+ 1f-12
 
-    idx = collect(Colon() for _ in 1:in_dim)
+    idx = collect(Colon() for _ in 1:in_dim+1)
     eitPCA = collect(norm(ePCA[idx..., i]) for i in 1:Nt)
     eitCAE = collect(norm(eCAE[idx..., i]) for i in 1:Nt)
     eitSNL = collect(norm(eSNL[idx..., i]) for i in 1:Nt)
@@ -117,20 +109,15 @@ function makeplots(
     eitCRM = collect(norm(eCRM[idx..., i]) for i in 1:Nt)
 
     if ifdt
-        udtFOM = udtFOM[1, ii...]
-        udtCAE = udtCAE[1, ii...]
-        udtSNL = udtSNL[1, ii...]
-        udtSNW = udtSNW[1, ii...]
-
-        nrdt = sum(abs2, udtFOM; dims = 1:in_dim) ./ prod(size(uFOM)[1:in_dim]) .|> sqrt
+        nrdt = sum(abs2, udtFOM; dims = 2:in_dim+1) ./ Nxyz .|> sqrt
 
         edtCAE = (udtFOM - udtCAE) ./ nrdt
         edtSNL = (udtFOM - udtSNL) ./ nrdt
         edtSNW = (udtFOM - udtSNW) ./ nrdt
 
-        e2tdtCAE = sum(abs2, edtCAE; dims = 1:in_dim) / Nxyz |> vec
-        e2tdtSNL = sum(abs2, edtSNL; dims = 1:in_dim) / Nxyz |> vec
-        e2tdtSNW = sum(abs2, edtSNW; dims = 1:in_dim) / Nxyz |> vec
+        e2tdtCAE = sum(abs2, edtCAE; dims = 1:in_dim+1) / Nfom |> vec
+        e2tdtSNL = sum(abs2, edtSNL; dims = 1:in_dim+1) / Nfom |> vec
+        e2tdtSNW = sum(abs2, edtSNW; dims = 1:in_dim+1) / Nfom |> vec
 
         e2tdtCAE = sqrt.(e2tdtCAE) .+ 1f-12
         e2tdtSNL = sqrt.(e2tdtSNL) .+ 1f-12
@@ -148,6 +135,14 @@ function makeplots(
         eitpreds = (eitpreds..., eitCRM,)
         e2tpreds = (e2tpreds..., e2tCRM,)
     end
+
+    # grab the first output dimension for plotting
+    ii = Tuple(Colon() for _ in 1:in_dim + 1)
+    upreds = getindex.(upreds, 1, ii...)
+    epreds = getindex.(epreds, 1, ii...)
+    uFOM = getindex(uFOM, 1, ii...)
+
+    #======================================================#
 
     figt = Figure(; size = ( 900, 400), backgroundcolor = :white, grid = :off)
     figc = Figure(; size = (1000, 800), backgroundcolor = :white, grid = :off)
@@ -682,19 +677,19 @@ e3file4 = joinpath(h5dir, "burgers1dcase4.h5")
 e3file5 = joinpath(h5dir, "burgers1dcase5.h5")
 e3file6 = joinpath(h5dir, "burgers1dcase6.h5")
 
-# makeplots(e1file, outdir, "exp1"; ifdt = true)
-# makeplots(e2file, outdir, "exp2"; ifdt = false)
+makeplots(e1file, outdir, "exp1"; ifdt = true)
+makeplots(e2file, outdir, "exp2"; ifdt = false)
 makeplots(e4file, outdir, "exp4")
-# makeplots(e5file, outdir, "exp5")
-#
-# # makeplots(e3file1, outdir, "exp3case1")
-# # makeplots(e3file3, outdir, "exp3case3")
-# # makeplots(e3file2, outdir, "exp3case2")
-# # makeplots(e3file4, outdir, "exp3case4")
-# makeplots(e3file5, outdir, "exp3case5")
-# # makeplots(e3file6, outdir, "exp3case6")
-#
-# makeplots_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
+makeplots(e5file, outdir, "exp5")
+
+# makeplots(e3file1, outdir, "exp3case1")
+# makeplots(e3file3, outdir, "exp3case3")
+# makeplots(e3file2, outdir, "exp3case2")
+# makeplots(e3file4, outdir, "exp3case4")
+makeplots(e3file5, outdir, "exp3case5")
+# makeplots(e3file6, outdir, "exp3case6")
+
+makeplots_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
 
 #======================================================#
 nothing
