@@ -202,12 +202,12 @@ function makeplots(
             MarkerElement(; marker = :star5, sckwq..., points = Point2f[(0.05,0.5)])
         ]
 
-        elems  = [eq, lp, lt]
-        labels = [L"\text{Learned prediction}", L"\text{Dynamics evaluation}", L"\text{Dynamics evaluation }(10\times\Delta t)"]
-
-        if !ifdt
-            elems  = elems[1:2]
-            labels = labels[1:2]
+        if ifdt
+            elems  = [eq, lp, lt]
+            labels = [L"\text{Learned prediction}", L"\text{Dynamics evaluation }(\Delta t)", L"\text{Dynamics evaluation }(10\times\Delta t)"]
+        else
+            elems  = [eq, lp]
+            labels = [L"\text{Learned prediction}", L"\text{Dynamics evaluation}"]
         end
 
         Legend(figp[0,:], elems, labels; orientation = :horizontal, patchsize = (50, 10), framevisible = false)
@@ -248,13 +248,13 @@ function makeplots(
         LineElement(; linestyle = :dot  , linewidth = 4.0, color = :black,),
         LineElement(; linestyle = :dash , linewidth = 4.0, color = :black,),
     ]
-    labels = [L"\text{Dynamics evaluation}", L"\text{Dynamics evaluation }(10\times\Delta t)"]
 
-    if !ifdt
+    if ifdt
+        labels = [L"\text{Dynamics evaluation }(\Delta t)", L"\text{Dynamics evaluation }(10\times\Delta t)"]
+    else
         elems  = elems[1:2]
-        labels = labels[1:1]
+        labels = [L"\text{Dynamics evaluation}",]
     end
-
 
     if occursin("exp3", casename)
         l1 = L"Learned prediction $e_{θ_e}(ū(t; \mathbf{\mu}))$"
@@ -392,6 +392,7 @@ function makeplots(
         lines!(axe1, tFOM, e2t; linewidth = 3, label = labels[i], plt_kw...)
     end
 
+    # FIGT
     if ifdt
         lines!(axe2, tdtFOM, e2tdtCAE; linewidth = 3, label = labels[2], color = colors[2], linestyle = styles[2])
         lines!(axe2, tdtFOM, e2tdtSNL; linewidth = 3, label = labels[3], color = colors[3], linestyle = styles[3])
@@ -399,7 +400,7 @@ function makeplots(
 
         linkaxes!(axe1, axe2)
 
-        Label(fige[2,1], L"(a) Dynamics evaluation $$", fontsize = 16)
+        Label(fige[2,1], L"(a) Dynamics evaluation $(Δt)$", fontsize = 16)
         Label(fige[2,2], L"(b) Dynamics evaluation $(10×Δt)$", fontsize = 16)
         colsize!(fige.layout, 1, Relative(0.50))
         colsize!(fige.layout, 2, Relative(0.50))
@@ -534,7 +535,7 @@ function makeplots_exp3(
         LineElement(; linestyle = :dot, color = :black, linewidth = 6),
     ]
 
-    l1 = [L"Learned prediction $e_{θ_e}(ū(t; \mathbf{\mu}))$", L"\text{Dynamics evaluation}"]
+    l1 = [L"Learned prediction $e_{θ_e}(ū(t; \mathbf{\mu}))$"  , L"\text{Dynamics evaluation}"]
     l2 = [L"Learned prediction $\Xi_\varrho(t, \mathbf{\mu})$" , L"\text{Dynamics evaluation}"]
 
     axislegend(axp1, elems, l1; position = :lt, patchsize = (40, 10))
