@@ -150,13 +150,29 @@ function train_kan(
 
     wi, wo = 1, 1
 
+<<<<<<< HEAD
     G  = 5
     h  = 3
+=======
+    G  = 10
+    h  = 1
+>>>>>>> 01f44ef (initial KAN implementation)
     wh = 10
 
-    in_layer = KDense(wi, wh, G; use_base_act = false)
-    hd_layer = KDense(wh, wh, G; use_base_act = false)
-    fn_layer = KDense(wh, wo, G; use_base_act = false)
+    use_base_act = false
+    basis_func = rswaf # rbf, rswaf
+    normalizer = identity # softsign # tanh, sigmoid, softsign
+
+    init_C = glorot_normal
+    # init_C = glorot_uniform
+
+    # TODO
+    # - take a look at layer outputs
+    # - take a look at C. Plot the basis functions that come out
+
+    in_layer = KDense(wi, wh, G; use_base_act, normalizer, basis_func, init_C)
+    hd_layer = KDense(wh, wh, G; use_base_act, normalizer, basis_func, init_C)
+    fn_layer = KDense(wh, wo, G; use_base_act, normalizer, basis_func, init_C)
 
     NN = Chain(in_layer, fill(hd_layer, h)..., fn_layer)
 
@@ -164,7 +180,7 @@ function train_kan(
     # training hyper-params
     #--------------------------------------------#
     _batchsize = 64
-    E = 500
+    E = 1000
 
     lossfun = mse
     _batchsize = 128
@@ -212,7 +228,11 @@ Random.seed!(rng, 123)
 
 datafile = joinpath(@__DIR__, "data_reg.jld2")
 modeldir = joinpath(@__DIR__, "kan")
+<<<<<<< HEAD
 modelfile = joinpath(modeldir, "model_07.jld2")
+=======
+modelfile = joinpath(modeldir, "model_08.jld2")
+>>>>>>> 01f44ef (initial KAN implementation)
 device = Lux.gpu_device()
 
 E = 100
