@@ -1,7 +1,7 @@
 # NeuralROMs.jl
 
 This repository implements machine learning (ML) based reduced order models (ROMs).
-Specifically, we introduce [smooth neural field ROM (SNF-ROM)](arxiv).
+Specifically, we introduce [smooth neural field ROM (SNF-ROM)](https://arxiv.org/abs/2405.14890) for solving advection dominated PDE problems.
 
 ## SNF-ROM: Projection-based nonlinear reduced order modeling with smooth neural fields
 
@@ -55,5 +55,13 @@ julia> include("examples/advect_fourier1D/snf.jl")
 #### 1D Kuramoto-Sivashinsky
 
 ## Citing
-
-See [`CITATION.bib`](CITATION.bib) for the relevant reference(s).
+```
+@misc{puri2024snfrom,
+      title={{SNF-ROM}: {P}rojection-based nonlinear reduced order modeling with smooth neural fields},
+      author={Vedant Puri and Aviral Prakash and Levent Burak Kara and Yongjie Jessica Zhang},
+      year={2024},
+      eprint={2405.14890},
+      archivePrefix={arXiv},
+      primaryClass={physics.flu-dyn},
+}
+```
