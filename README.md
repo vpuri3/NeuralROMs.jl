@@ -19,16 +19,26 @@ We demonstrate the efficacy of SNF-ROM on a range of advection-dominated linear 
 
 ### Setup and run
 
-Download the code and 
+Download the code by cloning this Git repo.
+
+```console
+$ git clone git@github.com:vpuri3/NeuralROMs.jl.git
+
+$ cd NeuralROMs.jl
+```
+
+Start Julia and activate the environment.
+
+```console
+$ julia
+```
 
 ```julia
 julia> import Pkg
 
-julia> Pkg.develop(url = "https://github.com/vpuri3/NeuralROMs.jl")
+julia> Pkg.activate() # switch environment
 
-julia> cd(joinpath(DEPOT_PATH[1], "dev", "NeuralROMs.jl"))
-
-julia> Pkg.activate() # activate the environment
+julia> Pkg.instantiate() # download environment
 ```
 
 We show how to run the 1D Advection test case corresponding to Section 6.1 of the paper.
@@ -44,6 +54,61 @@ To train SNF-ROM, run
 
 ```julia
 julia> include("examples/advect_fourier1D/snf.jl")
+```
+
+### Code Structure
+
+```console
+$ tree . -L 1
+.
+├── benchmarks
+├── CITATION.bib
+├── docs
+├── examples      # experiments in paper section 6
+├── figs          # figure from the paper
+├── LICENSE       # MIT License
+├── Manifest.toml # environment metadata
+├── Project.toml  # environment spec
+├── README.md     # this file
+├── src           # source code
+└── test
+```
+
+```console
+$ tree src/ -L 1
+├── autodiff.jl        # AD wrapper for 1-4th order derivatives
+├── evolve.jl          # Logic for dynamics evaluation
+├── layers.jl          # Architecture definitions (e.g., auto-decode, C-ROM, SIREN, etc.)
+├── metrics.jl         # Loss functions
+├── neuralgridmodel.jl # Grid-dependent neural space discretization (e.g., CAE-ROM, POD-ROM)
+├── neuralmodel.jl     # Neural field spatial discretization (e.g., C-ROM, SNF-ROM)
+├── NeuralROMs.jl      # Main file: declares Julia module and imports relevant packages
+├── nonlinleastsq.jl   # Nonlinear least square solve for LSPG and for initializing auto-decode.
+├── operator.jl        # Operator kernel definitions
+├── optimisers.jl      # Modified weight decay optimisers based on Optimisers.jl
+├── problems.jl        # PDE problem definitions du/dt = f(x, u, t, u', ...)
+├── timeintegrator.jl  # Time integrator object definition
+├── train.jl           # Training script
+├── transform.jl       # Fourier transform for Fourier Neural Operator
+├── utils.jl           # Miscalleneous utility functions
+└── vis.jl             # 1D/2D visualization functions
+```
+
+```console
+$ tree examples/ -L 1
+├── advect_fourier1D  # Section 6.1
+├── advect_fourier2D  # Section 6.2
+├── autodecode.jl     # auto-decode implementation
+├── burgers_fourier1D # Section 6.3
+├── burgers_fourier2D # Section 6.4
+├── cases.jl          # Helper functions
+├── compare.jl        # Helper functions
+├── convAE.jl         # CAE-ROM training and inference
+├── convINR.jl        # C-ROM training and inference
+├── ks_fourier1D      # Section 6.5
+├── PCA.jl            # PCA-ROM training and inference
+├── regularization    # Experiments with regularization
+└── smoothNF.jl       # SNF-ROM traning and inference
 ```
 
 ### Results
