@@ -17,7 +17,11 @@ This allows us to compute physics-based dynamics of the reduced system nonintrus
 SNF-ROM leads to fast offline training as well as enhanced accuracy and stability during the online dynamics evaluation.
 We demonstrate the efficacy of SNF-ROM on a range of advection-dominated linear and nonlinear PDE problems where we consistently outperform state-of-the-art ROMs.
 
+### Method
+
 ### Setup and run
+
+[train.pdf](https://github.com/vpuri3/NeuralROMs.jl/files/15476103/train.pdf)
 
 Download the code by cloning this Git repo.
 
