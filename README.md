@@ -130,14 +130,6 @@ $ tree examples/ -L 1
 └── smoothNF.jl       # SNF-ROM traning and inference
 ```
 
-### Results
-
-#### 1D Advection
-#### 2D Advection
-#### 1D Viscous Burgers (Re 10k)
-#### 2D Viscous Burgers (Re 1k)
-#### 1D Kuramoto-Sivashinsky
-
 ## Citing
 ```
 @misc{puri2024snfrom,
