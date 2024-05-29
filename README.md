@@ -24,8 +24,7 @@ the offline stage, a low-dimensional spatial representation is learned from simu
 field snapshots onto a low-dimensional manifold that can faithfully capture the relevant features in the dataset. The
 online stage then involves evaluating the model at new parametric points by time-evolving the learned spatial representation following the governing PDE system with classical time integrators.
 
-SNF-ROM is a continuous neural field ROM that addresses several of the previously mentioned
-issues. SNF-ROM is nonintrusive by construction and eliminates the need for a fixed grid structure in the underlying
+SNF-ROM is a continuous neural field ROM that is nonintrusive by construction and eliminates the need for a fixed grid structure in the underlying
 data and the identification of associated spatial discretization for dynamics evaluation. There are two important
 features of SNF-ROM:
 1. Constrained manifold formulation: SNF-ROM restricts the reduced trajectories to follow a regular, smoothly
