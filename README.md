@@ -72,36 +72,38 @@ julia> Pkg.instantiate() # download environment
 ```
 
 We show how to run the 1D Advection test case corresponding to Section 6.1 of the paper.
-Each test case in Section 6 of the paper has a corresponding directory in `examples/`.
+Each test case in Section 6 of the paper has a corresponding directory in `experiments_SNFROM/`.
 
 ```julia
-julia> include("examples/advect_fourier1D/datagen_advect1D.jl")
+julia> include("experiments_SNFROM/advect_fourier1D/datagen_advect1D.jl")
 ```
 
 The script solves the 1D advection problem and stores the dataset as a JLD2 binary in
-`examples/advect_fourier1D/data_advect/`.
+`experiments_SNFROM/advect_fourier1D/data_advect/`.
 To train SNF-ROM, run
 
 ```julia
-julia> include("examples/advect_fourier1D/snf.jl")
+julia> include("experiments_SNFROM/advect_fourier1D/snf.jl")
 ```
 
 ### Code Structure
 
 ```bash
-$ tree . -L 1
+$ tree . -L 1 --filesfirst
 .
-├── benchmarks
-├── CITATION.bib
-├── docs
-├── examples      # experiments in paper section 6
-├── figs          # figure from the paper
-├── LICENSE       # MIT License
-├── Manifest.toml # environment metadata
-├── Project.toml  # environment spec
-├── README.md     # this file
-├── src           # source code
-└── test
+├── CITATION.bib        # arXiv paper
+├── LICENSE             # MIT License
+├── Manifest.toml       # environment metadata
+├── Project.toml        # environment spec
+├── README.md           # this file
+├── benchmarks          # internal benchmarking scripts
+├── docs                # documentation (incomplete)
+├── examples            # playground
+├── experiments_SNFROM  # experiments in SNF-ROM paper Section 6
+├── figs                # figures in SNF-ROM paper
+├── src                 # source code
+└── test                # test scripts (incomplete)
+
 ```
 
 ```bash
@@ -125,20 +127,20 @@ $ tree src/ -L 1
 ```
 
 ```bash
-$ tree examples/ -L 1
-├── advect_fourier1D  # Section 6.1
-├── advect_fourier2D  # Section 6.2
-├── autodecode.jl     # auto-decode implementation
-├── burgers_fourier1D # Section 6.3
-├── burgers_fourier2D # Section 6.4
-├── cases.jl          # Helper functions
-├── compare.jl        # Helper functions
+$ tree examples/ -L 1 --filesfirst
+experiments_SNFROM/
+├── autodecode.jl     # Autodecode-ROM training and inference
+├── cases.jl          # Experiment setup
+├── compare.jl        # Comparison script
 ├── convAE.jl         # CAE-ROM training and inference
 ├── convINR.jl        # C-ROM training and inference
-├── ks_fourier1D      # Section 6.5
-├── PCA.jl            # PCA-ROM training and inference
-├── regularization    # Experiments with regularization
-└── smoothNF.jl       # SNF-ROM traning and inference
+├── PCA.jl            # POD-ROM training and inference
+├── smoothNF.jl       # SNF-ROM training and inference
+├── advect_fourier1D  # Section 6.1
+├── advect_fourier2D  # Section 6.2
+├── burgers_fourier1D # Section 6.3
+├── burgers_fourier2D # Section 6.4
+└── ks_fourier1D      # Section 6.5
 ```
 
 ## Citing
