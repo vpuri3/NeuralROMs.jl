@@ -24,6 +24,23 @@ the offline stage, a low-dimensional spatial representation is learned from simu
 field snapshots onto a low-dimensional manifold that can faithfully capture the relevant features in the dataset. The
 online stage then involves evaluating the model at new parametric points by time-evolving the learned spatial representation following the governing PDE system with classical time integrators.
 
+SNF-ROM is a continuous neural field ROM that addresses several of the previously mentioned
+issues. SNF-ROM is nonintrusive by construction and eliminates the need for a fixed grid structure in the underlying
+data and the identification of associated spatial discretization for dynamics evaluation. There are two important
+features of SNF-ROM:
+1. Constrained manifold formulation: SNF-ROM restricts the reduced trajectories to follow a regular, smoothly
+varying path. This behavior is achieved by directly modeling the ROM state vector as a simple, learnable
+function of problem parameters and time. Our numerical experiments reveal that this feature allows for larger
+time steps in the dynamics evaluation, where the reduced manifold is traversed in accordance with the governing
+PDEs.
+2. Neural field regularization: We formulate a robust network regularization approach encouraging smoothness
+in the learned neural fields. Consequently, the spatial derivatives of SNF representations match the true derivatives of the underlying signal. This feature allows us to calculate accurate spatial derivatives with the highly
+efficient forward mode automatic differentiation (AD) technique. Our studies indicate that precisely capturing
+spatial derivatives is crucial for an accurate dynamics prediction.
+
+The confluence of these two features produces desirable effects on the dynamics evaluation, such as greater accuracy,
+robustness to hyperparameter choice, and robustness to numerical perturbations.
+
 #### Offline stage
 ![Capture-2024-05-28-171751](https://github.com/vpuri3/NeuralROMs.jl/assets/36345239/9656da99-de98-4ead-9ae6-37f935bffa33)
 
