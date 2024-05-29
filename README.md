@@ -143,13 +143,14 @@ experiments_SNFROM/
 ```
 
 ## Citing
-```
-@misc{puri2024snfrom,
-      title={{SNF-ROM}: {P}rojection-based nonlinear reduced order modeling with smooth neural fields},
-      author={Vedant Puri and Aviral Prakash and Levent Burak Kara and Yongjie Jessica Zhang},
-      year={2024},
-      eprint={2405.14890},
-      archivePrefix={arXiv},
-      primaryClass={physics.flu-dyn},
+```bib
+@misc{
+    puri2024snfrom,
+    title={{SNF-ROM}: {P}rojection-based nonlinear reduced order modeling with smooth neural fields},
+    author={Vedant Puri and Aviral Prakash and Levent Burak Kara and Yongjie Jessica Zhang},
+    year={2024},
+    eprint={2405.14890},
+    archivePrefix={arXiv},
+    primaryClass={physics.flu-dyn},
 }
 ```
