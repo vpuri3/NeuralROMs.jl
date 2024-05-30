@@ -4,7 +4,7 @@ using LinearAlgebra, ComponentArrays              # arrays
 using Random, Lux, MLUtils, ParameterSchedulers   # ML
 using OptimizationOptimJL, OptimizationOptimisers # opt
 using LinearSolve, NonlinearSolve, LineSearches   # num
-using JLD2                                 # vis / save
+using JLD2                                        # vis / save
 using CUDA, LuxCUDA, KernelAbstractions           # GPU
 using LaTeXStrings
 
@@ -12,16 +12,14 @@ using KolmogorovArnold
 
 CUDA.allowscalar(false)
 
-# using FFTW
 begin
     nt = Sys.CPU_THREADS
     nc = min(nt, length(Sys.cpu_info()))
 
     BLAS.set_num_threads(nc)
-    # FFTW.set_num_threads(nt)
 end
 
-include(joinpath(pkgdir(NeuralROMs), "examples", "cases.jl"))
+# include(joinpath(pkgdir(NeuralROMs), "examples", "cases.jl"))
 
 #======================================================#
 function uData(x; σ = 1.0f0)
@@ -150,13 +148,8 @@ function train_kan(
 
     wi, wo = 1, 1
 
-<<<<<<< HEAD
-    G  = 5
-    h  = 3
-=======
     G  = 10
     h  = 1
->>>>>>> 01f44ef (initial KAN implementation)
     wh = 10
 
     use_base_act = false
@@ -228,11 +221,7 @@ Random.seed!(rng, 123)
 
 datafile = joinpath(@__DIR__, "data_reg.jld2")
 modeldir = joinpath(@__DIR__, "kan")
-<<<<<<< HEAD
-modelfile = joinpath(modeldir, "model_07.jld2")
-=======
 modelfile = joinpath(modeldir, "model_08.jld2")
->>>>>>> 01f44ef (initial KAN implementation)
 device = Lux.gpu_device()
 
 E = 100

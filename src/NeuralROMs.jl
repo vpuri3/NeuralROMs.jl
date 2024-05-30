@@ -70,7 +70,7 @@ include("utils.jl")
 export init_siren, scale_init, scaled_siren_init
 
 include("metrics.jl")
-export mae, mse, rsquare, pnorm, elasticreg, codereg,
+export mae, mae_clamped, mse, rsquare, pnorm, elasticreg, codereg,
     regularize_autodecoder
 
 include("autodiff.jl")

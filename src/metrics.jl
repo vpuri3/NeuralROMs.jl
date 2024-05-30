@@ -15,6 +15,27 @@ function mae(NN, p, st, batch)
 end
 
 """
+    mae_clamped(δ)(NN, p, st, batch) -> l, st, stats
+
+Clamped mean squared error
+"""
+function mae_clamped(
+    δ::Real;
+    clamp_true::Bool = true,
+    clamp_pred::Bool = true,
+)
+    function mae_clamped_internal(NN, p, st, batch)
+        x, ŷ = batch
+        y, st = NN(x, p, st)
+
+        y = clamp_true ? clamp.(y, -δ, δ) : y
+        ŷ = clamp_pred ? clamp.(ŷ, -δ, δ) : ŷ
+
+        mae(y, ŷ), st, (;)
+    end
+end
+
+"""
     mse(ypred, ytrue) -> l
     mse(NN, p, st, batch) -> l, st, stats
 

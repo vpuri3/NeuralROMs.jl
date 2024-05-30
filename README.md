@@ -40,10 +40,10 @@ spatial derivatives is crucial for an accurate dynamics prediction.
 The confluence of these two features produces desirable effects on the dynamics evaluation, such as greater accuracy,
 robustness to hyperparameter choice, and robustness to numerical perturbations.
 
-#### Offline stage
+##### Offline stage
 ![Capture-2024-05-28-171751](https://github.com/vpuri3/NeuralROMs.jl/assets/36345239/9656da99-de98-4ead-9ae6-37f935bffa33)
 
-#### Online stage
+##### Online stage
 ![Screenshot 2024-05-28 at 5 18 25 PM](https://github.com/vpuri3/NeuralROMs.jl/assets/36345239/8bdd00d0-c1e0-4aea-9bfa-b014b5e1a86b)
 
 ### Setup and run
