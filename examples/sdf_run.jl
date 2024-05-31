@@ -18,8 +18,8 @@ device = Lux.gpu_device()
 E = 700
 h, w = 5, 64
 
-isdir(modeldir) && rm(modeldir, recursive = true)
-model, ST, md = train_SDF(casename, modeldir, h, w, E; rng, device)
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# model, ST, md = train_SDF(casename, modeldir, h, w, E; rng, device)
 postprocess_SDF(casename, modelfile)
 #======================================================#
 nothing

@@ -175,20 +175,54 @@ function train_SDF(
     model, ST, metadata
 end
 #===========================================================#
+# using Meshes
+using MeshCat
+using Meshing: MarchingCubes, MarchingTetrahedra
+using GeometryBasics: Mesh, HyperRectangle, Vec
+
 function postprocess_SDF(
     casename::String,
-    modelfile::String,
+    modelfile::String;
+    Nvis::Int = 32,
 )
     # load model
     model = jldopen(modelfile)
     NN, p, st = model["model"]
     md = model["metadata"]
-
+    
     # load data
     _data, _, metadata = makedata_SDF(casename, md.δ; md.makedata_kws...)
 
-    # construct visualization
-    
+    # prepare visualization datapoints
+    # X = LinRange(-1.0f0, 1.0f0, Nvis)
+    # Z = ones(Nvis)
+    #
+    # xx = kron(Z, Z, X)
+    # yy = kron(Z, X, Z)
+    # zz = kron(X, Z, Z)
+    #
+    # x = vcat(xx', yy', zz')
+    # u = NN(x |> device, p |> device, st |> device)[1] |> cpu_device()
+
+    # get mesh (Meshing.jl)
+    function sdf(x)
+        @show size(x)
+        # NN(x, p, st)[1]
+
+        sum(sin, 5*x)
+    end
+
+    mesh = Mesh(
+        sdf,
+        HyperRectangle(Vec(-1f0, -1f0, -1f0), Vec(2f0, 2f0, 2f0)),
+        MarchingTetrahedra(),
+    )
+
+    # create visualization (MeshCat.jl)
+    vis = Visualizer()
+    setobject!(vis, mesh)
+    open(vis)
+
     nothing
 end
 
