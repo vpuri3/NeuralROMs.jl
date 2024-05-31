@@ -810,8 +810,8 @@ function plot_training(EPOCH, _LOSS, LOSS_)
 
     plt = plot(
         title = "Training Plot", yaxis = :log,
-        xlabel = "Epochs", ylabel = "Loss (MSE)",
-        ylims = (1f-7, 10f0),
+        xlabel = "Epochs", ylabel = "Loss",
+        yticks = (@. 10.0^(-7:1)),
     )
 
     plot!(plt, EPOCH, _LOSS, w = 2.0, c = :green, label = "Train Dataset") # (; ribbon = (lower, upper))

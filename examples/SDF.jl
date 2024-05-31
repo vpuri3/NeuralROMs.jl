@@ -21,7 +21,8 @@ end
 
 #======================================================#
 function makedata_SDF(
-    casename::String;
+    casename::String,
+    δ::Real;
     _Ix = Colon(),  # subsample in space
 )
     # load data
@@ -56,22 +57,26 @@ function makedata_SDF(
     x = hcat(xs...)
     u = hcat(us...)
 
+    # clamp RHS
+    clamp!(u, -δ, δ)
+
     # remove NaNs
     __Ix = findall(!isnan, x[1, :])
     __Iy = findall(!isnan, x[2, :])
     __Iz = findall(!isnan, x[3, :])
     __Iu = findall(!isnan, u[1, :])
-
-    __I = intersect(__Ix, __Iy, __Iz, __Iu)
+    __I  = intersect(__Ix, __Iy, __Iz, __Iu)
 
     x = x[:, __I]
     u = u[:, __I]
 
+    # metadata
     readme = ""
 
+    makedata_kws = (; _Ix,)
+
     metadata = (;
-        casename,
-        readme,
+        casename, readme, δ, makedata_kws,
     )
 
     (x, u), (x, u), metadata
@@ -95,7 +100,7 @@ function train_SDF(
     device = Lux.cpu_device(),
 ) where{M}
 
-    _data, data_, metadata = makedata_SDF(casename; makedata_kws...)
+    _data, _, metadata = makedata_SDF(casename, δ; makedata_kws...)
     dir = modeldir
 
     in_dim  = size(_data[1], 1)
@@ -105,10 +110,14 @@ function train_SDF(
     # architecture
     #--------------------------------------------#
 
-    println("input size: $in_dim")
-    println("output size: $out_dim")
+    println("input size: $(in_dim)")
+    println("output size: $(out_dim)")
+    println("Data points: $(numobs(_data))")
 
     NN = begin
+
+        # DeepSDF paper recommends weight normalization
+
         init_wt_in = scaled_siren_init(1f1)
         init_wt_hd = scaled_siren_init(1f0)
         init_wt_fn = glorot_uniform
@@ -121,31 +130,37 @@ function train_SDF(
         wi = in_dim
         wo = out_dim
 
-        wd = w
+        in_layer = Dense(wi, w , act; init_weight = init_wt_in, init_bias)
+        hd_layer = Dense(w , w , act; init_weight = init_wt_hd, init_bias)
+        fn_layer = Dense(w , wo     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
 
-        in_layer = Dense(wi, wd, act; init_weight = init_wt_in, init_bias)
-        hd_layer = Dense(wd, wd, act; init_weight = init_wt_hd, init_bias)
-        fn_layer = Dense(wd, wo     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
+        # _clamp(x) = @. clamp(x, -δ, δ)
+        _clamp(x) = @. δ * tanh_fast(x)
+        # _clamp(x) = @. δ * (2 * sigmoid_fast(x) - 1)
+        # _clamp(x) = @. δ * softsign(x)
 
-        Chain(in_layer, fill(hd_layer, h)..., fn_layer)
+        Chain(
+            in_layer,
+            fill(hd_layer, h)...,
+            fn_layer,
+            WrappedFunction(_clamp)
+        )
     end
 
     #-------------------------------------------#
     # training hyper-params
     #-------------------------------------------#
 
-    NN = NN
-
     _batchsize = isnothing(_batchsize) ? numobs(_data) ÷ 100 : _batchsize
     batchsize_ = isnothing(batchsize_) ? numobs(_data) ÷ 1   : batchsize_
 
-    lossfun = mae_clamped(δ)
+    lossfun = mae # mae_clamped(δ)
     opts, nepochs, schedules, early_stoppings = make_optimizer(E, warmup)
 
     #-------------------------------------------#
 
-    train_args = (; δ, h, w, E, _batchsize, batchsize_)
-    metadata   = (; metadata..., train_args)
+    train_args = (; h, w, E, _batchsize, batchsize_)
+    metadata   = (; metadata..., δ, train_args)
 
     display(NN)
 
@@ -158,6 +173,23 @@ function train_SDF(
     plot_training(ST...) |> display
 
     model, ST, metadata
+end
+#===========================================================#
+function postprocess_SDF(
+    casename::String,
+    modelfile::String,
+)
+    # load model
+    model = jldopen(modelfile)
+    NN, p, st = model["model"]
+    md = model["metadata"]
+
+    # load data
+    _data, _, metadata = makedata_SDF(casename, md.δ; md.makedata_kws...)
+
+    # construct visualization
+    
+    nothing
 end
 
 #===========================================================#
@@ -210,5 +242,4 @@ function make_optimizer(
     opts, nepochs, schedules, early_stoppings
 end
 #===========================================================#
-
 #

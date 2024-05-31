@@ -28,8 +28,8 @@ function mae_clamped(
         x, ŷ = batch
         y, st = NN(x, p, st)
 
-        y = clamp_true ? clamp.(y, -δ, δ) : y
-        ŷ = clamp_pred ? clamp.(ŷ, -δ, δ) : ŷ
+        ŷ = clamp_true ? clamp.(ŷ, -δ, δ) : ŷ
+        y = clamp_pred ? clamp.(y, -δ, δ) : y
 
         mae(y, ŷ), st, (;)
     end
