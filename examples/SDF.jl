@@ -8,6 +8,10 @@ using Plots, JLD2, NPZ                            # vis / save
 using CUDA, LuxCUDA, KernelAbstractions           # GPU
 using LaTeXStrings
 
+using MeshCat
+using GeometryBasics: Mesh, HyperRectangle, Vec, SVector
+using Meshing: isosurface, MarchingCubes, MarchingTetrahedra, NaiveSurfaceNets
+
 CUDA.allowscalar(false)
 
 begin
@@ -97,7 +101,7 @@ function train_SDF(
     batchsize_ = nothing,
     weight_decays::Union{Real, NTuple{M, <:Real}} = 0f0,
     makedata_kws = (; _Ix = :,),
-    device = Lux.cpu_device(),
+    device = Lux.gpu_device(),
 ) where{M}
 
     _data, _, metadata = makedata_SDF(casename, δ; makedata_kws...)
@@ -115,7 +119,6 @@ function train_SDF(
     println("Data points: $(numobs(_data))")
 
     NN = begin
-
         # DeepSDF paper recommends weight normalization
 
         init_wt_in = scaled_siren_init(1f1)
@@ -133,18 +136,9 @@ function train_SDF(
         in_layer = Dense(wi, w , act; init_weight = init_wt_in, init_bias)
         hd_layer = Dense(w , w , act; init_weight = init_wt_hd, init_bias)
         fn_layer = Dense(w , wo     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
+        finalize = _clamp_tanh(δ) |> WrappedFunction
 
-        # _clamp(x) = @. clamp(x, -δ, δ)
-        _clamp(x) = @. δ * tanh_fast(x)
-        # _clamp(x) = @. δ * (2 * sigmoid_fast(x) - 1)
-        # _clamp(x) = @. δ * softsign(x)
-
-        Chain(
-            in_layer,
-            fill(hd_layer, h)...,
-            fn_layer,
-            WrappedFunction(_clamp)
-        )
+        Chain(in_layer, fill(hd_layer, h)..., fn_layer, finalize)
     end
 
     #-------------------------------------------#
@@ -175,58 +169,7 @@ function train_SDF(
     model, ST, metadata
 end
 #===========================================================#
-# using Meshes
-using MeshCat
-using Meshing: MarchingCubes, MarchingTetrahedra
-using GeometryBasics: Mesh, HyperRectangle, Vec
 
-function postprocess_SDF(
-    casename::String,
-    modelfile::String;
-    Nvis::Int = 32,
-)
-    # load model
-    model = jldopen(modelfile)
-    NN, p, st = model["model"]
-    md = model["metadata"]
-    
-    # load data
-    _data, _, metadata = makedata_SDF(casename, md.δ; md.makedata_kws...)
-
-    # prepare visualization datapoints
-    # X = LinRange(-1.0f0, 1.0f0, Nvis)
-    # Z = ones(Nvis)
-    #
-    # xx = kron(Z, Z, X)
-    # yy = kron(Z, X, Z)
-    # zz = kron(X, Z, Z)
-    #
-    # x = vcat(xx', yy', zz')
-    # u = NN(x |> device, p |> device, st |> device)[1] |> cpu_device()
-
-    # get mesh (Meshing.jl)
-    function sdf(x)
-        @show size(x)
-        # NN(x, p, st)[1]
-
-        sum(sin, 5*x)
-    end
-
-    mesh = Mesh(
-        sdf,
-        HyperRectangle(Vec(-1f0, -1f0, -1f0), Vec(2f0, 2f0, 2f0)),
-        MarchingTetrahedra(),
-    )
-
-    # create visualization (MeshCat.jl)
-    vis = Visualizer()
-    setobject!(vis, mesh)
-    open(vis)
-
-    nothing
-end
-
-#===========================================================#
 function make_optimizer(
     E::Integer,
     warmup::Bool,
@@ -276,4 +219,79 @@ function make_optimizer(
     opts, nepochs, schedules, early_stoppings
 end
 #===========================================================#
+
+function postprocess_SDF(
+    casename::String,
+    modelfile::String;
+    vis = Visualizer(),
+    samples = (500, 500, 500),
+)
+    # load model
+    model = jldopen(modelfile)
+    NN, p, st = model["model"]
+    md = model["metadata"]
+
+    # sample points
+    u = begin
+        X = LinRange(-1.0f0, 1.0f0, samples[1])
+        Y = LinRange(-1.0f0, 1.0f0, samples[2])
+        Z = LinRange(-1.0f0, 1.0f0, samples[3])
+
+        Ix = ones(Float32, samples[1])
+        Iy = ones(Float32, samples[2])
+        Iz = ones(Float32, samples[3])
+
+        xx = kron(Iz, Iy, X )
+        yy = kron(Iz, Y , Ix)
+        zz = kron(Z , Iy, Ix)
+
+        x = vcat(xx', yy', zz')
+        u = eval_model((NN, p, st), x; device)
+        reshape(u, samples...)
+    end
+
+    @time mesh = Mesh(
+        u, MarchingCubes();
+        origin = SVector(-1f0,-1f0,-1f0), widths = SVector(2f0,2f0,2f0),
+    )
+
+    setobject!(vis, mesh)
+    vis
+end
+
+#===========================================================#
+function eval_model(
+    model::NTuple{3, Any},
+    x;
+    batchsize = numobs(x) ÷ 10,
+    device = Lux.gpu_device(),
+)
+    NN, p, st = model
+
+    loader = MLUtils.DataLoader(x; batchsize, shuffle = false, partial = true)
+
+    p, st = (p, st) |> device
+    st = Lux.testmode(st)
+
+    if device isa Lux.LuxCUDADevice
+        loader = CuIterator(loader)
+    end
+
+    y = ()
+    for batch in loader
+        yy = NN(batch, p, st)[1]
+        y = (y..., yy)
+    end
+
+    hcat(y...) |> Lux.cpu_device()
+end
+#===========================================================#
+
+_clamp_vanilla(δ)  = x -> @. clamp(x, -δ, δ)
+_clamp_tanh(δ)     = x -> @. δ * tanh_fast(x)
+_clamp_sigmoid(δ)  = x -> @. δ * (2 * sigmoid_fast(x) - 1)
+_clamp_softsign(δ) = x -> @. δ * softsign(x)
+
+#===========================================================#
+
 #
