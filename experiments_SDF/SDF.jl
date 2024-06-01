@@ -14,14 +14,10 @@ using Meshing: isosurface, MarchingCubes, MarchingTetrahedra, NaiveSurfaceNets
 
 CUDA.allowscalar(false)
 
-begin
-    nt = Sys.CPU_THREADS
-    nc = min(nt, length(Sys.cpu_info()))
+nc = min(Sys.CPU_THREADS, length(Sys.cpu_info()))
+BLAS.set_num_threads(nc)
 
-    BLAS.set_num_threads(nc)
-end
-
-# include(joinpath(pkgdir(NeuralROMs), "examples", "cases.jl"))
+include(joinpath(pkgdir(NeuralROMs), "experiments_SDF", "utils.jl"))
 
 #======================================================#
 function makedata_SDF(
@@ -30,8 +26,7 @@ function makedata_SDF(
     _Ix = Colon(),  # subsample in space
 )
     # load data
-
-    basedir = joinpath(pkgdir(NeuralROMs), "examples", "sdf_dataset")
+    basedir = joinpath(pkgdir(NeuralROMs), "experiments_SDF", "dataset_sdf-explorer")
 
     datafiles = (;
         near = joinpath(basedir, "near", casename),
@@ -96,7 +91,7 @@ function train_SDF(
     E::Int; # num epochs
     rng::Random.AbstractRNG = Random.default_rng(),
     δ::Real = 0.1f0,
-    warmup::Bool = true,
+    warmup::Bool = false,
     _batchsize = nothing,
     batchsize_ = nothing,
     weight_decays::Union{Real, NTuple{M, <:Real}} = 0f0,
@@ -136,7 +131,7 @@ function train_SDF(
         in_layer = Dense(wi, w , act; init_weight = init_wt_in, init_bias)
         hd_layer = Dense(w , w , act; init_weight = init_wt_hd, init_bias)
         fn_layer = Dense(w , wo     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
-        finalize = _clamp_tanh(δ) |> WrappedFunction
+        finalize = clamp_tanh(δ) |> WrappedFunction
 
         Chain(in_layer, fill(hd_layer, h)..., fn_layer, finalize)
     end
@@ -170,56 +165,6 @@ function train_SDF(
 end
 #===========================================================#
 
-function make_optimizer(
-    E::Integer,
-    warmup::Bool,
-    weightdecay = nothing,
-)
-    lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
-    Nlrs = length(lrs)
-
-    # Grokking (https://arxiv.org/abs/2201.02177)
-    # Optimisers.Adam(lr, (0.9f0, 0.95f0)), # 0.999 (default), 0.98, 0.95
-    # https://www.youtube.com/watch?v=IHikLL8ULa4&ab_channel=NeelNanda
-    opts = if isnothing(weightdecay)
-        Tuple(
-            Optimisers.Adam(lr) for lr in lrs
-        )
-    else
-        Tuple(
-            OptimiserChain(
-                Optimisers.Adam(lr),
-                weightdecay,
-            )
-            for lr in lrs
-        )
-    end
-
-    nepochs = (round.(Int, E / (Nlrs) * ones(Nlrs))...,)
-    schedules = Step.(lrs, 1f0, Inf32)
-    early_stoppings = (fill(true, Nlrs)...,)
-
-    if warmup
-        opt_warmup = if isnothing(weightdecay)
-            Optimisers.Adam(1f-2)
-        else
-            OptimiserChain(Optimisers.Adam(1f-2), weightdecay,)
-        end
-        nepochs_warmup = 10
-        schedule_warmup = Step(1f-2, 1f0, Inf32)
-        early_stopping_warmup = true
-
-        ######################
-        opts = (opt_warmup, opts...,)
-        nepochs = (nepochs_warmup, nepochs...,)
-        schedules = (schedule_warmup, schedules...,)
-        early_stoppings = (early_stopping_warmup, early_stoppings...,)
-    end
-    
-    opts, nepochs, schedules, early_stoppings
-end
-#===========================================================#
-
 function postprocess_SDF(
     casename::String,
     modelfile::String;
@@ -231,67 +176,23 @@ function postprocess_SDF(
     NN, p, st = model["model"]
     md = model["metadata"]
 
-    # sample points
-    u = begin
-        X = LinRange(-1.0f0, 1.0f0, samples[1])
-        Y = LinRange(-1.0f0, 1.0f0, samples[2])
-        Z = LinRange(-1.0f0, 1.0f0, samples[3])
+    mesh = begin
+        Xs = Tuple(LinRange(-1.0f0, 1.0f0, samples[i]) for i in 1:3)
+        Is = Tuple(ones(Float32, samples[i]) for i in 1:3)
 
-        Ix = ones(Float32, samples[1])
-        Iy = ones(Float32, samples[2])
-        Iz = ones(Float32, samples[3])
+        xx = kron(Is[3], Is[2], Xs[1])
+        yy = kron(Is[3], Xs[2], Is[1])
+        zz = kron(Xs[3], Is[2], Is[1])
 
-        xx = kron(Iz, Iy, X )
-        yy = kron(Iz, Y , Ix)
-        zz = kron(Z , Iy, Ix)
-
-        x = vcat(xx', yy', zz')
+        x = vcat(xx', zz', yy')
         u = eval_model((NN, p, st), x; device)
-        reshape(u, samples...)
-    end
+        u = reshape(u, samples...)
 
-    @time mesh = Mesh(
-        u, MarchingCubes();
-        origin = SVector(-1f0,-1f0,-1f0), widths = SVector(2f0,2f0,2f0),
-    )
+        Mesh(u, MarchingCubes())
+    end
 
     setobject!(vis, mesh)
     vis
 end
-
 #===========================================================#
-function eval_model(
-    model::NTuple{3, Any},
-    x;
-    batchsize = numobs(x) ÷ 10,
-    device = Lux.gpu_device(),
-)
-    NN, p, st = model
-
-    loader = MLUtils.DataLoader(x; batchsize, shuffle = false, partial = true)
-
-    p, st = (p, st) |> device
-    st = Lux.testmode(st)
-
-    if device isa Lux.LuxCUDADevice
-        loader = CuIterator(loader)
-    end
-
-    y = ()
-    for batch in loader
-        yy = NN(batch, p, st)[1]
-        y = (y..., yy)
-    end
-
-    hcat(y...) |> Lux.cpu_device()
-end
-#===========================================================#
-
-_clamp_vanilla(δ)  = x -> @. clamp(x, -δ, δ)
-_clamp_tanh(δ)     = x -> @. δ * tanh_fast(x)
-_clamp_sigmoid(δ)  = x -> @. δ * (2 * sigmoid_fast(x) - 1)
-_clamp_softsign(δ) = x -> @. δ * softsign(x)
-
-#===========================================================#
-
 #
