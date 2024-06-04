@@ -140,7 +140,7 @@ function train_model(
                     in optimiser chain $opt."""
 
                 iWD = only(iWD)
-                @set! opt.opts[iWD].gamma = weight_decay
+                @set! opt.opts[iWD].lambda = weight_decay
             end
         end
 

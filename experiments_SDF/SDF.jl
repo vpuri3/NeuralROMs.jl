@@ -8,6 +8,12 @@ using Plots, JLD2, NPZ                            # vis / save
 using CUDA, LuxCUDA, KernelAbstractions           # GPU
 using LaTeXStrings
 
+let
+    pkgpath = dirname(dirname(pathof(NeuralROMs)))
+    sdfpath = joinpath(pkgpath, "experiments_SDF")
+    !(sdfpath in LOAD_PATH) && push!(LOAD_PATH, sdfpath)
+end
+
 using MeshCat
 using GeometryBasics: Mesh, HyperRectangle, Vec, SVector
 using Meshing: isosurface, MarchingCubes, MarchingTetrahedra, NaiveSurfaceNets
@@ -34,17 +40,9 @@ function makedata_SDF(
         surf = joinpath(basedir, "surface", casename),
     )
 
-    datas = Tuple(
-        npzread(datafile) for datafile in datafiles
-    )
-
-    xs = Tuple(
-        data["position"]' for data in datas # [D, N]
-    )
-
-    us = Tuple(
-        data["distance"]' for data in datas # [1, N]
-    )
+    datas = Tuple(npzread(datafile) for datafile in datafiles)
+    xs    = Tuple(data["position"]' for data in datas) # [D, N]
+    us    = Tuple(data["distance"]' for data in datas) # [1, N]
 
     # subsample
     xs = Tuple(x[:, 1:10:end] for x in xs)
@@ -80,7 +78,6 @@ function makedata_SDF(
 
     (x, u), (x, u), metadata
 end
-
 #===========================================================#
 
 function train_SDF(
@@ -90,11 +87,11 @@ function train_SDF(
     w::Int, # hidden layer width
     E::Int; # num epochs
     rng::Random.AbstractRNG = Random.default_rng(),
-    δ::Real = 0.1f0,
+    δ::Real = 0.01f0, # 0.05f0
     warmup::Bool = false,
     _batchsize = nothing,
     batchsize_ = nothing,
-    weight_decays::Union{Real, NTuple{M, <:Real}} = 0f0,
+    weight_decays::Union{Real, NTuple{M, <:Real}} = 0f-5,
     makedata_kws = (; _Ix = :,),
     device = Lux.gpu_device(),
 ) where{M}
@@ -131,7 +128,7 @@ function train_SDF(
         in_layer = Dense(wi, w , act; init_weight = init_wt_in, init_bias)
         hd_layer = Dense(w , w , act; init_weight = init_wt_hd, init_bias)
         fn_layer = Dense(w , wo     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
-        finalize = clamp_tanh(δ) |> WrappedFunction
+        finalize = ClampTanh(δ)
 
         Chain(in_layer, fill(hd_layer, h)..., fn_layer, finalize)
     end
@@ -144,7 +141,8 @@ function train_SDF(
     batchsize_ = isnothing(batchsize_) ? numobs(_data) ÷ 1   : batchsize_
 
     lossfun = mae # mae_clamped(δ)
-    opts, nepochs, schedules, early_stoppings = make_optimizer(E, warmup)
+    weightdecay = WeightDecay(weight_decays)
+    opts, nepochs, schedules, early_stoppings = make_optimizer(E, warmup, weightdecay)
 
     #-------------------------------------------#
 
@@ -153,11 +151,15 @@ function train_SDF(
 
     display(NN)
 
+    @show metadata
+
     @time model, ST = train_model(NN, _data; rng,
         _batchsize, batchsize_, weight_decays,
         opts, nepochs, schedules, early_stoppings,
         device, dir, metadata, lossfun,
     )
+
+    @show metadata
 
     plot_training(ST...) |> display
 
@@ -170,11 +172,17 @@ function postprocess_SDF(
     modelfile::String;
     vis = Visualizer(),
     samples = (500, 500, 500),
+    device = Lux.gpu_device(),
 )
+    # load data
+
     # load model
     model = jldopen(modelfile)
     NN, p, st = model["model"]
     md = model["metadata"]
+
+    display(NN)
+    @show md
 
     mesh = begin
         Xs = Tuple(LinRange(-1.0f0, 1.0f0, samples[i]) for i in 1:3)
@@ -185,8 +193,8 @@ function postprocess_SDF(
         zz = kron(Xs[3], Is[2], Is[1])
 
         x = vcat(xx', zz', yy')
-        u = eval_model((NN, p, st), x; device)
-        u = reshape(u, samples...)
+        @time u = eval_model((NN, p, st), x; device) #, batchsize = 100)
+        @time u = reshape(u, samples...)
 
         Mesh(u, MarchingCubes())
     end

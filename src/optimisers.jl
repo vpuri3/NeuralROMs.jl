@@ -1,7 +1,7 @@
 #
 #======================================================#
 struct DecoderWeightDecay{Tg, Ta} <: Optimisers.AbstractRule
-    gamma::Tg
+    lambda::Tg
     ca_axes::Ta
 end
 Optimisers.init(::DecoderWeightDecay, ::AbstractArray) = nothing
@@ -13,7 +13,7 @@ function Optimisers.apply!(
     x::AbstractArray{T},
     dx,
 ) where{T}
-    γ = T(o.gamma)
+    γ = T(o.lambda)
 
     ### Optimisers.WeightDecay
     # dx′ = @lazy dx + γ * x
@@ -37,11 +37,11 @@ end
 
 #======================================================#
 struct IdxWeightDecay{Tg, Ti} <: Optimisers.AbstractRule
-    gamma::Tg
+    lambda::Tg
     index::Ti
 end
 Optimisers.init(::IdxWeightDecay, ::AbstractArray) = nothing
-Base.show(io::IO, o::IdxWeightDecay) = print(io, "IdxWeightDecay($(o.gamma), $(length(o.index)))")
+Base.show(io::IO, o::IdxWeightDecay) = print(io, "IdxWeightDecay($(o.lambda), $(length(o.index)))")
 
 function Optimisers.apply!(
     o::IdxWeightDecay,
@@ -49,7 +49,7 @@ function Optimisers.apply!(
     x::AbstractArray{T},
     dx,
 ) where{T}
-    γ = T(o.gamma)
+    γ = T(o.lambda)
     i = o.index
 
     ### in place

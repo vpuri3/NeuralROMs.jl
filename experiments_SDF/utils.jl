@@ -1,12 +1,5 @@
 #
 #===========================================================#
-
-clamp_vanilla(δ)  = x -> @. clamp(x, -δ, δ)
-clamp_tanh(δ)     = x -> @. δ * tanh_fast(x)
-clamp_sigmoid(δ)  = x -> @. δ * (2 * sigmoid_fast(x) - 1)
-clamp_softsign(δ) = x -> @. δ * softsign(x)
-
-#===========================================================#
 function make_optimizer(
     E::Integer,
     warmup::Bool,
@@ -60,7 +53,7 @@ end
 function eval_model(
     model::NTuple{3, Any},
     x;
-    batchsize = numobs(x) ÷ 50,
+    batchsize = numobs(x) ÷ 100,
     device = Lux.gpu_device(),
 )
     NN, p, st = model

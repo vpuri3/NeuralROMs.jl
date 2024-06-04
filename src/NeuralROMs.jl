@@ -70,8 +70,9 @@ include("utils.jl")
 export init_siren, scale_init, scaled_siren_init
 
 include("metrics.jl")
-export mae, mae_clamped, mse, rsquare, pnorm, elasticreg, codereg,
-    regularize_autodecoder
+export mae, mae_clamped, mse, PSNR, rsquare, pnorm,
+    elasticreg, codereg_autodecoder, regularize_decoder,
+    regularize_autodecoder, regularize_flatdecoder
 
 include("autodiff.jl")
 export
@@ -86,14 +87,17 @@ export
     FlatDecoder, get_flatdecoder, freeze_decoder,
     HyperDecoder, get_hyperdecoder
 
-include("optimisers.jl")
-export DecoderWeightDecay, IdxWeightDecay
-
 include("transform.jl")
 export FourierTransform, CosineTransform
 
 include("operator.jl")
 export OpKernel, OpConv, OpKernelBilinear, OpConvBilinear, linear_nonlinear
+
+include("sdf.jl")
+export ClampVanilla, ClampTanh, ClampSigmoid, ClampSoftsign
+
+include("optimisers.jl")
+export DecoderWeightDecay, IdxWeightDecay
 
 include("neuralmodel.jl")
 export

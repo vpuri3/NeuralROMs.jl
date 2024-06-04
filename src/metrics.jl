@@ -6,7 +6,7 @@
 
 Mean squared error
 """
-mae(y, ŷ) = sum(abs, ŷ - y) / numobs(ŷ)
+mae(y, ŷ) = sum(abs, ŷ - y) / length(ŷ)
 
 function mae(NN, p, st, batch)
     x, ŷ = batch
@@ -17,7 +17,7 @@ end
 """
     mae_clamped(δ)(NN, p, st, batch) -> l, st, stats
 
-Clamped mean squared error
+Clamped mean absolute error
 """
 function mae_clamped(
     δ::Real;
@@ -41,13 +41,36 @@ end
 
 Mean squared error
 """
-mse(y, ŷ) = sum(abs2, ŷ - y) / numobs(ŷ)
+mse(y, ŷ) = sum(abs2, ŷ - y) / length(ŷ)
 
 function mse(NN, p, st, batch)
     x, ŷ = batch
     y, st = NN(x, p, st)
 
     mse(y, ŷ), st, (;)
+end
+
+"""
+    PSNR(y, ŷ, maxval) --> -10 * log10(mse(y, ŷ) / maxval^2)
+
+Peak signal to noise ratio
+"""
+function PSNR(y::AbstractArray, ŷ::AbstractArray, maxval::Real)
+    T  = eltype(y)
+    ms = mse(y, ŷ)
+    -T(10) * log10(ms / T(maxval^2))
+end
+
+"""
+    PSNR(maxval)(NN, p, st, batch) --> PSNR
+"""
+function PSNR(maxval::Real)
+    function PSNR_internal(NN, p, st, batch)
+        x, ŷ = batch
+        y, st = NN(x, p, st)
+
+        PSNR(y, ŷ, maxval), st, (;)
+    end
 end
 
 """
@@ -58,7 +81,7 @@ P-Norm
 """
 function pnorm(p::Real)
     function pnorm_internal(y, ŷ)
-        sum(abs ∘ Base.Fix2(^, p), ŷ - y) / numobs(ŷ)
+        sum(abs ∘ Base.Fix2(^, p), ŷ - y) / length(ŷ)
     end
     
     function pnorm_internal(NN, p, st, batch)
