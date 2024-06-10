@@ -1,5 +1,33 @@
 #
 #===========================================================#
+# Multiresolution has encoding
+#===========================================================#
+
+"""
+https://github.com/cheind/pure-torch-ngp/blob/develop/torchngp/modules/encoding.py
+"""
+function index_hash(
+    Ix::AbstractVector{<:Integer}, # [K]
+    Iy::AbstractVector{<:Integer},
+    Iz::AbstractVector{<:Integer},
+    nEncodings::Integer,
+)
+
+    primes = [1, 2654435761, 805459861]
+
+    @. xor(Ix * primes[1], Iy * primes[2], Iz * primes[3]) % nEncodings
+end
+
+function index_dense(
+    Ix::AbstractVector{<:Integer},
+    Iy::AbstractVector{<:Integer},
+    Iz::AbstractVector{<:Integer},
+    shape::NTuple{3, <:Integer},
+)
+    Iz * (shape[1] * shape[2]) + Iy * shape[1] + Ix
+end
+
+#===========================================================#
 function make_optimizer(
     E::Integer,
     warmup::Bool,

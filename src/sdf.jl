@@ -1,6 +1,5 @@
 #
 #===========================================================#
-
 clamp_vanilla(x::AbstractArray, δ) = @. clamp(x, -δ, δ)
 clamp_tanh(x::AbstractArray, δ)    = @. δ * tanh_fast(x)
 clamp_sigmoid(x::AbstractArray, δ) = @. δ * (2 * sigmoid_fast(x) - 1)

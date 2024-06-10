@@ -4,7 +4,7 @@ using LinearAlgebra, ComponentArrays              # arrays
 using Random, Lux, MLUtils, ParameterSchedulers   # ML
 using OptimizationOptimJL, OptimizationOptimisers # opt
 using LinearSolve, NonlinearSolve, LineSearches   # num
-using Plots, JLD2, NPZ                            # vis / save
+using Plots, JLD2, HDF5, NPZ                      # vis / save
 using CUDA, LuxCUDA, KernelAbstractions           # GPU
 using LaTeXStrings
 
@@ -17,6 +17,8 @@ end
 using MeshCat
 using GeometryBasics: Mesh, HyperRectangle, Vec, SVector
 using Meshing: isosurface, MarchingCubes, MarchingTetrahedra, NaiveSurfaceNets
+
+using WGLMakie, Bonito
 
 CUDA.allowscalar(false)
 
@@ -88,7 +90,7 @@ function train_SDF(
     E::Int; # num epochs
     rng::Random.AbstractRNG = Random.default_rng(),
     δ::Real = 0.01f0, # 0.05f0
-    warmup::Bool = false,
+    warmup::Bool = true,
     _batchsize = nothing,
     batchsize_ = nothing,
     weight_decays::Union{Real, NTuple{M, <:Real}} = 0f-5,
@@ -168,14 +170,10 @@ end
 #===========================================================#
 
 function postprocess_SDF(
-    casename::String,
     modelfile::String;
-    vis = Visualizer(),
-    samples = (500, 500, 500),
+    samples = (256, 256, 256),
     device = Lux.gpu_device(),
 )
-    # load data
-
     # load model
     model = jldopen(modelfile)
     NN, p, st = model["model"]
@@ -184,7 +182,14 @@ function postprocess_SDF(
     display(NN)
     @show md
 
-    mesh = begin
+    sdffile = joinpath(modeldir, "sdf.h5")
+
+    u = if ispath(sdffile)
+        file = h5open(sdffile)
+        u = file["u"] |> Array
+        close(file)
+        u
+    else
         Xs = Tuple(LinRange(-1.0f0, 1.0f0, samples[i]) for i in 1:3)
         Is = Tuple(ones(Float32, samples[i]) for i in 1:3)
 
@@ -196,11 +201,48 @@ function postprocess_SDF(
         @time u = eval_model((NN, p, st), x; device) #, batchsize = 100)
         @time u = reshape(u, samples...)
 
-        Mesh(u, MarchingCubes())
+        file = h5open(sdffile, "w")
+        write(file, "u", u)
+        close(file)
+
+        u
     end
 
-    setobject!(vis, mesh)
-    vis
+    # # RUN.JL
+    # isdefined(Main, :vis) && MeshCat.close_server!(vis.core)
+    # vis = Visualizer()
+    # postprocess_SDF(casename, modelfile; vis, device)
+    # open(vis; start_browser = false)
+
+    # # HERE
+    # mesh = Mesh(u, MarchingCubes())
+    # vis = isnothing(vis) ? Visualizer() : vis
+    # setobject!(vis, mesh)
+    # return vis
+
+    # u = Float16.(u)
+    # plotsdf() = volume(u;
+    #     algorithm = :iso,
+    #     isovalue = 0.00f0,
+    #     isorange = 0.002f0,
+    #     nan_color = :transparent,
+    #     colormap = [:transparent, :gray]
+    # )
+
+    u = map(x -> x ≤ 0 ? 1 : 0, u) |> BitArray
+
+    plotsdf() = volume(u;
+        absorption = 50,
+        algorithm = :absorption,
+        nan_color = :transparent,
+        colormap = [:transparent, :gray]
+    )
+
+    makeapp(sess, req) = DOM.div(plotsdf())
+
+    app = App(makeapp)
+    server = Bonito.Server(app, "0.0.0.0", 8700)
+    return server
 end
 #===========================================================#
 #
