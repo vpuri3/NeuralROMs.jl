@@ -1,7 +1,8 @@
-Manifest.toml
+Manifest*.toml
 /docs/Manifest.toml
 /docs/build/
 *.bson
+*.npy
 *.npz
 *.jld2
 *.hdf5
