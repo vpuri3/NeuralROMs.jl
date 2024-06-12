@@ -106,27 +106,33 @@ $ tree . -L 1 --filesfirst
 ```
 
 ```bash
-$ tree src/ -L 1
-├── autodiff.jl        # AD wrapper for 1-4th order derivatives
-├── evolve.jl          # Logic for dynamics evaluation
-├── layers.jl          # Architecture definitions (e.g., auto-decode, C-ROM, SIREN, etc.)
-├── metrics.jl         # Loss functions
-├── neuralgridmodel.jl # Grid-dependent neural space discretization (e.g., CAE-ROM, POD-ROM)
-├── neuralmodel.jl     # Neural field spatial discretization (e.g., C-ROM, SNF-ROM)
-├── NeuralROMs.jl      # Main file: declares Julia module and imports relevant packages
-├── nonlinleastsq.jl   # Nonlinear least square solve for LSPG and for initializing auto-decode.
-├── operator.jl        # Operator kernel definitions
-├── optimisers.jl      # Modified weight decay optimisers based on Optimisers.jl
-├── problems.jl        # PDE problem definitions du/dt = f(x, u, t, u', ...)
-├── timeintegrator.jl  # Time integrator object definition
-├── train.jl           # Training script
-├── transform.jl       # Fourier transform for Fourier Neural Operator
-├── utils.jl           # Miscalleneous utility functions
-└── vis.jl             # 1D/2D visualization functions
+$ tree src/ -L 2 --filesfirst
+.
+├── autodiff.jl            # AD wrapper for 1-4th order derivatives
+├── metrics.jl             # Loss functions
+├── neuralgridmodel.jl     # Grid-dependent neural space discretization (e.g., CAE-ROM, POD-ROM)
+├── neuralmodel.jl         # Neural field spatial discretization (e.g., C-ROM, SNF-ROM)
+├── NeuralROMs.jl          # Main file: declares Julia module and imports relevant packages
+├── nonlinleastsq.jl       # Nonlinear least square solve for LSPG and for initializing auto-decode.
+├── optimisers.jl          # Modified weight decay optimisers based on Optimisers.jl
+├── pdeproblems.jl         # PDE problem definitions du/dt = f(x, u, t, u', ...)
+├── train.jl               # Training loop
+├── utils.jl               # Miscalleneous utility functions
+├── vis.jl                 # 1D/2D visualizations
+├── dynamics               #
+│   ├── evolve.jl          # Logic for dynamics evaluation
+│   └── timeintegrator.jl  # Time integrator object definition
+├── layers                 #
+│   ├── basic.jl           # Basic layer definitions (e.g., PermuteLayer, HyperNet)
+│   ├── encoder_decoder.jl # Encoder-decoder network definitions (auto-decode, CAE, C-ROM, SNF-ROM)
+│   └── sdf.jl             # Layers for 3D shape encoding
+└── operator               #
+    ├── oplayers.jl        # Fourier neural operator kernel definitions
+    └── transform.jl       # Spectral transforms for FNO
 ```
 
 ```bash
-$ tree examples/ -L 1 --filesfirst
+$ tree experiments_SNFROM/ -L 1 --filesfirst
 experiments_SNFROM/
 ├── autodecode.jl     # Autodecode-ROM training and inference
 ├── cases.jl          # Experiment setup

@@ -14,9 +14,9 @@ let
     !(sdfpath in LOAD_PATH) && push!(LOAD_PATH, sdfpath)
 end
 
-using MeshCat
-using GeometryBasics: Mesh, HyperRectangle, Vec, SVector
-using Meshing: isosurface, MarchingCubes, MarchingTetrahedra, NaiveSurfaceNets
+# using MeshCat
+# using GeometryBasics: Mesh, HyperRectangle, Vec, SVector
+# using Meshing: isosurface, MarchingCubes, MarchingTetrahedra, NaiveSurfaceNets
 
 using WGLMakie, Bonito
 
@@ -178,6 +178,7 @@ function postprocess_SDF(
     model = jldopen(modelfile)
     NN, p, st = model["model"]
     md = model["metadata"]
+    δ = md.δ
 
     display(NN)
     @show md
@@ -200,6 +201,7 @@ function postprocess_SDF(
         x = vcat(xx', zz', yy')
         @time u = eval_model((NN, p, st), x; device) #, batchsize = 100)
         @time u = reshape(u, samples...)
+        u = Float16.(u)
 
         file = h5open(sdffile, "w")
         write(file, "u", u)
@@ -208,10 +210,12 @@ function postprocess_SDF(
         u
     end
 
+    # # MeshCat workflow
+
     # # RUN.JL
     # isdefined(Main, :vis) && MeshCat.close_server!(vis.core)
     # vis = Visualizer()
-    # postprocess_SDF(casename, modelfile; vis, device)
+    # vis = postprocess_SDF(casename, modelfile; vis, device)
     # open(vis; start_browser = false)
 
     # # HERE
@@ -220,17 +224,17 @@ function postprocess_SDF(
     # setobject!(vis, mesh)
     # return vis
 
-    # u = Float16.(u)
+    # # WGLMakie workflow
+
     # plotsdf() = volume(u;
     #     algorithm = :iso,
-    #     isovalue = 0.00f0,
-    #     isorange = 0.002f0,
+    #     isovalue = zero(Float16),
+    #     isorange = Float16(0.10δ),
     #     nan_color = :transparent,
     #     colormap = [:transparent, :gray]
     # )
 
     u = map(x -> x ≤ 0 ? 1 : 0, u) |> BitArray
-
     plotsdf() = volume(u;
         absorption = 50,
         algorithm = :absorption,

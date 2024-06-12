@@ -15,11 +15,11 @@ Random.seed!(rng, 199)
 # casename = "Burger.npz"
 # modeldir  = joinpath(@__DIR__, "dump3")
 
-# casename = "HumanSkull.npz"
-# modeldir  = joinpath(@__DIR__, "dump4")
+casename = "HumanSkull.npz"
+modeldir  = joinpath(@__DIR__, "dump4")
 
-casename = "Cybertruck.npz"
-modeldir  = joinpath(@__DIR__, "dump5")
+# casename = "Cybertruck.npz"
+# modeldir  = joinpath(@__DIR__, "dump5")
 
 modelfile = joinpath(modeldir, "model_08.jld2")
 device = Lux.gpu_device()
@@ -31,6 +31,6 @@ h, w = 5, 512
 # isdir(modeldir) && rm(modeldir, recursive = true)
 # model, ST, md = train_SDF(casename, modeldir, h, w, E; rng, device)
 
-isdefined(Main, :server) && close(server)
-server = postprocess_SDF(modelfile; device)
+# isdefined(Main, :server) && close(server)
+# server = postprocess_SDF(modelfile; device)
 #======================================================#

@@ -79,22 +79,24 @@ export
     forwarddiff_deriv1, forwarddiff_deriv2, forwarddiff_deriv4, forwarddiff_jacobian,
     finitediff_deriv1, finitediff_deriv2, finitediff_deriv4, finitediff_jacobian
 
-include("layers.jl")
+include("layers/basic.jl")
+export Atten, Diag, PermutedBatchNorm, SplitRows, HyperNet
+
+include("layers/encoder_decoder.jl")
 export
-    Atten, Diag, PermutedBatchNorm, SplitRows, ImplicitEncoderDecoder,
-    HyperNet,
+    ImplicitEncoderDecoder,
     AutoDecoder, get_autodecoder,
     FlatDecoder, get_flatdecoder, freeze_decoder,
     HyperDecoder, get_hyperdecoder
 
-include("transform.jl")
-export FourierTransform, CosineTransform
+include("layers/sdf.jl")
+export ClampVanilla, ClampTanh, ClampSigmoid, ClampSoftsign
 
-include("operator.jl")
+include("operator/oplayers.jl")
 export OpKernel, OpConv, OpKernelBilinear, OpConvBilinear, linear_nonlinear
 
-include("sdf.jl")
-export ClampVanilla, ClampTanh, ClampSigmoid, ClampSoftsign
+include("operator/transform.jl")
+export FourierTransform, CosineTransform
 
 include("optimisers.jl")
 export DecoderWeightDecay, IdxWeightDecay
@@ -109,7 +111,7 @@ export
 
 include("neuralgridmodel.jl")
 
-include("problems.jl")
+include("pdeproblems.jl")
 export dudtRHS
 export
     Advection1D, Advection2D,
@@ -121,10 +123,10 @@ export
 include("nonlinleastsq.jl")
 export nonlinleastsq
 
-include("timeintegrator.jl")
+include("dynamics/timeintegrator.jl")
 export TimeIntegrator, perform_timestep!, evolve_integrator!, evolve_model
 
-include("evolve.jl")
+include("dynamics/evolve.jl")
 export
     # timestepper types
     EulerForward, EulerBackward, RK2, RK4,
