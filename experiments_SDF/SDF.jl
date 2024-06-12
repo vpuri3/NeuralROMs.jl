@@ -83,10 +83,9 @@ end
 #===========================================================#
 
 function train_SDF(
+    NN::Lux.AbstractExplicitLayer,
     casename::String,
     modeldir::String,
-    h::Int, # num hidden layers
-    w::Int, # hidden layer width
     E::Int; # num epochs
     rng::Random.AbstractRNG = Random.default_rng(),
     δ::Real = 0.01f0, # 0.05f0
@@ -101,39 +100,16 @@ function train_SDF(
     _data, _, metadata = makedata_SDF(casename, δ; makedata_kws...)
     dir = modeldir
 
-    in_dim  = size(_data[1], 1)
-    out_dim = size(_data[2], 1)
-
     #--------------------------------------------#
     # architecture
     #--------------------------------------------#
 
+    in_dim  = size(_data[1], 1)
+    out_dim = size(_data[2], 1)
+
     println("input size: $(in_dim)")
     println("output size: $(out_dim)")
     println("Data points: $(numobs(_data))")
-
-    NN = begin
-        # DeepSDF paper recommends weight normalization
-
-        init_wt_in = scaled_siren_init(1f1)
-        init_wt_hd = scaled_siren_init(1f0)
-        init_wt_fn = glorot_uniform
-
-        init_bias = rand32 # zeros32
-        use_bias_fn = false
-
-        act = sin
-
-        wi = in_dim
-        wo = out_dim
-
-        in_layer = Dense(wi, w , act; init_weight = init_wt_in, init_bias)
-        hd_layer = Dense(w , w , act; init_weight = init_wt_hd, init_bias)
-        fn_layer = Dense(w , wo     ; init_weight = init_wt_fn, init_bias, use_bias = use_bias_fn)
-        finalize = ClampTanh(δ)
-
-        Chain(in_layer, fill(hd_layer, h)..., fn_layer, finalize)
-    end
 
     #-------------------------------------------#
     # training hyper-params
@@ -148,7 +124,7 @@ function train_SDF(
 
     #-------------------------------------------#
 
-    train_args = (; h, w, E, _batchsize, batchsize_)
+    train_args = (; E, _batchsize, batchsize_)
     metadata   = (; metadata..., δ, train_args)
 
     display(NN)
