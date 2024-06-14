@@ -24,14 +24,14 @@ modeldir  = joinpath(@__DIR__, "dump4")
 rng = Random.default_rng()
 Random.seed!(rng, 199)
 
-modelfile = joinpath(modeldir, "model_08.jld2")
+modelfile = joinpath(modeldir, "model_05.jld2")
 device = Lux.gpu_device()
 
-δ = 0.1f0
+δ = 0.01f0
 #======================================================#
 # Train MLP
 #======================================================#
-#
+
 # NN = begin
 #     h, w = 5, 512
 #     # DeepSDF paper recommends weight normalization
@@ -57,25 +57,24 @@ device = Lux.gpu_device()
 #
 # E = 490
 # isdir(modeldir) && rm(modeldir, recursive = true)
-# model, ST, md = train_SDF(NN, casename, modeldir, E; rng, δ, device)
+# model, ST, md = train_SDF(NN, casename, modeldir, E; rng, warmup = true, δ, device)
+
 #======================================================#
 # Hash Encoding
 #======================================================#
 
-using Zygote
-device = Lux.gpu_device()
-
 NN = begin
-    nLevels = 4
-    out_dims = 3
+    nLevels = 8
+    out_dims = 2
+    nEmbeddings = 2^10
 
-    MLH = MultiLevelSpatialHash(; out_dims, nLevels, min_res = 32)
+    MLH = MultiLevelSpatialHash(; out_dims, nEmbeddings, nLevels, min_res = 8)
 
     mlp_w  = 64
-    mlp_in = out_dims * nLevels + 3
+    mlp_in = out_dims * nLevels #+ 3
 
     MLP = Chain(
-        Dense(mlp_in, mlp_w, tanh),
+        Dense(mlp_in, mlp_w, relu),
         Dense(mlp_w, 1; use_bias = false),
         ClampTanh(δ),
     )
@@ -83,9 +82,16 @@ NN = begin
     Chain(; MLH, MLP)
 end
 
-E = 490
+E = 500
+warmup = false
+lrs = (1f-3, 5f-4, 1f-4, 5f-5, 1f-5,)
+beta = (0.9f0, 0.99f0)
+epsilon = 1f-15
+
 isdir(modeldir) && rm(modeldir, recursive = true)
-model, ST, md = train_SDF(NN, casename, modeldir, E; rng, δ, device)
+model, ST, md = train_SDF(NN, casename, modeldir, E; rng, δ,
+    lrs, warmup, beta, epsilon, device,
+)
 
 #======================================================#
 # process visualization

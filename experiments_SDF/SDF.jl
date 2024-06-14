@@ -87,12 +87,20 @@ function train_SDF(
     casename::String,
     modeldir::String,
     E::Int; # num epochs
+
     rng::Random.AbstractRNG = Random.default_rng(),
+
     δ::Real = 0.01f0, # 0.05f0
-    warmup::Bool = true,
+
+    lrs = nothing,
+    warmup::Bool = false,
+    weight_decays::Union{Real, NTuple{M, <:Real}} = 0f-5,
+    beta = nothing,
+    epsilon = nothing,
+
     _batchsize = nothing,
     batchsize_ = nothing,
-    weight_decays::Union{Real, NTuple{M, <:Real}} = 0f-5,
+
     makedata_kws = (; _Ix = :,),
     device = Lux.gpu_device(),
 ) where{M}
@@ -120,7 +128,7 @@ function train_SDF(
 
     lossfun = mae # mae_clamped(δ)
     weightdecay = WeightDecay(weight_decays)
-    opts, nepochs, schedules, early_stoppings = make_optimizer(E, warmup, weightdecay)
+    opts, nepochs, schedules, early_stoppings = make_optimizer(E, lrs; warmup, weightdecay, beta, epsilon)
 
     #-------------------------------------------#
 
@@ -177,7 +185,7 @@ function postprocess_SDF(
         x = vcat(xx', zz', yy')
         @time u = eval_model((NN, p, st), x; device) #, batchsize = 100)
         @time u = reshape(u, samples...)
-        u = Float16.(u)
+        # u = Float16.(u)
 
         file = h5open(sdffile, "w")
         write(file, "u", u)

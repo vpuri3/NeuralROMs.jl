@@ -2,15 +2,32 @@
 #===========================================================#
 function make_optimizer(
     E::Integer,
-    warmup::Bool,
+    lrs = nothing;
+    warmup::Bool = false,
     weightdecay = nothing,
+    beta = nothing,
+    epsilon = nothing,
 )
-    lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
+    if isnothing(lrs)
+        lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
+    end
+
+    if isnothing(beta)
+        beta = (0.9f0, 0.999f0)
+    end
+
+    if isnothing(epsilon)
+        epsilon = 1f-8
+    end
+
     Nlrs = length(lrs)
 
     # Grokking (https://arxiv.org/abs/2201.02177)
-    # Optimisers.Adam(lr, (0.9f0, 0.95f0)), # 0.999 (default), 0.98, 0.95
     # https://www.youtube.com/watch?v=IHikLL8ULa4&ab_channel=NeelNanda
+    # beta = (0.9f0, 0.95f0))
+
+    # InstantNGP: beta = (0.9, 0.999), epsilon = 10^-15
+
     opts = if isnothing(weightdecay)
         Tuple(
             Optimisers.Adam(lr) for lr in lrs
@@ -18,7 +35,7 @@ function make_optimizer(
     else
         Tuple(
             OptimiserChain(
-                Optimisers.Adam(lr),
+                Optimisers.Adam(; eta = lr, beta, epsilon),
                 weightdecay,
             )
             for lr in lrs
