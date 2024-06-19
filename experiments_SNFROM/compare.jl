@@ -137,7 +137,9 @@ function train_SNF_compare(
         batchsizes...,
     )
 end
-
+#======================================================#
+# compare cases
+#======================================================#
 function compare_plots(
     modeldirs,
     labels,

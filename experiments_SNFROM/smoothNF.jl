@@ -67,8 +67,8 @@ function makedata_SNF(
     _Ns = _Nb * _Nt # num trajectories
     Ns_ = Nb_ * Nt_
 
-    println("Using $Nx sample points per trajectory.")
-    println("$_Ns / $Ns_ trajectories in train/test sets.")
+    println("MAKEDATA_SNF: Using $Nx sample points per trajectory.")
+    println("MAKEDATA_SNF: $_Ns / $Ns_ trajectories in train/test sets.")
 
     # make arrays
 
@@ -133,7 +133,7 @@ function train_SNF(
     α::Real = 0f0,
     weight_decays::Union{Real, NTuple{M, <:Real}} = 0f0,
     makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :,),
-    device = Lux.cpu_device(),
+    device = Lux.gpu_device(),
 ) where{M}
 
     _data, data_, metadata = makedata_SNF(datafile; makedata_kws...)
@@ -147,9 +147,9 @@ function train_SNF(
     # architecture
     #--------------------------------------------#
 
-    println("input size: $in_dim")
-    println("param size: $prm_dim")
-    println("output size: $out_dim")
+    println("TRAIN_SNF: input size: $in_dim")
+    println("TRAIN_SNF: param size: $prm_dim")
+    println("TRAIN_SNF: output size: $out_dim")
 
     hyper = begin
         wi = prm_dim
@@ -219,114 +219,6 @@ function train_SNF(
     model, ST, metadata
 end
 
-#======================================================#
-function evolve_SNF(
-    prob::AbstractPDEProblem,
-    datafile::String,
-    modelfile::String,
-    case::Integer; # batch
-    rng::Random.AbstractRNG = Random.default_rng(),
-    outdir::String = joinpath(dirname(modelfile), "results"),
-    data_kws = (; Ix = :, It = :),
-    Δt::Union{Real, Nothing} = nothing,
-    timealg::NeuralROMs.AbstractTimeAlg = EulerForward(),
-    adaptive::Bool = false,
-    scheme::Union{Nothing, NeuralROMs.AbstractSolveScheme} = nothing,
-    autodiff_xyz::ADTypes.AbstractADType = AutoForwardDiff(),
-    ϵ_xyz::Union{Real, Nothing} = nothing,
-    learn_ic::Bool = true,
-    verbose::Bool = true,
-    device = Lux.cpu_device(),
-)
-    # load data
-    Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
-
-    # load model
-    (NN, p, st), md = loadmodel(modelfile)
-
-    #==============#
-    # subsample in space
-    #==============#
-    Udata = @view Udata[:, data_kws.Ix, :, data_kws.It]
-    Xdata = @view Xdata[:, data_kws.Ix]
-    Tdata = @view Tdata[data_kws.It]
-
-    Ud = Udata[:, :, case, :]
-    U0 = Ud[:, :, 1]
-
-    data = (Xdata, U0, Tdata)
-    data = copy.(data) # ensure no SubArrays
-
-    #==============#
-    # get hyper-decoer
-    #==============#
-    hyper, decoder = get_flatdecoder(NN, p, st)
-
-    #==============#
-    # get p0
-    #==============#
-    _data, _, _ = makedata_SNF(datafile; Ix = [1,], _Ib = [case])
-    _prm = _data[1][2]
-    _ps = hyper[1](_prm, hyper[2], hyper[3])[1]
-    p0 = _ps[:, 1]
-
-    #==============#
-    # make model
-    #==============#
-    NN, p0, st = freeze_decoder(decoder, length(p0); rng, p0)
-    model = NeuralModel(NN, st, md)
-
-    #==============#
-    # evolve
-    #==============#
-    autodiff = AutoForwardDiff()
-    linsolve = QRFactorization()
-    linesearch = LineSearch()
-    nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
-    nlsmaxiters = 20
-
-    Δt = isnothing(Δt) ? -(-(extrema(Tdata)...)) / 100.0f0 : Δt
-
-    if isnothing(scheme)
-        scheme  = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
-        # scheme = LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, 1f-6, 1f-3, 1f-6)
-    end
-
-    @time _, ps, Up = evolve_model(
-        prob, model, timealg, scheme, data, p0, Δt;
-        adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
-    )
-
-    #==============#
-    # visualization
-    #==============#
-
-    mkpath(outdir)
-
-    # field visualizations
-    grid = get_prob_grid(prob)
-    fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "evolve", case)
-
-    # parameter plots
-    plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
-    plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
-    png(plt, joinpath(outdir, "evolve_p_scatter_case$(case)"))
-
-    plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
-    plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")
-    png(plt, joinpath(outdir, "evolve_p_case$(case)"))
-
-    # save files
-    filename = joinpath(outdir, "evolve$(case).jld2")
-    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps, Plrnd = _ps)
-
-    # print error metrics
-    @show sqrt(mse(Up, Ud) / mse(Ud, 0 * Ud))
-    @show norm(Up - Ud, Inf) / sqrt(mse(Ud, 0 * Ud))
-
-    Xdata, Tdata, Ud, Up, ps
-end
-
 #===========================================================#
 function postprocess_SNF(
     prob::AbstractPDEProblem,
@@ -336,7 +228,7 @@ function postprocess_SNF(
     makeplot::Bool = true,
     evolve_kw::NamedTuple = (;),
     outdir::String = joinpath(dirname(modelfile), "results"),
-    device = Lux.cpu_device(),
+    device = Lux.gpu_device(),
 )
     # load data
     Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
@@ -518,6 +410,283 @@ function postprocess_SNF(
     end
 
     nothing
+end
+
+#======================================================#
+function evolve_SNF(
+    prob::AbstractPDEProblem,
+    datafile::String,
+    modelfile::String,
+    case::Integer; # batch
+    rng::Random.AbstractRNG = Random.default_rng(),
+    outdir::String = joinpath(dirname(modelfile), "results"),
+    data_kws = (; Ix = :, It = :),
+    Δt::Union{Real, Nothing} = nothing,
+    timealg::NeuralROMs.AbstractTimeAlg = EulerForward(),
+    adaptive::Bool = false,
+    scheme::Union{Nothing, NeuralROMs.AbstractSolveScheme} = nothing,
+    autodiff_xyz::ADTypes.AbstractADType = AutoForwardDiff(),
+    ϵ_xyz::Union{Real, Nothing} = nothing,
+    learn_ic::Bool = true,
+    hyper_reduction::Bool = true,
+    verbose::Bool = true,
+    device = Lux.gpu_device(),
+)
+    mkpath(outdir)
+    modeldir = dirname(modelfile)
+
+    # load data
+    Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
+
+    # load model
+    (NN, p, st), md = loadmodel(modelfile)
+
+    #==============#
+    # subsample in space
+    #==============#
+    Udata = @view Udata[:, data_kws.Ix, :, data_kws.It]
+    Xdata = @view Xdata[:, data_kws.Ix]
+    Tdata = @view Tdata[data_kws.It]
+
+    #==============#
+    # get hyper-decoer
+    #==============#
+    hyper, decoder = get_flatdecoder(NN, p, st)
+
+    #==============#
+    # get p0
+    #==============#
+    # # TODO: verify this on Burgers 1D
+
+    # _data, _, _ = makedata_SNF(datafile; Ix = [1,], _Ib = [case], _It = [1])
+    # _prm = _data[1][2]
+    # _ps = hyper[1](_prm, hyper[2], hyper[3])[1]
+    # p0 = _ps[:, 1]
+
+    _data, _, _ = makedata_SNF(datafile; Ix = [1,], _It = [1])
+    _prm = _data[1][2]
+    _ps  = hyper[1](_prm, hyper[2], hyper[3])[1] # [N_ROM, N_CASES]
+
+    #==============#
+    # make model
+    #==============#
+    p0 = _ps[:, case]
+
+    NN, p0, st = freeze_decoder(decoder, length(p0); rng, p0)
+    model = NeuralModel(NN, st, md)
+
+    #==============#
+    # solver setup
+    #==============#
+    autodiff = AutoForwardDiff()
+    linsolve = QRFactorization()
+    linesearch = LineSearch()
+    nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
+    nlsmaxiters = 20
+
+    Δt = isnothing(Δt) ? -(-(extrema(Tdata)...)) / 100.0f0 : Δt
+
+    if isnothing(scheme)
+        scheme  = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
+    end
+
+    #==============#
+    # Hyper-reduction
+    # TODO: Modify time-evolution to include hypernetwork
+    #==============#
+
+    if hyper_reduction
+        hyppath = joinpath(modeldir, "hyperreduction.jld2")
+        if ispath(hyppath)
+            hypfile = jldopen(hyppath)
+            IX = hypfile["IX"]
+            close(hypfile)
+
+            println("Grabbing Hyper-reduction indices from $hypfile with $(length(IX)) points.")
+        else
+            IX = hyperreduction_idx(
+                Xdata, Udata, Tdata, _ps, getaxes(p0),
+                prob, model, timealg, scheme, Δt,
+                adaptive, autodiff_xyz, ϵ_xyz, learn_ic;
+                rng, verbose = false, device,
+            )
+
+            jldsave(hyppath; IX)
+        end
+    else
+        IX = Colon()
+    end
+
+    U0 = @view Udata[:, IX, case, 1]
+    Xd = @view Xdata[:, IX]
+    Td = @view Tdata[:]
+
+    # create data
+    data = (Xd, U0, Td)
+    data = copy.(data) # ensure no SubArrays
+
+    #==============#
+    # evolve
+    #==============#
+
+    @time _, ps, _ = evolve_model(
+        prob, model, timealg, scheme, data, p0, Δt;
+        adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
+    )
+
+    #==============#
+    # analysis
+    #==============#
+
+    # get data array
+    Ud = @view Udata[:, :, case, :]
+
+    # query decoder to get output field
+    Up = begin
+        Ups = []
+        ax = getaxes(p0)
+
+        for i in axes(ps, 2)
+            _p = ComponentArray(ps[:, i], ax)
+            _u = model(Xdata, _p)
+            push!(Ups, _u)
+        end
+        cat(Ups...; dims = 3)
+    end
+
+    # field visualizations
+    grid = get_prob_grid(prob)
+    fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "evolve", case)
+
+    # parameter plots
+    plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
+    plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
+    png(plt, joinpath(outdir, "evolve_p_scatter_case$(case)"))
+
+    plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+    plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")
+    png(plt, joinpath(outdir, "evolve_p_case$(case)"))
+
+    # save files
+    filename = joinpath(outdir, "evolve$(case).jld2")
+    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps, Plrnd = _ps)
+
+    # print error metrics
+    @show sqrt(mse(Up, Ud) / mse(Ud, 0 * Ud))
+    @show norm(Up - Ud, Inf) / sqrt(mse(Ud, 0 * Ud))
+
+    Xdata, Tdata, Ud, Up, ps
+end
+
+#===========================================================#
+function hyperreduction_idx(
+    Xdata, Udata, Tdata, ps, ax,
+    prob, model, timealg, scheme, Δt,
+    adaptive, autodiff_xyz, ϵ_xyz, learn_ic;
+    rng = Random.default_rng(),
+    tol::Real = 5f-3,
+    Q::Integer = 10,
+    maxsamples::Integer = 100,
+    verbose::Bool = false,
+    device = Lux.gpu_device(),
+)
+    IX = rand(rng, 1:size(Xdata, 2), size(ps, 1))
+
+    residual_args = Xdata, Udata, Tdata, ps, ax,
+        prob, model, timealg, scheme, Δt,
+        adaptive, autodiff_xyz, ϵ_xyz, learn_ic
+
+    while true
+        IX = sort(IX)
+
+        r  = compute_residual(IX, residual_args...; verbose, device)
+        rm = residual_metric(r)
+
+        println("HYPERREDUCTION_IDX: |IX| = $(length(IX)), metric: $(rm)")
+        println(IX')
+
+        if residual_metric(r) < tol
+            println("HYPERREDUCTION_IDX: Tolerance has been met with $(length(IX)) points.")
+            break
+        end
+
+        if length(IX) > maxsamples
+            println("HYPERREDUCTION_IDX: maxsamples exceeded. returning $(length(IX)) points.")
+            break
+        end
+
+        II = sortperm(r, rev = true)
+        II = setdiff(II, IX)
+        II = II[1:Q]
+
+        ms = []
+        for i in II
+            I_ = [IX..., i]
+            r_ = compute_residual(I_, residual_args...; verbose, device)
+            m_ = residual_metric(r_)
+            println("HYPERREDUCTION_IDX: ------- metric: $(m_)")
+            push!(ms, m_)
+        end
+
+        j = II[argmin(ms)]
+        push!(IX, j)
+    end
+
+    return IX
+end
+
+function compute_residual(
+    IX, Xdata, Udata, Tdata, ps, ax,
+    prob, model, timealg, scheme, Δt,
+    adaptive, autodiff_xyz, ϵ_xyz, learn_ic;
+    verbose::Bool = false,
+    device = Lux.gpu_deivce(),
+)
+    res = zeros(Float32, size(Xdata, 2))
+
+    for case in axes(Udata, 3)
+        # make data
+        Nt = length(Tdata)
+        It = LinRange(1, Nt, 10) .|> Base.Fix1(round, Int)
+
+        Td = @view Tdata[It]
+        Xd = @view Xdata[:, IX]
+        U0 = @view Udata[:, IX, case,  1]
+        Ud = @view Udata[:,  :, case, It]
+
+        data = (Xd, U0, Td)
+        data = copy.(data)
+
+        p0 = ComponentArray(ps[:, case], ax)
+
+        _, ps, _ = evolve_model(
+            prob, model, timealg, scheme, data, p0, Δt;
+            adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
+        )
+
+        # Compute residual 
+        Up = begin
+            Ups = []
+            for i in axes(ps, 2)
+                _p = ComponentArray(ps[:, i], ax)
+                _u = model(Xdata, _p)
+                push!(Ups, _u)
+            end
+            cat(Ups...; dims = 3)
+        end
+
+        err = Up - Ud
+        res += sum(abs2, err; dims = (1, 3)) .|> sqrt |> vec
+    end
+
+    res
+end
+
+function residual_metric(r::AbstractVector)
+    mn = sum(r) / length(r)
+    mx = maximum(r)
+
+    mn + mx
 end
 #===========================================================#
 #

@@ -1,27 +1,21 @@
 #
 using NeuralROMs
-using JLD2, TSne
-using Random, Lux, NNlib, MLUtils
+using Random, Lux, NNlib, MLUtils, JLD2
 using Plots, ColorSchemes, LaTeXStrings
 
 #======================================================#
 
-function get_prob_grid(prob::NeuralROMs.AbstractPDEProblem)
-    if prob isa Advection1D
-        (128,)
-    elseif prob isa BurgersViscous1D
-        (1024,)
-        # (2048,)
-    elseif prob isa KuramotoSivashinsky1D
-        (256,)
-    elseif prob isa Advection2D
-        (128,128,)
-    elseif prob isa BurgersViscous2D
-        (512,512,)
-    else
-        throw(ErrorException("Unsupported problem type."))
-    end
-end
+get_prob_domain(::Advection1D) = (-1f0, 1f0)
+get_prob_domain(::Advection2D) = (-1f0, 1f0), (-1f0, 1f0)
+get_prob_domain(::BurgersViscous1D) = (0f0, 2f0)
+get_prob_domain(::BurgersViscous2D) = (-0.25f0, 0.75f0), (-0.25f0, 0.75f0)
+get_prob_domain(::KuramotoSivashinsky1D) = Float32.(-pi, pi)
+
+get_prob_grid(::Advection1D) = (128,)
+get_prob_grid(::Advection2D) = (128, 128)
+get_prob_grid(::BurgersViscous1D) = (1024,)
+get_prob_grid(::BurgersViscous2D) = (512, 512)
+get_prob_grid(::KuramotoSivashinsky1D) = (256,)
 
 #======================================================#
 

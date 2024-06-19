@@ -1,7 +1,6 @@
 #
 using NeuralROMs
-include(joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "smoothNF.jl"))
-include(joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "cases.jl"))
+joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "compare.jl") |> include
 #======================================================#
 
 rng = Random.default_rng()
@@ -13,12 +12,11 @@ modeldir  = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
 device = Lux.gpu_device()
 
-_It = LinRange(1, 500, 50) .|> Base.Fix1(round, Int)
-makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It, It_ = :,)
-train_params = (; E = 1400, wd = 64, α = 0f-0, γ = 1f-2, makedata_kws,)
+# latent = 2
+# train_params = (; E = 1400, wd = 64, α = 0f-0, γ = 1f-2, makedata_kws,)
+# makedata_kws = (; Ix = :, _Ib = [1,], Ib_ = [1,], _It = :, It_ = :)
+# train_SNF_compare(latent, datafile, modeldir, train_params; rng, device)
 
-train_SNF_compare(2, datafile, modeldir, train_params; rng, device)
 postprocess_SNF(prob, datafile, modelfile; rng, device)
-
 #======================================================#
 nothing
