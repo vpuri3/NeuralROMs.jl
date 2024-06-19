@@ -45,7 +45,7 @@ Lux.parameterlength(::ClampSoftsign) = 0
 cubic_interp(f0, f1, w) = @. f0 + (f1 - f0) * (3 - 2w) * w^2
 lerp(f0, f1, w) = @. w * (f1 - f0) + f0
 
-function get_bottomleft(
+function get_boundingbox_indices(
     xyz::AbstractMatrix{T},
     shape::NTuple{D, Ti}
 ) where{T, D, Ti}
@@ -55,12 +55,44 @@ function get_bottomleft(
     xyz  = (xyz .+ 1f0) .* 0.5f0
 
     XYZ  = xyz .* shape
-    Ixyz = floor.(Int32, XYZ)
-    wxyz = XYZ - Ixyz
+    Ixyz0 = floor.(Int32, XYZ)
+    Ixyz1 = ceil.( Int32, XYZ)
 
-    Ixyz, wxyz
+    wxyz = XYZ - Ixyz0
+
+    Ixyz0, Ixyz1, wxyz
 end
 
+function get_boundingbox(
+    xyz::AbstractArray{T},
+    shape::NTuple{D, Ti},
+    nEmbeddings,
+    indexfun,
+) where{T, D, Ti}
+
+    Ixyz0, Ixyz1, wxyz = get_boundingbox_indices(xyz, shape)
+
+    Ix0, Iy0, Iz0 = collect(getindex(Ixyz0, d, :) for d in axes(Ixyz0, 1))
+    Ix1, Iy1, Iz1 = collect(getindex(Ixyz1, d, :) for d in axes(Ixyz1, 1))
+    wx , wy , wz  = collect(getindex(wxyz , d, :) for d in axes(wxyz , 1))
+
+    wx , wy , wz  = map(w -> reshape(w, 1, size(w)...), (wx, wy, wz))
+
+    I000 = indexfun(Ix0, Iy0, Iz0, nEmbeddings)
+    I100 = indexfun(Ix1, Iy0, Iz0, nEmbeddings)
+    I010 = indexfun(Ix0, Iy1, Iz0, nEmbeddings)
+    I110 = indexfun(Ix1, Iy1, Iz0, nEmbeddings)
+    I001 = indexfun(Ix0, Iy0, Iz1, nEmbeddings)
+    I101 = indexfun(Ix1, Iy0, Iz1, nEmbeddings)
+    I011 = indexfun(Ix0, Iy1, Iz1, nEmbeddings)
+    I111 = indexfun(Ix1, Iy1, Iz1, nEmbeddings)
+
+    (wx, wy, wz), (I000, I100, I010, I110, I001, I101, I011, I111)
+end
+
+#===========================================================#
+# index schemes
+#===========================================================#
 function index_hash(
     Ix::AbstractArray{Ti},
     Iy::AbstractArray{Ti},
@@ -83,32 +115,6 @@ function index_grid(
     @. (Iz - 1) * (shape[1] * shape[2]) + (Iy - 1) * shape[1] + Ix
 end
 
-function get_boundingbox(
-    xyz::AbstractArray{T},
-    shape::NTuple{D, Ti},
-    nEmbeddings,
-    indexfun,
-) where{T, D, Ti}
-
-    Ixyz0, wxyz = get_bottomleft(xyz, shape)
-
-    Ix0, Iy0, Iz0 = collect(getindex(Ixyz0, d, :) for d in axes(Ixyz0, 1))
-    wx , wy , wz  = collect(getindex(wxyz , d, :) for d in axes(wxyz , 1))
-
-    Ix1, Iy1, Iz1 = map(II -> II .+ true, (Ix0, Iy0, Iz0))
-    wx , wy , wz  = map(w -> reshape(w, 1, size(w)...), (wx, wy, wz))
-
-    I000 = indexfun(Ix0, Iy0, Iz0, nEmbeddings)
-    I100 = indexfun(Ix1, Iy0, Iz0, nEmbeddings)
-    I010 = indexfun(Ix0, Iy1, Iz0, nEmbeddings)
-    I110 = indexfun(Ix1, Iy1, Iz0, nEmbeddings)
-    I001 = indexfun(Ix0, Iy0, Iz1, nEmbeddings)
-    I101 = indexfun(Ix1, Iy0, Iz1, nEmbeddings)
-    I011 = indexfun(Ix0, Iy1, Iz1, nEmbeddings)
-    I111 = indexfun(Ix1, Iy1, Iz1, nEmbeddings)
-
-    (wx, wy, wz), (I000, I100, I010, I110, I001, I101, I011, I111)
-end
 #===========================================================#
 # Spatial hash grid
 #===========================================================#
@@ -242,8 +248,17 @@ function MultiLevelSpatialHash(;
 
     println("Generating $(nLevels) spatial hashes with resolutions $(Ns)")
 
+    # levels = (;)
+    # for l in 1:nLevels
+    #     N = Ns[l]
+    #     shape = (N, N, N,)
+    #     Ne = min(prod(shape), nEmbeddings)
+    #     layer = SpatialHash(out_dims, nEmbeddings)
+    #     levels = (; levels..., Symbol("level$l") = layer)
+    # end
+
     levels = NamedTuple(
-        Symbol("hash$l") => SpatialHash(
+        Symbol("Level$l") => SpatialHash(
             out_dims, nEmbeddings, (Ns[l], Ns[l], Ns[l]);
             init_weight, interpfun,
         )
