@@ -32,6 +32,8 @@
     ϵ_nls
     ϵ_jac
     ϵ_xyz
+
+    lincache # Galerkin only (linear solver cache)
 end
 
 function TimeIntegrator(
@@ -79,8 +81,16 @@ function TimeIntegrator(
     u0 = model(x, p0)
     f0 = dudtRHS(prob, model, x, p0, t0; autodiff = autodiff_xyz, ϵ = ϵ_xyz)
 
+    lincache = if scheme isa GalerkinProjection
+        J = dudp(model, x, p0; autodiff = autodiff_jac, ϵ = ϵ_jac)
+        linprob = LinearProblem(J, vec(similar(f0)))
+        LinearSolve.init(linprob, scheme.linsolve)
+    else
+        nothing
+    end
+
     f̃0 = if scheme isa GalerkinProjection
-        compute_f̃(f0, p0, x, model, scheme; autodiff_jac, ϵ_jac)
+        compute_f̃(f0, p0, x, model, lincache; autodiff_jac, ϵ_jac)
     else
         p0 * NaN
     end
@@ -100,6 +110,7 @@ function TimeIntegrator(
         tprevs, pprevs, uprevs, fprevs, f̃prevs,
         autodiff_nls, autodiff_jac, autodiff_xyz,
         ϵ_nls, ϵ_jac, ϵ_xyz,
+        lincache,
     )
 end
 
@@ -328,6 +339,7 @@ function evolve_integrator!(
 
     return ts, ps, us
 end
+
 #===========================================================#
 
 function descend_p0(
@@ -435,9 +447,11 @@ function evolve_model(
     #============================#
 
     mse_norm = mse(model(x, p0), u0)
-    println("#============================#")
-    println("Initial Condition MSE: $mse_norm")
-    println("Time Step: $(0), Time: 0.0")
+    if verbose
+        println("#============================#")
+        println("Initial Condition MSE: $mse_norm")
+        println("Time Step: $(0), Time: 0.0")
+    end
 
     if learn_ic
         p0, mse_norm = learn_p0(model, p0, (x, u0);

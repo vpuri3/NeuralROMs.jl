@@ -58,7 +58,7 @@ using NonlinearSolve
 using LineSearches
 
 abstract type AbstractNeuralModel end
-abstract type AbstractPDEProblem end
+abstract type AbstractPDEProblem{D} end
 abstract type AbstractTimeAlg end
 abstract type AbstractTimeIntegrator end
 abstract type AbstractSolveScheme end
@@ -112,7 +112,7 @@ export
 include("neuralgridmodel.jl")
 
 include("pdeproblems.jl")
-export dudtRHS
+export dudtRHS, indims
 export
     Advection1D, Advection2D,
     AdvectionDiffusion1D,

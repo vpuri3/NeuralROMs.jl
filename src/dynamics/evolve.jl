@@ -216,21 +216,16 @@ function solve_timestep(
     verbose::Bool = true,
 ) where{T}
 
-    @unpack prob, model, x, timealg = integrator
+    @unpack prob, model, x, timealg, lincache = integrator
     @unpack autodiff_jac, autodiff_xyz, ϵ_jac, ϵ_xyz = integrator
     @unpack Δt, pprevs, uprevs, tprevs, fprevs, f̃prevs = integrator
 
     p1 = if isimplicit(timealg)
-        @error """GalerkinProjection with implicit time-integrator is
-        not implemetned"""
+        @error "GalerkinProjection with implicit time-integrator is not implemetned"
     else
-        function dpdt_rhs(p, t)
-            compute_f̃(p, x, t, prob, model, scheme;
-                autodiff_jac, autodiff_xyz, ϵ_jac, ϵ_xyz,
-            )
-        end
-
         f̃1 = nothing
+        kws = (; autodiff_jac, autodiff_xyz, ϵ_jac, ϵ_xyz)
+        dpdt_rhs(p, t) = compute_f̃(p, x, t, prob, model, lincache; kws...)
         apply_timestep(timealg, Δt, f̃prevs, pprevs, tprevs, f̃1, dpdt_rhs)
     end
 
@@ -238,7 +233,7 @@ function solve_timestep(
     t1 = get_time(integrator) + Δt
     u1 = model(x, p1)
     f1 = dudtRHS(prob, model, x, p1, t1; autodiff = autodiff_xyz, ϵ = ϵ_xyz)
-    f̃1 = compute_f̃(f1, p1, x, model, scheme; autodiff_jac, ϵ_jac)
+    f̃1 = compute_f̃(f1, p1, x, model, lincache; autodiff_jac, ϵ_jac)
     r1 = compute_residual(timealg, Δt, fprevs, uprevs, tprevs, f1, u1, nothing) #TODO
 
     # print message
@@ -258,14 +253,14 @@ function compute_f̃(
     t::Real,
     prob::AbstractPDEProblem,
     model::AbstractNeuralModel,
-    scheme::GalerkinProjection;
+    lincache::LinearSolve.LinearCache;
     autodiff_jac = AutoForwardDiff(),
     autodiff_xyz = AutoForwardDiff(),
     ϵ_jac = nothing,
     ϵ_xyz = nothing,
 )
     f = dudtRHS(prob, model, x, p, t; autodiff = autodiff_xyz, ϵ = ϵ_xyz)
-    compute_f̃(f, p, x, model, scheme; autodiff_jac, ϵ_jac,)
+    compute_f̃(f, p, x, model, lincache; autodiff_jac, ϵ_jac,)
 end
 
 function compute_f̃(
@@ -273,19 +268,19 @@ function compute_f̃(
     p::AbstractVector,
     x::AbstractArray,
     model::AbstractNeuralModel,
-    scheme::GalerkinProjection;
+    lincache::LinearSolve.LinearCache;
     autodiff_jac = AutoForwardDiff(),
     ϵ_jac = nothing,
 )
     # du/dp (N, n)
     J = dudp(model, x, p; autodiff = autodiff_jac, ϵ = ϵ_jac)
 
-    linprob = LinearProblem(J, vec(f))
-    linsol  = solve(linprob, scheme.linsolve)
+    lincache.A = J
+    lincache.b = vec(f)
+    lincache.u = similar(lincache.u)
 
-    # TODO compute_f̃: add stats?
-
-    linsol.u
+    solve!(lincache)
+    lincache.u
 end
 
 #===========================================================#
