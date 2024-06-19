@@ -1,6 +1,9 @@
 #
 #===================================================#
-struct Advection1D{T} <: AbstractPDEProblem
+indims(::AbstractPDEProblem{D}) where{D} = D
+
+#===================================================#
+struct Advection1D{T} <: AbstractPDEProblem{1}
     c::T
 end
 
@@ -20,7 +23,7 @@ function dudtRHS(
 end
 
 #===================================================#
-struct Advection2D{T} <: AbstractPDEProblem
+struct Advection2D{T} <: AbstractPDEProblem{2}
     cx::T
     cy::T
 end
@@ -42,7 +45,7 @@ function dudtRHS(
 end
 
 #===================================================#
-struct AdvectionDiffusion1D{T} <: AbstractPDEProblem
+struct AdvectionDiffusion1D{T} <: AbstractPDEProblem{1}
     c::T
     ν::T
 end
@@ -65,7 +68,7 @@ function dudtRHS(
 end
 
 #===================================================#
-struct BurgersInviscid1D <: AbstractPDEProblem
+struct BurgersInviscid1D <: AbstractPDEProblem{1}
 end
 
 function dudtRHS(
@@ -83,7 +86,7 @@ function dudtRHS(
 end
 
 #===================================================#
-struct BurgersViscous1D{T} <: AbstractPDEProblem
+struct BurgersViscous1D{T} <: AbstractPDEProblem{1}
     ν::T
 end
 
@@ -104,7 +107,7 @@ function dudtRHS(
 end
 
 #===================================================#
-struct BurgersViscous2D{T} <: AbstractPDEProblem
+struct BurgersViscous2D{T} <: AbstractPDEProblem{2}
     ν::T
 end
 
@@ -149,7 +152,7 @@ function dudtRHS(
 end
 
 #===================================================#
-struct KuramotoSivashinsky1D{T} <: AbstractPDEProblem
+struct KuramotoSivashinsky1D{T} <: AbstractPDEProblem{1}
     ν::T
 end
 
