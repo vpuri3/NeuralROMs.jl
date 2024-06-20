@@ -10,13 +10,10 @@ using LaTeXStrings
 
 CUDA.allowscalar(false)
 
-# using FFTW
 begin
     nt = Sys.CPU_THREADS
     nc = min(nt, length(Sys.cpu_info()))
-
     BLAS.set_num_threads(nc)
-    # FFTW.set_num_threads(nt)
 end
 
 include(joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "cases.jl"))
@@ -428,12 +425,12 @@ function evolve_SNF(
     autodiff_xyz::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ_xyz::Union{Real, Nothing} = nothing,
     learn_ic::Bool = false,
-    hyper_reduction::Bool = false,
+    hyper_indices = nothing,
+    hyper_reduction_path::Union{String, Nothing} = nothing,
     verbose::Bool = true,
     device = Lux.gpu_device(),
 )
     mkpath(outdir)
-    modeldir = dirname(modelfile)
 
     # load data
     Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
@@ -456,13 +453,6 @@ function evolve_SNF(
     #==============#
     # get p0
     #==============#
-    # # TODO: verify this on Burgers 1D
-
-    # _data, _, _ = makedata_SNF(datafile; Ix = [1,], _Ib = [case], _It = [1])
-    # _prm = _data[1][2]
-    # _ps = hyper[1](_prm, hyper[2], hyper[3])[1]
-    # p0 = _ps[:, 1]
-
     _data, _, _ = makedata_SNF(datafile; Ix = [1,], _It = [1])
     _prm = _data[1][2]
     _ps  = hyper[1](_prm, hyper[2], hyper[3])[1] # [N_ROM, N_CASES]
@@ -495,9 +485,10 @@ function evolve_SNF(
     # TODO: Modify time-evolution to include hypernetwork
     #==============#
 
-    if hyper_reduction
-        hyppath = joinpath(modeldir, "hyperreduction.jld2")
-        if ispath(hyppath)
+    if !isnothing(hyper_reduction_path)
+        if !isnothing(hyper_indices)
+            IX = hyper_indices
+        elseif ispath(hyper_reduction_path)
             hypfile = jldopen(hyppath)
             IX = hypfile["IX"]
             close(hypfile)
@@ -511,7 +502,7 @@ function evolve_SNF(
                 rng, verbose = false, device,
             )
 
-            jldsave(hyppath; IX)
+            jldsave(hyper_reduction_path; IX)
         end
     else
         IX = Colon()
@@ -529,10 +520,17 @@ function evolve_SNF(
     # evolve
     #==============#
 
-    @time _, ps, _ = evolve_model(
-        prob, model, timealg, scheme, data, p0, Δt;
-        adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
-    )
+    if device isa Lux.LuxDeviceUtils.AbstractLuxGPUDevice
+        CUDA.@time _, ps, _ = evolve_model(
+            prob, model, timealg, scheme, data, p0, Δt;
+            adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
+        )
+    else
+        @time _, ps, _ = evolve_model(
+            prob, model, timealg, scheme, data, p0, Δt;
+            adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
+        )
+    end
 
     #==============#
     # analysis
@@ -546,11 +544,17 @@ function evolve_SNF(
         Ups = []
         ax = getaxes(p0)
 
+        _X     = Xdata |> device
+        _ps    = ps    |> device
+        _model = model |> device
+
         for i in axes(ps, 2)
-            _p = ComponentArray(ps[:, i], ax)
-            _u = model(Xdata, _p)
+            _p = ComponentArray(_ps[:, i], ax)
+            _u = _model(_X, _p)
             push!(Ups, _u)
         end
+
+        Ups = Ups |> Lux.cpu_device()
         cat(Ups...; dims = 3)
     end
 
@@ -656,8 +660,10 @@ function compute_residual(
     res = zeros(Float32, size(Xdata, 2))
 
     for case in axes(Udata, 3)
+
         # make data
         Nt = length(Tdata)
+        # It = LinRange(1, Nt, 2) .|> Base.Fix1(round, Int)
         It = LinRange(1, Nt, 10) .|> Base.Fix1(round, Int)
 
         Td = @view Tdata[It]
@@ -678,11 +684,17 @@ function compute_residual(
         # Compute residual 
         Up = begin
             Ups = []
+            _X     = Xdata |> device
+            _ps    = ps    |> device
+            _model = model |> device
+
             for i in axes(ps, 2)
-                _p = ComponentArray(ps[:, i], ax)
-                _u = model(Xdata, _p)
+                _p = ComponentArray(_ps[:, i], ax)
+                _u = _model(_X, _p)
                 push!(Ups, _u)
             end
+
+            Ups = Ups |> Lux.cpu_device()
             cat(Ups...; dims = 3)
         end
 

@@ -331,9 +331,12 @@ function evolve_integrator!(
         end
     end
 
+    ps = ps |> Lux.cpu_device()
+    us = us |> Lux.cpu_device()
+
     ts = [ts...]
-    ps = mapreduce(getdata, hcat, ps) |> Lux.cpu_device()
-    us = cat(us...; dims = 3)         |> Lux.cpu_device()
+    ps = mapreduce(getdata, hcat, ps)
+    us = cat(us...; dims = 3)
 
     @assert norm(integrator.tsave - ts, Inf) < 1e-6
 
