@@ -18,6 +18,6 @@ device = Lux.gpu_device()
 # train_SNF_compare(latent, datafile, modeldir, train_params; rng, device)
 
 evolve_kw = (; hyper_reduction = true,)
-postprocess_SNF(prob, datafile, modelfile; rng, device)
+postprocess_SNF(prob, datafile, modelfile; rng, evolve_kw, device)
 #======================================================#
 nothing
