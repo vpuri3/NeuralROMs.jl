@@ -37,25 +37,21 @@ ids = zeros(Bool, grid...)
 @views ids[1:32:end, 1:32:end] .= true
 hyper_indices = findall(isone, vec(ids))
 
-# modeldir/hyper
-outdir = joinpath(modeldir, "hyper")
-hyper_reduction_path = joinpath(modeldir, "hyper.jld2")
-evolve_kw = (; hyper_reduction_path, hyper_indices, verbose = false,)
-postprocess_SNF(prob, datafile, modelfile; rng, evolve_kw, outdir, device)
-
-# # modeldir/hyperDT
-# outdir = joinpath(modeldir, "hyperDT")
-# hyper_reduction_path = joinpath(modeldir, "hyperDT.jld2")
+# # modeldir/hyper
+# outdir = joinpath(modeldir, "hyper")
+# hyper_reduction_path = joinpath(modeldir, "hyper.jld2")
 # evolve_kw = (; hyper_reduction_path, hyper_indices, verbose = false,)
 # postprocess_SNF(prob, datafile, modelfile; rng, evolve_kw, outdir, device)
 
-# outdir = joinpath(modeldir, "hyperDT")
-# hyper_reduction_path = joinpath(modeldir, "hyperDT.jld2")
-# T, Nt = 0.5f0, 500
-# It = LinRange(1, Nt, 500) .|> Base.Fix1(round, Int)
-# data_kws = (; Ix = :, It = :)
-# evolve_kw = (; Δt = T, data_kws, hyper_reduction_path, hyper_indices, adaptive = true, verbose = false)
-# postprocess_SNF(prob, datafile, modelfile; rng, evolve_kw, outdir, device)
+# # modeldir/hyperDT
+outdir = joinpath(modeldir, "hyperDT")
+hyper_reduction_path = joinpath(modeldir, "hyperDT.jld2")
+
+# It = LinRange(1, 500, 50) .|> Base.Fix1(round, Int)
+It = LinRange(1, 500, 100) .|> Base.Fix1(round, Int)
+data_kws = (; Ix = :, It)
+evolve_kw = (; Δt = 10f0, data_kws, hyper_reduction_path, hyper_indices, verbose = false,)
+postprocess_SNF(prob, datafile, modelfile; rng, evolve_kw, outdir, device)
 
 #======================================================#
 nothing

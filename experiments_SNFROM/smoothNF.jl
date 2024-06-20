@@ -362,39 +362,39 @@ function postprocess_SNF(
     # Compare evolution with training plots
     #==============#
 
-    for (i, case) in  enumerate(_Ib)
-        ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
-
-        ps = ev["Ppred"]
-        _p = _ps[:, i, :]
-
-        plt = plot(; title =  L"$\tilde{u}$ distribution, case " * "$(case)")
-        plt = make_param_scatterplot(_p, _Tdata; plt, label = "HyperNet prediction", color = :reds, cbar = false)
-        plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
-        png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
-
-        plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
-        plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
-        plot!(plt, _Tdata, _p'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
-        png(plt, joinpath(outdir, "compare_p_case$(case)"))
-    end
-
-    for (i, case) in  enumerate(Ib_)
-        ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
-
-        ps = ev["Ppred"]
-        p_ = ps_[:, i, :]
-
-        plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
-        plt = make_param_scatterplot(p_, Tdata_; plt, label = "HyperNet prediction", color = :reds, cbar = false)
-        plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
-        png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
-
-        plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
-        plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
-        plot!(plt, Tdata_, p_'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
-        png(plt, joinpath(outdir, "compare_p_case$(case)"))
-    end
+    # for (i, case) in  enumerate(_Ib)
+    #     ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
+    #
+    #     ps = ev["Ppred"]
+    #     _p = _ps[:, i, :]
+    #
+    #     plt = plot(; title =  L"$\tilde{u}$ distribution, case " * "$(case)")
+    #     plt = make_param_scatterplot(_p, _Tdata; plt, label = "HyperNet prediction", color = :reds, cbar = false)
+    #     plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
+    #     png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
+    #
+    #     plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+    #     plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
+    #     plot!(plt, _Tdata, _p'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
+    #     png(plt, joinpath(outdir, "compare_p_case$(case)"))
+    # end
+    #
+    # for (i, case) in  enumerate(Ib_)
+    #     ev = jldopen(joinpath(outdir, "evolve$(case).jld2"))
+    #
+    #     ps = ev["Ppred"]
+    #     p_ = ps_[:, i, :]
+    #
+    #     plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
+    #     plt = make_param_scatterplot(p_, Tdata_; plt, label = "HyperNet prediction", color = :reds, cbar = false)
+    #     plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
+    #     png(plt, joinpath(outdir, "compare_p_scatter_case$(case)"))
+    #
+    #     plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
+    #     plot!(plt, Tdata, ps'; w = 3.0, label = "Dynamics solve", palette = :tab10)
+    #     plot!(plt, Tdata_, p_'; w = 4.0, label = "HyperNet prediction", style = :dash, palette = :tab10)
+    #     png(plt, joinpath(outdir, "compare_p_case$(case)"))
+    # end
 
     #==============#
     # Done
