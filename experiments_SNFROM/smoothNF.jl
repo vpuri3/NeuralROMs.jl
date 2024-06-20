@@ -427,8 +427,8 @@ function evolve_SNF(
     scheme::Union{Nothing, NeuralROMs.AbstractSolveScheme} = nothing,
     autodiff_xyz::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ_xyz::Union{Real, Nothing} = nothing,
-    learn_ic::Bool = true,
-    hyper_reduction::Bool = true,
+    learn_ic::Bool = false,
+    hyper_reduction::Bool = false,
     verbose::Bool = true,
     device = Lux.gpu_device(),
 )
@@ -502,7 +502,7 @@ function evolve_SNF(
             IX = hypfile["IX"]
             close(hypfile)
 
-            println("Grabbing Hyper-reduction indices from $hypfile with $(length(IX)) points.")
+            println("Grabbing collocation indices from $hypfile with $(length(IX)) points.")
         else
             IX = hyperreduction_idx(
                 Xdata, Udata, Tdata, _ps, getaxes(p0),
@@ -584,17 +584,28 @@ function hyperreduction_idx(
     prob, model, timealg, scheme, Δt,
     adaptive, autodiff_xyz, ϵ_xyz, learn_ic;
     rng = Random.default_rng(),
-    tol::Real = 5f-3,
+    tol::Real = 1f-2,
     Q::Integer = 10,
     maxsamples::Integer = 100,
     verbose::Bool = false,
     device = Lux.gpu_device(),
 )
-    IX = rand(rng, 1:size(Xdata, 2), size(ps, 1))
-
     residual_args = Xdata, Udata, Tdata, ps, ax,
         prob, model, timealg, scheme, Δt,
         adaptive, autodiff_xyz, ϵ_xyz, learn_ic
+
+    N = size(Xdata, 2)
+    l = size(ps   , 1)
+
+    begin
+        r = compute_residual(1:N, residual_args...; verbose, device)
+        rm = residual_metric(r)
+        tol = max(1 * rm, tol)
+        println("HYPERREDUCTION_IDX: IX = Xdata, metric: $(rm)")
+    end
+
+    # randomly initialize residual
+    IX = rand(rng, 1:N, l)
 
     while true
         IX = sort(IX)
@@ -603,7 +614,7 @@ function hyperreduction_idx(
         rm = residual_metric(r)
 
         println("HYPERREDUCTION_IDX: |IX| = $(length(IX)), metric: $(rm)")
-        println(IX')
+        println("HYPERREDUCTION_IDX: $(IX')")
 
         if residual_metric(r) < tol
             println("HYPERREDUCTION_IDX: Tolerance has been met with $(length(IX)) points.")
