@@ -60,7 +60,6 @@ function advect1D(Nx, Ny, ν, cx, cy, mu = nothing, p = nothing;
 
     # time discr
     prob = ODEProblem{false}(odefunc, u0, tspan, p)
-    # prob = ODEProblem{false}(odefunc, u0, tspan, p; reltol=1f-6, abstol=1f-6)
 
     # solve
     sol = if device isa LuxDeviceUtils.AbstractLuxGPUDevice

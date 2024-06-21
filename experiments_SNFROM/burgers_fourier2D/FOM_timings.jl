@@ -1,6 +1,7 @@
 #
 using FourierSpaces
 using NeuralROMs
+using BenchmarkTools
 
 let
     # add test dependencies to env stack
@@ -94,17 +95,16 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
 
     """ time discr """
     tspan = tspan .|> T
-    prob  = ODEProblem(ddt, u0, tspan, p)
+    prob  = ODEProblem(ddt, u0, tspan, p; abstol, reltol)
 
     # solve
     sol = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
-        CUDA.@time sol = solve(prob, odealg; abstol, reltol)
+        CUDA.@time sol = solve(prob, odealg)
     else
-        sol = solve(prob, odealg; abstol, reltol)
+        @time sol = solve(prob, odealg)
     end
 
     @show sol.retcode
-
     nothing
 end
 
@@ -113,6 +113,4 @@ Nx = Ny = 512
 device = gpu_device()
 odealg = SSPRK43()
 burgers2D(Nx, Ny, ν; device, odealg)
-
-nothing
 #

@@ -259,68 +259,68 @@ function postprocess_SNF(
     #==============#
     hyper, decoder = get_flatdecoder(model...)
     model = NeuralModel(decoder[1], decoder[3], md)
-
+    
     #==============#
     # evaluate model
     #==============#
     _data, data_, _ = makedata_SNF(datafile; md.makedata_kws...)
-
+    
     in_dim  = size(Xdata, 1)
     out_dim, Nx, Nb, Nt = size(Udata)
-
+    
     _code = eval_model(hyper, _data[1][2]; device)
     code_ = eval_model(hyper, data_[1][2]; device)
-
+    
     _xc = vcat(_data[1][1], _code)
     xc_ = vcat(data_[1][1], code_)
-
+    
     _upred = eval_model(decoder, _xc; device)
     upred_ = eval_model(decoder, xc_; device)
-
+    
     _upred = reshape(_upred, out_dim, Nx, length(_Ib), length(_It))
     upred_ = reshape(upred_, out_dim, Nx, length(Ib_), length(It_))
-
+    
     _Upred = unnormalizedata(_upred, md.ū, md.σu)
     Upred_ = unnormalizedata(upred_, md.ū, md.σu)
-
+    
     @show mse(_Upred, _Udata) / mse(_Udata, 0 * _Udata)
     @show mse(Upred_, Udata_) / mse(Udata_, 0 * Udata_)
-
+    
     #==============#
     # save codes
     #==============#
     _code = reshape(_code, size(_code, 1), Nx, length(_Ib), length(_It))
     code_ = reshape(code_, size(code_, 1), Nx, length(Ib_), length(It_))
-
+    
     _ps = _code[:, 1, :, :] # [code_len, _Nb, _Nt]
     ps_ = code_[:, 1, :, :] # [code_len, Nb_, Nt_]
-
+    
     isdir(outdir) && rm(outdir; recursive = true)
     mkpath(outdir)
-
+    
     if makeplot
         grid = get_prob_grid(prob)
-
+    
         # field plots
         for case in axes(_Ib, 1)
             Ud = _Udata[:, :, case, :]
             Up = _Upred[:, :, case, :]
             fieldplot(Xdata, _Tdata, Ud, Up, grid, outdir, "train", case)
         end
-
+    
         # parameter plots
         linewidth = 2.0
         palette = :tab10
         colors = (:reds, :greens, :blues, cgrad(:viridis), cgrad(:inferno), cgrad(:thermal))
-
+    
         plt = plot(; title = "Parameter scatter plot")
-
+    
         for (i, case) in enumerate(_Ib)
             _p = _ps[:, i, :]
             color = colors[i]
             plt = make_param_scatterplot(_p, _Tdata; plt,
                 label = "Case $(case)", color, cbar = false)
-
+    
             # parameter evolution plot
             p2 = plot(;
                 title =  "Learned parameter evolution, case $(case)",
@@ -329,14 +329,14 @@ function postprocess_SNF(
             plot!(p2, _Tdata, _p'; linewidth, palette)
             png(p2, joinpath(outdir, "train_p_case$(case)"))
         end
-
+    
         for (i, case) in enumerate(Ib_)
             if case ∉ _Ib
                 p_ = ps_[:, i, :]
                 color = colors[i + length(_Ib)]
                 plt = make_param_scatterplot(p_, Tdata_; plt,
                     label = "Case $(case) (Testing)", color, cbar = false)
-
+    
                 # parameter evolution plot
                 p2 = plot(;
                     title =  "Trained parameter evolution, case $(case)",
@@ -346,9 +346,9 @@ function postprocess_SNF(
                 png(p2, joinpath(outdir, "test_p_case$(case)"))
             end
         end
-
+    
         png(plt, joinpath(outdir, "train_p_scatter"))
-
+    
     end # makeplot
 
     #==============#
@@ -558,26 +558,35 @@ function evolve_SNF(
         cat(Ups...; dims = 3)
     end
 
+    # print error metrics
+    begin
+        N = length(Up)
+        Nr = sum(abs2, Up) / N |> sqrt # normalizer
+        Ep = (Up - Ud) ./ Nr
+
+        Er = sum(abs2, Ep) / N |> sqrt # rel-error
+        Em = norm(Ep, Inf)             # ||∞-error
+
+        println("Rel-Error: $(100 * Er) %")
+        println("Max-Error: $(100 * Em) %")
+    end
+
     # field visualizations
     grid = get_prob_grid(prob)
     fieldplot(Xdata, Tdata, Ud, Up, grid, outdir, "evolve", case)
-
+    
     # parameter plots
     plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
     plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
     png(plt, joinpath(outdir, "evolve_p_scatter_case$(case)"))
-
+    
     plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
     plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")
     png(plt, joinpath(outdir, "evolve_p_case$(case)"))
-
+    
     # save files
     filename = joinpath(outdir, "evolve$(case).jld2")
     jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps, Plrnd = _ps)
-
-    # print error metrics
-    @show sqrt(mse(Up, Ud) / mse(Ud, 0 * Ud))
-    @show norm(Up - Ud, Inf) / sqrt(mse(Ud, 0 * Ud))
 
     Xdata, Tdata, Ud, Up, ps
 end

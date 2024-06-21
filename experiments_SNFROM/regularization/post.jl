@@ -1,6 +1,7 @@
 #
 using LinearAlgebra, LaTeXStrings, JLD2
-using CairoMakie
+# using CairoMakie
+using Plots
 
 include(joinpath(@__DIR__, "reg.jl"))
 

@@ -12,6 +12,8 @@ modeldir  = joinpath(@__DIR__, "dump")
 modelfile = joinpath(modeldir, "model_08.jld2")
 device = Lux.gpu_device()
 
+grid = (128, 128,)
+
 # # train
 # latent = 2
 # batchsize_ = (128 * 128) * 500 ÷ 4
@@ -22,20 +24,66 @@ device = Lux.gpu_device()
 # # modeldir/results
 # postprocess_SNF(prob, datafile, modelfile; rng, device)
 
+ids = zeros(Bool, grid...)
+kk = 16
+@views ids[1:kk:end, 1:kk:end] .= true
+hyper_indices = findall(isone, vec(ids))
+
 # # modeldir/hyper
 # outdir = joinpath(modeldir, "hyper")
 # hyper_reduction_path = joinpath(modeldir, "hyper.jld2")
-# evolve_kw = (; hyper_reduction_path, verbose = false,)
+# evolve_kw = (; hyper_reduction_path, hyper_indices, verbose = false,)
 # postprocess_SNF(prob, datafile, modelfile; rng, evolve_kw, outdir, device)
 
-# modeldir/hyperDT
-outdir = joinpath(modeldir, "hyperDT")
-hyper_reduction_path = joinpath(modeldir, "hyperDT.jld2")
-T, Nt = 4.0f0, 500
-It = LinRange(1, Nt, 100) .|> Base.Fix1(round, Int)
-data_kws = (; Ix = :, It = :)
-evolve_kw = (; Δt = T, data_kws, hyper_reduction_path, adaptive = true,)
-postprocess_SNF(prob, datafile, modelfile; rng, evolve_kw, outdir, device)
+# # modeldir/hyperDT
+# outdir = joinpath(modeldir, "hyperDT")
+# hyper_reduction_path = joinpath(modeldir, "hyperDT.jld2")
+#
+# It = LinRange(1, 500, 500) .|> Base.Fix1(round, Int)
+# data_kws = (; Ix = :, It)
+# evolve_kw = (; Δt = 10f0, data_kws, hyper_reduction_path, hyper_indices, verbose = false,)
+# postprocess_SNF(prob, datafile, modelfile; rng, evolve_kw, outdir, device)
+#======================================================#
+
+# timing plots
+
+tme_FOM = 0.499433 # s
+mem_FOM = 1.602    # GiB
+
+Ngrid = prod(grid)
+skips = 4 .^ Array(0:4) # indices: 1, 2, 4, 8, 16
+
+Nps = Ngrid ./ skips
+DTs = [1, 2, 5, 10]
+
+# s
+tme_01 = [8.655742 4.336693 1.748981 0.896192]
+tme_02 = [2.492559 1.242272 0.511401 0.267714]
+tme_04 = [1.009825 0.500941 0.211161 0.087910]
+tme_08 = [0.759159 0.358999 0.147521 0.074116]
+tme_16 = [0.839552 0.351671 0.144932 0.072996]
+
+# GiB
+mem_01 = [355.435 177.884 71.353 35.842]
+mem_02 = [89.158 44.621 17.899 8.991]
+mem_04 = [22.588 11.305 4.535 2.278]
+mem_08 = [5.946 2.976 1.194 614.583/1024]
+mem_16 = [1.785 915.264/1024 367.540/1024 184.966/1024]
+
+# rel-MSE-error %
+err_01 = [0.33465478 0.63720053 1.568733 3.1377885]
+err_02 = [0.33475608 0.63742095 1.5687758 3.1377559]
+err_04 = [0.333026 0.63556844 1.5664246 3.1343515]
+err_08 = [0.32001957 0.6240544 1.5579201 3.1301193]
+err_16 = [0.27075416 0.5654563 1.487445 3.042574]
+
+tmes = vcat(tme_01, tme_02, tme_04, tme_08, tme_16)
+mems = vcat(mem_01, mem_02, mem_04, mem_08, mem_16)
+errs = vcat(err_01, err_02, err_04, err_08, err_16)
+
+# speedup
+speedups = tme_FOM ./ tmes
+memorys  = mem_FOM ./ mems
 
 #======================================================#
 nothing
