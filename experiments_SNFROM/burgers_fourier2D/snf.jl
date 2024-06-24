@@ -34,10 +34,10 @@ grid = (512, 512,)
 # # modeldir/results
 # postprocess_SNF(prob, datafile, modelfile; rng, device)
 
-# ids = zeros(Bool, grid...)
-# kk = 32
-# @views ids[1:kk:end, 1:kk:end] .= true
-# hyper_indices = findall(isone, vec(ids))
+ids = zeros(Bool, grid...)
+kk = 32
+@views ids[1:kk:end, 1:kk:end] .= true
+hyper_indices = findall(isone, vec(ids))
 
 # # modeldir/hyper
 # outdir = joinpath(modeldir, "hyper")
@@ -49,10 +49,19 @@ grid = (512, 512,)
 # outdir = joinpath(modeldir, "hyperDT")
 # hyper_reduction_path = joinpath(modeldir, "hyperDT.jld2")
 #
-# It = LinRange(1, 500, 50) .|> Base.Fix1(round, Int)
+# It = LinRange(1, 500, 500) .|> Base.Fix1(round, Int)
 # data_kws = (; Ix = :, It)
 # evolve_kw = (; Δt = 10f0, data_kws, hyper_reduction_path, hyper_indices, verbose = false,)
 # postprocess_SNF(prob, datafile, modelfile; rng, evolve_kw, outdir, device)
+
+# modeldir/hyperGreedy
+outdir = joinpath(modeldir, "hyperGreedy")
+hyper_reduction_path = joinpath(modeldir, "hyperGreedy.jld2")
+
+It = LinRange(1, 500, 500) .|> Base.Fix1(round, Int)
+data_kws = (; Ix = :, It)
+evolve_kw = (; Δt = 10f0, data_kws, hyper_reduction_path, verbose = false,)
+postprocess_SNF(prob, datafile, modelfile; rng, evolve_kw, outdir, device)
 #======================================================#
 
 # timing plots

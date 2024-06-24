@@ -97,9 +97,12 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
     tspan = tspan .|> T
     prob  = ODEProblem(ddt, u0, tspan, p; abstol, reltol)
 
+    # odealg = OrdinaryDiffEq.RK4()
+    # dt = 1f-2
+
     # solve
     sol = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
-        CUDA.@time sol = solve(prob, odealg)
+        CUDA.@time sol = solve(prob, odealg)#; dt)
     else
         @time sol = solve(prob, odealg)
     end
