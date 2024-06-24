@@ -308,9 +308,33 @@ end
 function eval_model(
     model::NeuralROMs.AbstractNeuralModel,
     x::AbstractArray,
-    p::AbstractArray;
+    p::AbstractMatrix,
+    ax::ComponentArrays.Axis;
+    batchsize = 1,
+    device = Lux.gpu_device(),
+)
+    us = []
+
+    x = x |> device
+    p = p |> device
+    model = model |> device
+
+    for i in axes(p, 2)
+        q = ComponentArray(p[:, i], ax)
+        u = eval_model(model, x, q; batchsize, device)
+
+        push!(us, u)
+    end
+
+    cat(us...; dims = 3)
+end
+
+function eval_model(
+    model::NeuralROMs.AbstractNeuralModel,
+    x::AbstractArray,
+    p::AbstractVector;
     batchsize = numobs(x) ÷ 100,
-    device = Lux.cpu_device(),
+    device = Lux.gpu_device(),
 )
     loader = MLUtils.DataLoader(x; batchsize, shuffle = false, partial = true)
 
@@ -323,21 +347,20 @@ function eval_model(
 
     y = ()
     for batch in loader
-        yy = model(batch, p)
+        yy = model(batch, p) |> Lux.cpu_device()
         y = (y..., yy)
     end
 
-    hcat(y...) |> Lux.cpu_device()
+    hcat(y...)
 end
 
 function eval_model(
     model::NTuple{3, Any},
     x;
     batchsize = numobs(x) ÷ 100,
-    device = Lux.cpu_device(),
+    device = Lux.gpu_device(),
 )
     NN, p, st = model
-
     loader = MLUtils.DataLoader(x; batchsize, shuffle = false, partial = true)
 
     p, st = (p, st) |> device
@@ -349,11 +372,11 @@ function eval_model(
 
     y = ()
     for batch in loader
-        yy = NN(batch, p, st)[1]
+        yy = NN(batch, p, st)[1] |> Lux.cpu_device()
         y = (y..., yy)
     end
 
-    hcat(y...) |> Lux.cpu_device()
+    hcat(y...)
 end
 
 #======================================================#

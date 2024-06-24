@@ -540,23 +540,7 @@ function evolve_SNF(
     Ud = @view Udata[:, :, case, :]
 
     # query decoder to get output field
-    Up = begin
-        Ups = []
-        ax = getaxes(p0)
-
-        _X     = Xdata |> device
-        _ps    = ps    |> device
-        _model = model |> device
-
-        for i in axes(ps, 2)
-            _p = ComponentArray(_ps[:, i], ax)
-            _u = _model(_X, _p)
-            push!(Ups, _u)
-        end
-
-        Ups = Ups |> Lux.cpu_device()
-        cat(Ups...; dims = 3)
-    end
+    Up = eval_model(model, Xdata, ps, getaxes(p0); device)
 
     # print error metrics
     begin
@@ -599,7 +583,7 @@ function hyperreduction_idx(
     rng = Random.default_rng(),
     tol::Real = 1f-2,
     Q::Integer = 10,
-    maxsamples::Integer = 100,
+    maxsamples::Integer = 64,
     verbose::Bool = false,
     device = Lux.gpu_device(),
 )
@@ -627,7 +611,6 @@ function hyperreduction_idx(
         rm = residual_metric(r)
 
         println("HYPERREDUCTION_IDX: |IX| = $(length(IX)), metric: $(rm)")
-        println("HYPERREDUCTION_IDX: $(IX')")
 
         if residual_metric(r) < tol
             println("HYPERREDUCTION_IDX: Tolerance has been met with $(length(IX)) points.")
@@ -672,8 +655,8 @@ function compute_residual(
 
         # make data
         Nt = length(Tdata)
-        # It = LinRange(1, Nt, 2) .|> Base.Fix1(round, Int)
-        It = LinRange(1, Nt, 10) .|> Base.Fix1(round, Int)
+        It = LinRange(1, Nt, 2) .|> Base.Fix1(round, Int)
+        # It = LinRange(1, Nt, 10) .|> Base.Fix1(round, Int)
 
         Td = @view Tdata[It]
         Xd = @view Xdata[:, IX]
@@ -690,23 +673,10 @@ function compute_residual(
             adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
         )
 
-        # Compute residual 
-        Up = begin
-            Ups = []
-            _X     = Xdata |> device
-            _ps    = ps    |> device
-            _model = model |> device
+        # get prediction values
+        Up = eval_model(model, Xdata, ps, getaxes(p0); device)
 
-            for i in axes(ps, 2)
-                _p = ComponentArray(_ps[:, i], ax)
-                _u = _model(_X, _p)
-                push!(Ups, _u)
-            end
-
-            Ups = Ups |> Lux.cpu_device()
-            cat(Ups...; dims = 3)
-        end
-
+        # compute residual
         err = Up - Ud
         res += sum(abs2, err; dims = (1, 3)) .|> sqrt |> vec
     end
@@ -716,9 +686,9 @@ end
 
 function residual_metric(r::AbstractVector)
     mn = sum(r) / length(r)
-    mx = maximum(r)
-
-    mn + mx
+    # mx = maximum(r)
+    #
+    # mn + mx
 end
 #===========================================================#
 #

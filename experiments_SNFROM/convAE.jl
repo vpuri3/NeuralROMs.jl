@@ -69,7 +69,7 @@ function makedata_CAE(
 
     # make arrays
     _u = permutedims(_u, (2, 1, 3, 4)) # [Nx, out_dim, Nbatch, Ntime]
-    u_ = permutedims(_u, (2, 1, 3, 4))
+    u_ = permutedims(u_, (2, 1, 3, 4))
 
     _u = reshape(_u, grid..., out_dim, _Ns)
     u_ = reshape(u_, grid..., out_dim, Ns_)
@@ -235,7 +235,7 @@ function postprocess_CAE(
         # parameter plots
         linewidth = 2.0
         palette = :tab10
-        colors = (:reds, :greens, :blues, cgrad(:thermal), cgrad(:acton), cgrad(:viridis))
+        colors = (:reds, :greens, :blues, cgrad(:thermal), cgrad(:acton), cgrad(:viridis), cgrad(:thermal), cgrad(:viridis))
         shapes = (:circle, :square, :star,)
 
         plt = plot(; title = "Parameter scatter plot")
