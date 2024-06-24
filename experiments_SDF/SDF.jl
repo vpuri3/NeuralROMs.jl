@@ -101,6 +101,8 @@ function train_SDF(
     _batchsize = nothing,
     batchsize_ = nothing,
 
+    ifmlh::Bool = false,
+
     makedata_kws = (; _Ix = :,),
     device = Lux.gpu_device(),
 ) where{M}
@@ -132,6 +134,20 @@ function train_SDF(
 
     #-------------------------------------------#
 
+    # precompute MLH indices
+    if ifmlh
+        _x  = _data[1]
+        MLH = NN.layers.MLH
+        _i, MLH = precompute_MLH(_x, MLH)
+
+        NN = Chain(; MLH, NN.layers.MLP)
+        _data = (_i, _data[2])
+
+        @show typeof(_data[1])
+        @show typeof(_data[2])
+    end
+
+    #-------------------------------------------#
     train_args = (; E, _batchsize, batchsize_)
     metadata   = (; metadata..., δ, train_args)
 

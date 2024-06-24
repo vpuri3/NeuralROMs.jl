@@ -87,10 +87,12 @@ warmup = false
 lrs = (1f-3, 5f-4, 1f-4, 5f-5, 1f-5,)
 beta = (0.9f0, 0.99f0)
 epsilon = 1f-15
+ifmlh = true
+
 
 isdir(modeldir) && rm(modeldir, recursive = true)
 model, ST, md = train_SDF(NN, casename, modeldir, E; rng, δ,
-    lrs, warmup, beta, epsilon, device,
+    lrs, warmup, beta, epsilon, ifmlh, device,
 )
 
 #======================================================#
