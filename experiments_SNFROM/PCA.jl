@@ -25,6 +25,10 @@ function pca_basis(
     u::AbstractMatrix;
     device = Lux.cpu_device(),
 )
+    if length(u) > 10^8
+        device = Lux.cpu_device()
+    end
+
     F = svd(u |> device)
     F.U[:, 1:R] |> Lux.cpu_device()
 end
