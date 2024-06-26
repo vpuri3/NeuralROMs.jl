@@ -42,8 +42,8 @@ Lux.parameterlength(::ClampSoftsign) = 0
 #===========================================================#
 
 """ Cubic hermite interpolation """
-cubic_interp(f0, f1, w) = @. f0 + (f1 - f0) * (3 - 2w) * w^2
-lerp(f0, f1, w) = @. w * (f1 - f0) + f0
+interp_cubic( f0, f1, w) = @. f0 + (f1 - f0) * (3 - 2w) * w^2
+interp_linear(f0, f1, w) = @. w * (f1 - f0) + f0
 
 function get_boundingbox_indices(
     xyz::AbstractMatrix{T},
@@ -52,9 +52,9 @@ function get_boundingbox_indices(
     @assert size(xyz, 1) == D
 
     # normalize from [-1, 1] to [0, 1]
-    xyz  = (xyz .+ 1f0) .* 0.5f0
+    xyz = (xyz .+ 1f0) .* 0.5f0
 
-    XYZ  = xyz .* shape
+    XYZ   = xyz .* shape
     Ixyz0 = floor.(Int32, XYZ)
     Ixyz1 = ceil.( Int32, XYZ)
 
@@ -185,7 +185,7 @@ function SpatialHash(
     nEmbeddings::Integer,
     shape::NTuple{D, Integer};
     init_weight = randn32,
-    interpfun = lerp,
+    interpfun = interp_linear,
 ) where{D}
 
     embedding = Embedding(nEmbeddings => out_dims; init_weight)
@@ -197,7 +197,7 @@ function SpatialGrid(
     out_dims::Integer,
     shape::NTuple{D, Integer};
     init_weight = randn32,
-    interpfun = lerp,
+    interpfun = interp_linear,
 ) where{D}
 
     nEmbeddings = prod(shape)
@@ -256,10 +256,10 @@ function (l::FeatureGrid{3})((wxyz, Ibbox)::Tuple, p, st)
 
     f, st
 end
-
 #===========================================================#
 
 export MultiLevelSpatialHash, precompute_MLH
+
 function MultiLevelSpatialHash(;
     out_dims::Integer = 2,
     nEmbeddings::Integer = 2^14,
@@ -267,7 +267,7 @@ function MultiLevelSpatialHash(;
     min_res::Integer = 16,  # shape of first level
     max_res::Integer = 512, # shape of final level
     init_weight = scale_init(randn32, 1f-4, 0f0),
-    interpfun = lerp,
+    interpfun = interp_linear,
 )
     gf = exp(log(max_res / min_res) / (nLevels - 1)) # growth factor
     Ns = min_res .* collect(gf ^ l for l in 0:nLevels-1)

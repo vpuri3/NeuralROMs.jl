@@ -4,7 +4,7 @@ using LinearAlgebra, ComponentArrays              # arrays
 using Random, Lux, MLUtils, ParameterSchedulers   # ML
 using OptimizationOptimJL, OptimizationOptimisers # opt
 using LinearSolve, NonlinearSolve, LineSearches   # num
-using Plots, JLD2                                 # vis / save
+using Plots, JLD2, Setfield                       # vis / save
 using CUDA, LuxCUDA, KernelAbstractions           # GPU
 using LaTeXStrings
 
@@ -311,7 +311,7 @@ function postprocess_SNF(
         # parameter plots
         linewidth = 2.0
         palette = :tab10
-        colors = (:reds, :greens, :blues, cgrad(:viridis), cgrad(:inferno), cgrad(:thermal))
+        colors = (:reds, :greens, :blues, cgrad(:viridis), cgrad(:inferno), cgrad(:thermal), cgrad(:viridis), cgrad(:inferno), cgrad(:thermal))
     
         plt = plot(; title = "Parameter scatter plot")
     
@@ -424,7 +424,7 @@ function evolve_SNF(
     scheme::Union{Nothing, NeuralROMs.AbstractSolveScheme} = nothing,
     autodiff_xyz::ADTypes.AbstractADType = AutoForwardDiff(),
     ϵ_xyz::Union{Real, Nothing} = nothing,
-    learn_ic::Bool = false,
+    learn_ic::Bool = true,
     hyper_indices = nothing,
     hyper_reduction_path::Union{String, Nothing} = nothing,
     verbose::Bool = true,
@@ -520,17 +520,19 @@ function evolve_SNF(
     # evolve
     #==============#
 
-    if device isa Lux.LuxDeviceUtils.AbstractLuxGPUDevice
-        CUDA.@time _, ps, _ = evolve_model(
+    solvestats = if device isa Lux.LuxDeviceUtils.AbstractLuxGPUDevice
+        CUDA.@timed _, ps, _ = evolve_model(
             prob, model, timealg, scheme, data, p0, Δt;
             adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
         )
     else
-        @time _, ps, _ = evolve_model(
+        @timed _, ps, _ = evolve_model(
             prob, model, timealg, scheme, data, p0, Δt;
             adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
         )
     end
+
+    @set! solvestats.value = nothing
 
     #==============#
     # analysis
@@ -572,7 +574,7 @@ function evolve_SNF(
     filename = joinpath(outdir, "evolve$(case).jld2")
     jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps, Plrnd = _ps)
 
-    Xdata, Tdata, Ud, Up, ps
+    (Xdata, Tdata, Ud, Up, ps), solvestats
 end
 
 #===========================================================#

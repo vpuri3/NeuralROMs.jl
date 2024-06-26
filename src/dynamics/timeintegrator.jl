@@ -449,7 +449,8 @@ function evolve_model(
     # learn IC
     #============================#
 
-    mse_norm = mse(model(x, p0), u0)
+    mse_norm = mse(model(x, p0), u0) / mse(u0, 0 * u0)
+
     if verbose
         println("#============================#")
         println("Initial Condition MSE: $mse_norm")

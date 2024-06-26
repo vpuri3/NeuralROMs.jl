@@ -1,5 +1,5 @@
 #
-using LinearAlgebra, HDF5, LaTeXStrings
+using LinearAlgebra, HDF5, JLD2, LaTeXStrings
 using CairoMakie
 
 function makeplots(
@@ -204,7 +204,7 @@ function makeplots(
 
         if ifdt
             elems  = [eq, lp, lt]
-            labels = [L"\text{Learned prediction}", L"\text{Dynamics evaluation }(\Delta t)", L"\text{Dynamics evaluation }(10\times\Delta t)"]
+            labels = [L"\text{Learned prediction}", L"\text{Dynamics evaluation }(Δt = Δt_0)", L"\text{Dynamics evaluation }(Δt = 10Δt_0)"]
         else
             elems  = [eq, lp]
             labels = [L"\text{Learned prediction}", L"\text{Dynamics evaluation}"]
@@ -250,7 +250,7 @@ function makeplots(
     ]
 
     if ifdt
-        labels = [L"\text{Dynamics evaluation }(\Delta t)", L"\text{Dynamics evaluation }(10\times\Delta t)"]
+        labels = [L"\text{Dynamics evaluation }(Δt = Δt_0)", L"\text{Dynamics evaluation }(Δt = 10Δt_0)"]
     else
         elems  = elems[1:2]
         labels = [L"\text{Dynamics evaluation}",]
@@ -400,8 +400,8 @@ function makeplots(
 
         linkaxes!(axe1, axe2)
 
-        Label(fige[2,1], L"(a) Dynamics evaluation $(Δt)$", fontsize = 16)
-        Label(fige[2,2], L"(b) Dynamics evaluation $(10×Δt)$", fontsize = 16)
+        Label(fige[2,1], L"(a) Dynamics evaluation $(Δt = Δt_0)$", fontsize = 16)
+        Label(fige[2,2], L"(b) Dynamics evaluation $(Δt = 10Δt_0)$", fontsize = 16)
         colsize!(fige.layout, 1, Relative(0.50))
         colsize!(fige.layout, 2, Relative(0.50))
     end
@@ -662,6 +662,105 @@ function ptplot!(ax, t, p, q, pdt = nothing;
     lq, lp, lt
 end
 
+function makeplots_hyper(
+    e2hyper::String,
+    casename::String,
+)
+    grid = if occursin("exp2", casename)
+        128, 128
+    elseif occursin("exp4", casename)
+        512, 512
+    end
+
+    file = jldopen(e2hyper)
+    xdata = file["xdata"]
+    udata = file["udata"]
+    upreds = file["uprs"]
+
+    xdiag = diag(reshape(xdata[1, :, :], grid))
+    udata = reshape(udata, grid)
+
+    ups = collect(reshape(upred, grid) for upred in upreds)
+    ups = cat(ups...; dims = 3)
+
+    nr  = sqrt(sum(abs2, udata) / length(udata))
+    eps = @. (ups - udata) / nr
+
+    epreds = NamedTuple{keys(upreds)}(eps[:, :, i] for i in 1:length(upreds))
+
+    figc = Figure(; size = (1000, 800), backgroundcolor = :white, grid = :off)
+    figl = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
+
+    nlevels = 11
+    levels = if occursin("exp2", casename)
+        10.0 .^ range(-4, 0, nlevels)
+    elseif occursin("exp4", casename)
+        10.0 .^ range(-5, 0, nlevels)
+    end
+
+    l1 = (L"(a) $$", L"(b) $$", L"(c) $$", L"(d) $$")
+    l2 = (L"(e) $$", L"(f) $$", L"(g) $$", L"(h) $$")
+    l3 = (L"(i) $$", L"(j) $$", L"(k) $$", L"(l) $$")
+
+    cax_kw = (; aspect = 1, xlabel = L"x", ylabel = L"y")
+    ctr_kw = (; extendlow = :cyan, extendhigh = :magenta, colorscale = log10, levels)
+
+    k1 = (:N4096_dt1, :N1024_dt1, :N256_dt1, :N64_dt1)
+    k2 = (:N4096_dt2, :N1024_dt2, :N256_dt2, :N64_dt2)
+    k3 = (:N4096_dt5, :N1024_dt5, :N256_dt5, :N64_dt5)
+
+    for j in 1:4
+        ep1 = epreds[k1[j]] .|> abs
+        ep2 = epreds[k2[j]] .|> abs
+        ep3 = epreds[k3[j]] .|> abs
+
+        ax1j = Axis(figc[1,j]; cax_kw...)
+        ax2j = Axis(figc[2,j]; cax_kw...)
+        ax3j = Axis(figc[3,j]; cax_kw...)
+
+        cf1j = contourf!(ax1j, xdiag, xdiag, ep1; ctr_kw...)
+        cf2j = contourf!(ax2j, xdiag, xdiag, ep2; ctr_kw...)
+        cf3j = contourf!(ax3j, xdiag, xdiag, ep3; ctr_kw...)
+
+        tightlimits!(ax1j)
+        tightlimits!(ax2j)
+        tightlimits!(ax3j)
+
+        hidedecorations!(ax1j; label = false)
+        hidedecorations!(ax2j; label = false)
+        hidedecorations!(ax3j; label = false)
+
+        if j == 4
+            Colorbar(figc[4, :], cf1j; vertical = false)
+
+            rowsize!(figc.layout, 1, Relative(0.30))
+            rowsize!(figc.layout, 2, Relative(0.30))
+            rowsize!(figc.layout, 3, Relative(0.30))
+
+            colsize!(figc.layout, 1, Relative(0.22))
+            colsize!(figc.layout, 2, Relative(0.22))
+            colsize!(figc.layout, 3, Relative(0.22))
+            colsize!(figc.layout, 4, Relative(0.22))
+        end
+    end
+
+    Label(figc[1:3, -1][1,1], L"Time-step size $(Δt)$"; rotation = pi/2, fontsize = 16)
+    Label(figc[-1, 1:4][1,1], L"Number of hyper-reduction points $(|X_\text{proj}|)$"; fontsize = 16)
+
+    Label(figc[0,1], L"$|X_\text{proj}| = 4096$", fontsize = 16)
+    Label(figc[0,2], L"$|X_\text{proj}| = 1024$", fontsize = 16)
+    Label(figc[0,3], L"$|X_\text{proj}| = 256$" , fontsize = 16)
+    Label(figc[0,4], L"$|X_\text{proj}| = 64$"  , fontsize = 16)
+
+    Label(figc[1,0], L"$Δt = 1Δt_0$"; fontsize = 16, rotation = pi/2)
+    Label(figc[2,0], L"$Δt = 2Δt_0$"; fontsize = 16, rotation = pi/2)
+    Label(figc[3,0], L"$Δt = 5Δt_0$"; fontsize = 16, rotation = pi/2)
+
+    save(joinpath(outdir, "hyper_$(casename).pdf"), figc)
+
+    nothing
+end
+
 #======================================================#
 h5dir  = joinpath(@__DIR__, "h5files")
 outdir = joinpath(@__DIR__, "results")
@@ -678,6 +777,8 @@ e3file4 = joinpath(h5dir, "burgers1dcase4.h5")
 e3file5 = joinpath(h5dir, "burgers1dcase5.h5")
 e3file6 = joinpath(h5dir, "burgers1dcase6.h5")
 
+e2hyper = joinpath(@__DIR__, "..", "experiments_SNFROM", "advect_fourier2D", "dump", "hypercompiled.jld2")
+
 # makeplots(e1file, outdir, "exp1"; ifdt = true)
 # makeplots(e2file, outdir, "exp2"; ifdt = false)
 # makeplots(e4file, outdir, "exp4")
@@ -691,6 +792,8 @@ e3file6 = joinpath(h5dir, "burgers1dcase6.h5")
 # # makeplots(e3file6, outdir, "exp3case6")
 #
 # makeplots_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
+
+makeplots_hyper(e2hyper, "exp2")
 
 #======================================================#
 nothing

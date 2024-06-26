@@ -309,7 +309,7 @@ function eval_model(
     model::NeuralROMs.AbstractNeuralModel,
     x::AbstractArray,
     p::AbstractMatrix,
-    ax::ComponentArrays.Axis;
+    ax; # (ComponentArray.Axis,)
     batchsize = 1,
     device = Lux.gpu_device(),
 )
@@ -321,7 +321,8 @@ function eval_model(
 
     for i in axes(p, 2)
         q = ComponentArray(p[:, i], ax)
-        u = eval_model(model, x, q; batchsize, device)
+        u = model(x, q) |> Lux.cpu_device()
+        # u = eval_model(model, x, q; batchsize, device)
 
         push!(us, u)
     end

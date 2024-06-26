@@ -13,9 +13,7 @@ datafile = joinpath(@__DIR__, "data_burgers2D/", "data.jld2")
 device = Lux.gpu_device()
 
 _Ib, Ib_ = [1, 2, 3, 5, 6, 7], [4,]
-Ix  = Colon()
-_It = Colon()
-makedata_kws = (; Ix, _Ib, Ib_, _It, It_ = :)
+makedata_kws = (; Ix = :, _Ib, Ib_, _It = :, It_ = :)
 
 # latent 
 latent = 2
@@ -62,9 +60,25 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 modelfile_SNW = joinpath(modeldir_SNW, "model_07.jld2")
 
 # postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
-postprocess_CAE(prob, datafile, modelfile_CAE; rng)
+# postprocess_CAE(prob, datafile, modelfile_CAE; rng)
 # postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 # postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
+
+# evolve_SNF(prob, datafile, modelfile_SNL, 1; rng, device)
+# evolve_SNF(prob, datafile, modelfile_SNL, 2; rng, device)
+# evolve_SNF(prob, datafile, modelfile_SNL, 3; rng, device)
+# evolve_SNF(prob, datafile, modelfile_SNL, 4; rng, device)
+# evolve_SNF(prob, datafile, modelfile_SNL, 5; rng, device)
+# evolve_SNF(prob, datafile, modelfile_SNL, 6; rng, device)
+# evolve_SNF(prob, datafile, modelfile_SNL, 7; rng, device)
+
+# evolve_SNF(prob, datafile, modelfile_SNW, 1; rng, device)
+# evolve_SNF(prob, datafile, modelfile_SNW, 2; rng, device)
+# evolve_SNF(prob, datafile, modelfile_SNW, 3; rng, device)
+# evolve_SNF(prob, datafile, modelfile_SNW, 4; rng, device)
+# evolve_SNF(prob, datafile, modelfile_SNW, 5; rng, device)
+# evolve_SNF(prob, datafile, modelfile_SNW, 6; rng, device)
+# evolve_SNF(prob, datafile, modelfile_SNW, 7; rng, device)
 
 #==================#
 # make figures
@@ -77,5 +91,9 @@ labels = ("POD ($(2*l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
 # _, p1, e1 = compare_plots(modeldirs, labels, @__DIR__, casename * "case1", 1, grid)
 # _, p2, e2 = compare_plots(modeldirs, labels, @__DIR__, casename * "case2", 2, grid)
 # _, p3, e3 = compare_plots(modeldirs, labels, @__DIR__, casename * "case3", 3, grid)
+# _, p4, e4 = compare_plots(modeldirs, labels, @__DIR__, casename * "case3", 4, grid)
+# _, p5, e5 = compare_plots(modeldirs, labels, @__DIR__, casename * "case3", 5, grid)
+# _, p6, e6 = compare_plots(modeldirs, labels, @__DIR__, casename * "case3", 6, grid)
+# _, p7, e7 = compare_plots(modeldirs, labels, @__DIR__, casename * "case3", 7, grid)
 #======================================================#
 nothing

@@ -101,7 +101,7 @@ function train_SDF(
     _batchsize = nothing,
     batchsize_ = nothing,
 
-    ifmlh::Bool = false,
+    precompute_mlh::Bool = false,
 
     makedata_kws = (; _Ix = :,),
     device = Lux.gpu_device(),
@@ -128,23 +128,20 @@ function train_SDF(
     _batchsize = isnothing(_batchsize) ? numobs(_data) ÷ 100 : _batchsize
     batchsize_ = isnothing(batchsize_) ? numobs(_data) ÷ 1   : batchsize_
 
-    lossfun = mae # mae_clamped(δ)
+    lossfun = mae
     weightdecay = WeightDecay(weight_decays)
     opts, nepochs, schedules, early_stoppings = make_optimizer(E, lrs; warmup, weightdecay, beta, epsilon)
 
     #-------------------------------------------#
 
     # precompute MLH indices
-    if ifmlh
+    if precompute_mlh
         _x  = _data[1]
         MLH = NN.layers.MLH
         _i, MLH = precompute_MLH(_x, MLH)
 
         NN = Chain(; MLH, NN.layers.MLP)
         _data = (_i, _data[2])
-
-        @show typeof(_data[1])
-        @show typeof(_data[2])
     end
 
     #-------------------------------------------#

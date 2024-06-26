@@ -137,8 +137,9 @@ function train_SNF_compare(
         batchsizes...,
     )
 end
+
 #======================================================#
-# compare cases
+# compare cases (accuracy)
 #======================================================#
 function compare_plots(
     modeldirs,
@@ -300,5 +301,41 @@ function compare_plots(
     p1, p2, p3
 end
 
+#======================================================#
+# hyper-reduction experiments
+#======================================================#
+function hyper_plots(
+    datafile::String,
+    modeldir::String,
+    casenum::Integer,
+)
+
+    statsfile = joinpath(modeldir, "hyperstats.jld2")
+    stats = jldopen(statsfile)["solvestats"]
+    cases = keys(stats)
+
+    tims = (;)
+    mems = (;) # GPU memory
+    uprs = (;) # at final time-step
+
+    data = jldopen(datafile)
+    xdata = data["x"]
+    udata = data["u"][:, :, end]
+    close(data)
+
+    for case in cases
+        evolvefile = joinpath(modeldir, "hyper_" * String(case), "evolve$(casenum).jld2")
+        ev = jldopen(evolvefile)
+
+        tims = (; tims..., case => getproperty(stats, case).time)
+        mems = (; mems..., case => getproperty(stats, case).gpu_bytes)
+        uprs = (; uprs..., case => ev["Upred"][:, :, end])
+
+        close(ev)
+    end
+
+    savefile = joinpath(modeldir, "hypercompiled.jld2")
+    jldsave(savefile; xdata, udata, tims, mems, uprs)
+end
 #======================================================#
 nothing

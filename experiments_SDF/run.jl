@@ -64,11 +64,17 @@ device = Lux.gpu_device()
 #======================================================#
 
 NN = begin
-    nLevels = 8
-    out_dims = 2
-    nEmbeddings = 2^10
+    # mis_res = 8
+    # nLevels = 8
+    # out_dims = 2
+    # nEmbeddings = 2^14
 
-    MLH = MultiLevelSpatialHash(; out_dims, nEmbeddings, nLevels, min_res = 8)
+    min_res = 8
+    nLevels = 16
+    out_dims = 2
+    nEmbeddings = 2^14
+
+    MLH = MultiLevelSpatialHash(; out_dims, nEmbeddings, nLevels, min_res)
 
     mlp_w  = 64
     mlp_in = out_dims * nLevels #+ 3
@@ -82,21 +88,19 @@ NN = begin
     Chain(; MLH, MLP)
 end
 
-E = 500
+E = 300
 warmup = false
-lrs = (1f-3, 5f-4, 1f-4, 5f-5, 1f-5,)
-beta = (0.9f0, 0.99f0)
-epsilon = 1f-15
-ifmlh = true
-
+precompute_mlh = true
+lrs = (1f-4, 5f-5, 1f-5,)
+beta, epsilon = (0.9f0, 0.99f0), 1f-15
 
 isdir(modeldir) && rm(modeldir, recursive = true)
 model, ST, md = train_SDF(NN, casename, modeldir, E; rng, δ,
-    lrs, warmup, beta, epsilon, ifmlh, device,
+    lrs, warmup, beta, epsilon, precompute_mlh, device,
 )
 
 #======================================================#
-# process visualization
+# visualization
 #======================================================#
 # isdefined(Main, :server) && close(server)
 # server = postprocess_SDF(modelfile; device)
