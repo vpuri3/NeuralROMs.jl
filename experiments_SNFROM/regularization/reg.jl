@@ -27,7 +27,8 @@ function uData(x; σ = 1.0f0)
     # @. sin(5f0 * x^1) * exp(-(x/σ)^2)
     # @. sin(3f0 * x^2) * exp(-(x/σ)^2)
 
-    @. (x - pi32/2f0) * sin(x) * exp(-(x/σ)^2)
+    # @. (x - pi32/2f0) * sin(x) * exp(-(x/σ)^2)
+    @. sin(abs(x/2))
 end
 
 function datagen_reg(_N, datafile; N_ = 32768)
@@ -266,14 +267,14 @@ isdir(modeldir2) && rm(modeldir2, recursive = true)
 isdir(modeldir3) && rm(modeldir3, recursive = true)
 isdir(modeldir4) && rm(modeldir4, recursive = true)
 
-# α, weight_decays, λ2 = 0f-5, 0f-2, 0f-2
-# train_reg(datafile, modeldir1, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
-# α, weight_decays, λ2 = 0f-5, 0f-2, 1f-2
-# train_reg(datafile, modeldir2, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
-# α, weight_decays, λ2 = 1f-5, 0f-2, 0f-2
-# train_reg(datafile, modeldir3, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
-# α, weight_decays, λ2 = 0f-5, 0f-2, 1f-2
-# train_reg(datafile, modeldir4, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
+α, weight_decays, λ2 = 0f-5, 0f-2, 0f-2 # vanilla
+train_reg(datafile, modeldir1, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
+α, weight_decays, λ2 = 0f-5, 0f-2, 1f-2 # L2
+train_reg(datafile, modeldir2, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
+α, weight_decays, λ2 = 1f-5, 0f-2, 0f-2 # Lipschitz
+train_reg(datafile, modeldir3, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
+α, weight_decays, λ2 = 0f-5, 0f-2, 1f-2 # Weight
+train_reg(datafile, modeldir4, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
 
 # #############
 
