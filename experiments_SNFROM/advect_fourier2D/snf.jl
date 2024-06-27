@@ -32,7 +32,7 @@ grid = (128, 128,)
 
 solvestats = (;)
 
-for dt_mult in [1, 2, 5] # time-step
+for dt_mult in [1, 2, 5, 10] # time-step
     for iskip in [1, 2, 4, 8, 16] # indices
         # hyper-indices
         ids = zeros(Bool, grid...)

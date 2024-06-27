@@ -318,10 +318,8 @@ function hyper_plots(
     mems = (;) # GPU memory
     uprs = (;) # at final time-step
 
-    data = jldopen(datafile)
-    xdata = data["x"]
-    udata = data["u"][:, :, end]
-    close(data)
+    xdata, _, _, udata, _ = loaddata(datafile)
+    udata = udata[:, :, casenum, end]
 
     for case in cases
         evolvefile = joinpath(modeldir, "hyper_" * String(case), "evolve$(casenum).jld2")
