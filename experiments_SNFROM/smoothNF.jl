@@ -26,9 +26,10 @@ function makedata_SNF(
     Ib_ = Colon(), # disregard. set to everything but _Ib
     _It = Colon(), # train/test split in time
     It_ = Colon(),
+    verbose::Bool = true,
 )
     # load data
-    x, t, mu, u, md_data = loaddata(datafile)
+    x, t, mu, u, md_data = loaddata(datafile; verbose)
 
     _Ib = isa(_Ib, Colon) ? (1:size(u, 3)) : _Ib
     Ib_ = setdiff(1:size(u, 3), _Ib)
@@ -64,8 +65,10 @@ function makedata_SNF(
     _Ns = _Nb * _Nt # num trajectories
     Ns_ = Nb_ * Nt_
 
-    println("MAKEDATA_SNF: Using $Nx sample points per trajectory.")
-    println("MAKEDATA_SNF: $_Ns / $Ns_ trajectories in train/test sets.")
+    if verbose
+        println("MAKEDATA_SNF: Using $Nx sample points per trajectory.")
+        println("MAKEDATA_SNF: $_Ns / $Ns_ trajectories in train/test sets.")
+    end
 
     # make arrays
 
@@ -130,10 +133,11 @@ function train_SNF(
     α::Real = 0f0,
     weight_decays::Union{Real, NTuple{M, <:Real}} = 0f0,
     makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :,),
+    verbose::Bool = true,
     device = Lux.gpu_device(),
 ) where{M}
 
-    _data, data_, metadata = makedata_SNF(datafile; makedata_kws...)
+    _data, data_, metadata = makedata_SNF(datafile; makedata_kws..., verbose)
     dir = modeldir
 
     in_dim  = size(_data[1][1], 1)
@@ -144,9 +148,11 @@ function train_SNF(
     # architecture
     #--------------------------------------------#
 
-    println("TRAIN_SNF: input size: $in_dim")
-    println("TRAIN_SNF: param size: $prm_dim")
-    println("TRAIN_SNF: output size: $out_dim")
+    if verbose
+        println("TRAIN_SNF: input size: $in_dim")
+        println("TRAIN_SNF: param size: $prm_dim")
+        println("TRAIN_SNF: output size: $out_dim")
+    end
 
     hyper = begin
         wi = prm_dim
@@ -225,10 +231,11 @@ function postprocess_SNF(
     makeplot::Bool = true,
     evolve_kw::NamedTuple = (;),
     outdir::String = joinpath(dirname(modelfile), "results"),
+    verbose::Bool = true,
     device = Lux.gpu_device(),
 )
     # load data
-    Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
+    Xdata, Tdata, mu, Udata, md_data = loaddata(datafile; verbose)
 
     # load model
     model, md = loadmodel(modelfile)
@@ -263,7 +270,7 @@ function postprocess_SNF(
     #==============#
     # evaluate model
     #==============#
-    _data, data_, _ = makedata_SNF(datafile; md.makedata_kws...)
+    _data, data_, _ = makedata_SNF(datafile; md.makedata_kws..., verbose)
     
     in_dim  = size(Xdata, 1)
     out_dim, Nx, Nb, Nt = size(Udata)
@@ -283,8 +290,10 @@ function postprocess_SNF(
     _Upred = unnormalizedata(_upred, md.ū, md.σu)
     Upred_ = unnormalizedata(upred_, md.ū, md.σu)
     
-    @show mse(_Upred, _Udata) / mse(_Udata, 0 * _Udata)
-    @show mse(Upred_, Udata_) / mse(Udata_, 0 * Udata_)
+    if verbose
+        @show mse(_Upred, _Udata) / mse(_Udata, 0 * _Udata)
+        @show mse(Upred_, Udata_) / mse(Udata_, 0 * Udata_)
+    end
     
     #==============#
     # save codes
@@ -433,7 +442,7 @@ function evolve_SNF(
     mkpath(outdir)
 
     # load data
-    Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
+    Xdata, Tdata, mu, Udata, md_data = loaddata(datafile; verbose)
 
     # load model
     (NN, p, st), md = loadmodel(modelfile)
@@ -453,14 +462,22 @@ function evolve_SNF(
     #==============#
     # get p0
     #==============#
-    _data, _, _ = makedata_SNF(datafile; Ix = [1,], _It = [1])
-    _prm = _data[1][2]
-    _ps  = hyper[1](_prm, hyper[2], hyper[3])[1] # [N_ROM, N_CASES]
+    p0 = begin
+        _data, _, _ = makedata_SNF(datafile; Ix = [1,], _It = [1], verbose)
+        _prm = _data[1][2]
+        _ps  = hyper[1](_prm, hyper[2], hyper[3])[1] # [N_ROM, N_CASES]
+        _ps[:, case]
+    end
+
+    plrnd = begin
+        _data, _, _ = makedata_SNF(datafile; Ix = [1,], _Ib = [case], verbose)
+        _prm = _data[1][2]
+        hyper[1](_prm, hyper[2], hyper[3])[1] # [N_ROM, N_CASES]
+    end
 
     #==============#
     # make model
     #==============#
-    p0 = _ps[:, case]
 
     NN, p0, st = freeze_decoder(decoder, length(p0); rng, p0)
     model = NeuralModel(NN, st, md)
@@ -496,7 +513,7 @@ function evolve_SNF(
             println("Grabbing collocation indices from $hypfile with $(length(IX)) points.")
         else
             IX = hyperreduction_idx(
-                Xdata, Udata, Tdata, _ps, getaxes(p0),
+                Xdata, Udata, Tdata, vec(p0), getaxes(p0),
                 prob, model, timealg, scheme, Δt,
                 adaptive, autodiff_xyz, ϵ_xyz, learn_ic;
                 rng, verbose = false, device,
@@ -520,7 +537,7 @@ function evolve_SNF(
     # evolve
     #==============#
 
-    solvestats = if device isa Lux.LuxDeviceUtils.AbstractLuxGPUDevice
+    statsROM = if device isa Lux.LuxDeviceUtils.AbstractLuxGPUDevice
         CUDA.@timed _, ps, _ = evolve_model(
             prob, model, timealg, scheme, data, p0, Δt;
             adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
@@ -532,7 +549,9 @@ function evolve_SNF(
         )
     end
 
-    @set! solvestats.value = nothing
+    @set! statsROM.value = nothing
+
+    @show statsROM.time
 
     #==============#
     # analysis
@@ -545,7 +564,7 @@ function evolve_SNF(
     Up = eval_model(model, Xdata, ps, getaxes(p0); device)
 
     # print error metrics
-    begin
+    if verbose
         N = length(Up)
         Nr = sum(abs2, Up) / N |> sqrt # normalizer
         Ep = (Up - Ud) ./ Nr
@@ -572,14 +591,14 @@ function evolve_SNF(
     
     # save files
     filename = joinpath(outdir, "evolve$(case).jld2")
-    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps, Plrnd = _ps)
+    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps, Plrnd = plrnd)
 
-    (Xdata, Tdata, Ud, Up, ps), solvestats
+    (Xdata, Tdata, Ud, Up, ps), statsROM
 end
 
 #===========================================================#
 function hyperreduction_idx(
-    Xdata, Udata, Tdata, ps, ax,
+    Xdata, Udata, Tdata, p0, ax,
     prob, model, timealg, scheme, Δt,
     adaptive, autodiff_xyz, ϵ_xyz, learn_ic;
     rng = Random.default_rng(),
@@ -589,12 +608,12 @@ function hyperreduction_idx(
     verbose::Bool = false,
     device = Lux.gpu_device(),
 )
-    residual_args = Xdata, Udata, Tdata, ps, ax,
+    residual_args = Xdata, Udata, Tdata, p0, ax,
         prob, model, timealg, scheme, Δt,
         adaptive, autodiff_xyz, ϵ_xyz, learn_ic
 
     N = size(Xdata, 2)
-    l = size(ps   , 1)
+    l = length(p0)
 
     begin
         r = compute_residual(1:N, residual_args...; verbose, device)
@@ -645,7 +664,7 @@ function hyperreduction_idx(
 end
 
 function compute_residual(
-    IX, Xdata, Udata, Tdata, ps, ax,
+    IX, Xdata, Udata, Tdata, p0, ax,
     prob, model, timealg, scheme, Δt,
     adaptive, autodiff_xyz, ϵ_xyz, learn_ic;
     verbose::Bool = false,
@@ -668,7 +687,7 @@ function compute_residual(
         data = (Xd, U0, Td)
         data = copy.(data)
 
-        p0 = ComponentArray(ps[:, case], ax)
+        p0 = ComponentArray(p0, ax)
 
         _, ps, _ = evolve_model(
             prob, model, timealg, scheme, data, p0, Δt;

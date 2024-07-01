@@ -12,7 +12,7 @@ end
 
 using CUDA, LuxCUDA, LuxDeviceUtils, ComponentArrays
 using OrdinaryDiffEq, LinearSolve, LinearAlgebra, Random
-using Plots, JLD2, LaTeXStrings
+using Plots, JLD2, LaTeXStrings, Setfield
 
 Random.seed!(0)
 CUDA.allowscalar(false)
@@ -101,19 +101,24 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
     # dt = 1f-2
 
     # solve
-    sol = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
-        CUDA.@time sol = solve(prob, odealg)#; dt)
+    statsFOM = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
+        CUDA.@timed solve(prob, odealg)#; dt)
     else
-        @time sol = solve(prob, odealg)
+        @timed solve(prob, odealg)
     end
 
-    @show sol.retcode
-    nothing
+    @set! statsFOM.value = nothing
+    @show statsFOM.time
+
+    statsFOM
 end
 
-Nx = Ny = 512
-ν = 1f-3
-device = gpu_device()
-odealg = SSPRK43()
-burgers2D(Nx, Ny, ν; device, odealg)
+FOMstats = begin
+    Nx = Ny = 512
+    ν = 1f-3
+    device = gpu_device()
+    odealg = SSPRK43()
+    burgers2D(Nx, Ny, ν; device, odealg)
+end
+
 #

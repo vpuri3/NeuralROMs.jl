@@ -34,36 +34,46 @@ grid = (512, 512,)
 # # modeldir/results
 # postprocess_SNF(prob, datafile, modelfile; rng, device)
 
-solvestats = (;)
+function timings()
+    statsROM = (;)
 
-for dt_mult in [1, 2, 5, 10] # time-step
-    for iskip in [4, 8, 16, 32, 64] # indices
-        # hyper-indices
-        ids = zeros(Bool, grid...)
-        @views ids[1:iskip:end, 1:iskip:end] .= true
-        hyper_indices = findall(isone, vec(ids))
-        hyper_reduction_path = joinpath(modeldir, "hyper.jld2")
+    for dt_mult in reverse([1, 2, 5, 10]) # time-step
+        for iskip in reverse([4, 8, 16, 32, 64]) # indices
+            # hyper-indices
+            ids = zeros(Bool, grid...)
+            @views ids[1:iskip:end, 1:iskip:end] .= true
+            hyper_indices = findall(isone, vec(ids))
+            hyper_reduction_path = joinpath(modeldir, "hyper.jld2")
 
-        # time-step
-        It = LinRange(1, 500, 500 ÷ dt_mult) .|> Base.Fix1(round, Int)
-        data_kws = (; Ix = :, It)
-        evolve_kw = (; Δt = 10f0, data_kws, hyper_reduction_path, hyper_indices, verbose = false,)
+            # time-step
+            It = LinRange(1, 500, 500 ÷ dt_mult) .|> Base.Fix1(round, Int)
+            data_kws = (; Ix = :, It)
 
-        # directory
-        N = length(hyper_indices)
-        casename = "N$(N)_dt$(dt_mult)"
-        outdir = joinpath(modeldir, "hyper_$(casename)")
 
-        # run
-        _, stats = evolve_SNF(prob, datafile, modelfile, 1; rng, outdir, evolve_kw..., device)
+            learn_ic = false
+            evolve_kw = (; Δt = 10f0, data_kws, hyper_reduction_path, hyper_indices, learn_ic, verbose = false,)
 
-        global solvestats = (; solvestats..., Symbol(casename) => stats)
+            # directory
+            N = length(hyper_indices)
+            casename = "N$(N)_dt$(dt_mult)"
+            outdir = joinpath(modeldir, "hyper_$(casename)")
+
+            # run
+            _, stats = evolve_SNF(prob, datafile, modelfile, 1; rng, outdir, evolve_kw..., device)
+            statsROM = (; statsROM..., Symbol(casename) => stats)
+        end
     end
+
+    # FOM stats
+    statsFOM = include(joinpath(@__DIR__, "FOM_timings.jl"))
+
+    statsfile = joinpath(modeldir, "hyperstats.jld2")
+    jldsave(statsfile; statsROM, statsFOM)
+    hyper_plots(datafile, modeldir, 1)
+    nothing
 end
 
-statsfile = joinpath(modeldir, "hyperstats.jld2")
-jldsave(statsfile; solvestats)
-hyper_plots(datafile, modeldir, 1)
+timings()
 
 #======================================================#
 

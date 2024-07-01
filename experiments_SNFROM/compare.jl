@@ -141,6 +141,7 @@ end
 #======================================================#
 # compare cases (accuracy)
 #======================================================#
+
 function compare_plots(
     modeldirs,
     labels,
@@ -304,6 +305,7 @@ end
 #======================================================#
 # hyper-reduction experiments
 #======================================================#
+
 function hyper_plots(
     datafile::String,
     modeldir::String,
@@ -311,8 +313,8 @@ function hyper_plots(
 )
 
     statsfile = joinpath(modeldir, "hyperstats.jld2")
-    stats = jldopen(statsfile)["solvestats"]
-    cases = keys(stats)
+    statsROM = jldopen(statsfile)["statsROM"]
+    statsFOM = jldopen(statsfile)["statsFOM"]
 
     tims = (;)
     mems = (;) # GPU memory
@@ -321,16 +323,24 @@ function hyper_plots(
     xdata, _, _, udata, _ = loaddata(datafile)
     udata = udata[:, :, casenum, end]
 
-    for case in cases
+    for case in keys(statsROM)
         evolvefile = joinpath(modeldir, "hyper_" * String(case), "evolve$(casenum).jld2")
         ev = jldopen(evolvefile)
 
-        tims = (; tims..., case => getproperty(stats, case).time)
-        mems = (; mems..., case => getproperty(stats, case).gpu_bytes)
+        tims = (; tims..., case => getproperty(statsROM, case).time)
+        mems = (; mems..., case => getproperty(statsROM, case).gpu_bytes)
         uprs = (; uprs..., case => ev["Upred"][:, :, end])
 
         close(ev)
     end
+
+    tims = (; tims..., FOM = statsFOM.time)
+    mems = (; mems..., FOM = statsFOM.gpu_bytes)
+
+    times    = round.(values(tims), sigdigits = 4)
+    speedups = round.(statsFOM.time ./ values(tims), sigdigits = 4)
+    @show times
+    @show speedups
 
     savefile = joinpath(modeldir, "hypercompiled.jld2")
     jldsave(savefile; xdata, udata, tims, mems, uprs)

@@ -201,7 +201,7 @@ function convINR_network(
 end
 #======================================================#
 
-function loaddata(datafile::String)
+function loaddata(datafile::String; verbose::Bool = true)
 
     data = jldopen(datafile)
     x = data["x"]
@@ -223,8 +223,10 @@ function loaddata(datafile::String)
     in_dim  = size(x, 1)
     out_dim = size(u, 1)
 
-    println("input size $in_dim with $(size(x, 2)) points per trajectory.")
-    println("output size $out_dim.")
+    if verbose
+        println("input size $in_dim with $(size(x, 2)) points per trajectory.")
+        println("output size $out_dim.")
+    end
 
     @assert eltype(x) === Float32
     @assert eltype(u) === Float32

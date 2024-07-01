@@ -91,9 +91,9 @@ labels = ("POD ($(2*l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
 # _, p1, e1 = compare_plots(modeldirs, labels, @__DIR__, casename * "case1", 1, grid)
 # _, p2, e2 = compare_plots(modeldirs, labels, @__DIR__, casename * "case2", 2, grid)
 # _, p3, e3 = compare_plots(modeldirs, labels, @__DIR__, casename * "case3", 3, grid)
-# _, p4, e4 = compare_plots(modeldirs, labels, @__DIR__, casename * "case3", 4, grid)
-# _, p5, e5 = compare_plots(modeldirs, labels, @__DIR__, casename * "case3", 5, grid)
-# _, p6, e6 = compare_plots(modeldirs, labels, @__DIR__, casename * "case3", 6, grid)
-# _, p7, e7 = compare_plots(modeldirs, labels, @__DIR__, casename * "case3", 7, grid)
+# _, p4, e4 = compare_plots(modeldirs, labels, @__DIR__, casename * "case4", 4, grid)
+# _, p5, e5 = compare_plots(modeldirs, labels, @__DIR__, casename * "case5", 5, grid)
+# _, p6, e6 = compare_plots(modeldirs, labels, @__DIR__, casename * "case6", 6, grid)
+# _, p7, e7 = compare_plots(modeldirs, labels, @__DIR__, casename * "case7", 7, grid)
 #======================================================#
 nothing

@@ -213,7 +213,6 @@ function makeplots(
         Legend(figp[0,:], elems, labels; orientation = :horizontal, patchsize = (50, 10), framevisible = false)
     end
 
-
     #===============================#
     # FIGQ
     #===============================#
@@ -291,8 +290,8 @@ function makeplots(
     elseif occursin("exp4", casename)
         n = 11
 
-        l1 = range(-0.2, 1.0, n)
-        l2 = range(-0.2, 1.0, n)
+        l1 = range(-0.2, 1.1, n)
+        l2 = range(-0.2, 1.1, n)
         l3 = 10.0 .^ range(-5, 0, n)
 
         l1, l2, l3
@@ -662,6 +661,7 @@ function ptplot!(ax, t, p, q, pdt = nothing;
     lq, lp, lt
 end
 
+#======================================================#
 function makeplots_hyper(
     e2hyper::String,
     casename::String,
@@ -678,6 +678,9 @@ function makeplots_hyper(
     xdata = file["xdata"]
     udata = file["udata"]
     upreds = file["uprs"]
+    times = file["tims"]
+    mems  = file["mems"]
+    close(file)
 
     xdiag = diag(reshape(xdata[1, :, :], grid))
     udata = if occursin("exp2", casename)
@@ -700,6 +703,64 @@ function makeplots_hyper(
     udiags = NamedTuple{icases}(diag(ups[:, :, i]) for i in 1:ncases)
     uddiag = diag(udata)
 
+    k1 = (:N16384_dt1 , :N4096_dt1 , :N1024_dt1 , :N256_dt1 , :N64_dt1 )
+    k2 = (:N16384_dt2 , :N4096_dt2 , :N1024_dt2 , :N256_dt2 , :N64_dt2 )
+    k3 = (:N16384_dt5 , :N4096_dt5 , :N1024_dt5 , :N256_dt5 , :N64_dt5 )
+    k4 = (:N16384_dt10, :N4096_dt10, :N1024_dt10, :N256_dt10, :N64_dt10)
+
+    # create dataframe / table
+    df = nothing
+
+    tFOM = times.FOM
+    mFOM = mems.FOM
+
+    e1 = Tuple(sqrt(sum(abs2, epreds[k]) / length(udata)) for k in k1)
+    e2 = Tuple(sqrt(sum(abs2, epreds[k]) / length(udata)) for k in k2)
+    e3 = Tuple(sqrt(sum(abs2, epreds[k]) / length(udata)) for k in k3)
+    e4 = Tuple(sqrt(sum(abs2, epreds[k]) / length(udata)) for k in k4)
+
+    @show round.(e1 .* 100, sigdigits = 4)
+    @show round.(e2 .* 100, sigdigits = 4)
+    @show round.(e3 .* 100, sigdigits = 4)
+    @show round.(e4 .* 100, sigdigits = 4)
+    
+    println()
+
+    t1 = Tuple(times[k] for k in k1)
+    t2 = Tuple(times[k] for k in k2)
+    t3 = Tuple(times[k] for k in k3)
+    t4 = Tuple(times[k] for k in k4)
+    
+    nn = 1024^3
+    
+    m1 = Tuple(mems[k] for k in k1) ./ nn
+    m2 = Tuple(mems[k] for k in k2) ./ nn
+    m3 = Tuple(mems[k] for k in k3) ./ nn
+    m4 = Tuple(mems[k] for k in k4) ./ nn
+    
+    s1 = tFOM ./ t1
+    s2 = tFOM ./ t2
+    s3 = tFOM ./ t3
+    s4 = tFOM ./ t4
+
+    # @show tFOM
+    # @show round.(s1, sigdigits = 4)
+    # @show round.(s2, sigdigits = 4)
+    # @show round.(s3, sigdigits = 4)
+    # @show round.(s4, sigdigits = 4)
+    #
+    # println()
+    #
+    # @show mFOM / nn
+    # @show round.(m1, sigdigits = 4)
+    # @show round.(m2, sigdigits = 4)
+    # @show round.(m3, sigdigits = 4)
+    # @show round.(m4, sigdigits = 4)
+    
+    println()
+
+    return df
+
     ### Make plots
 
     figc = Figure(; size = (750, 750), backgroundcolor = :white, grid = :off)
@@ -717,7 +778,8 @@ function makeplots_hyper(
     kw_axc = (; aspect = 1, xlabel = L"x", ylabel = L"y")
     kw_ctr = (; extendlow = :cyan, extendhigh = :magenta, colorscale = log10, levels)
 
-    # fige
+    # FIGE, FIGP
+
     colors = (:orange, :green, :blue, :red, :brown,)
     styles = (:solid, :dash, :dashdot, :dashdotdot, :dot)
     labels = (L"$|X_\text{proj}|=16384$", L"$|X_\text{proj}|=4096$", L"$|X_\text{proj}|=1024$", L"$|X_\text{proj}|=256$", L"$|X_\text{proj}|=64$",)
@@ -754,11 +816,6 @@ function makeplots_hyper(
     axp3 = Axis(figp[3, 1]; kw_axp...)
     axp4 = Axis(figp[3, 2]; kw_axp...)
 
-    k1 = (:N16384_dt1 , :N4096_dt1 , :N1024_dt1 , :N256_dt1 , :N64_dt1 )
-    k2 = (:N16384_dt2 , :N4096_dt2 , :N1024_dt2 , :N256_dt2 , :N64_dt2 )
-    k3 = (:N16384_dt5 , :N4096_dt5 , :N1024_dt5 , :N256_dt5 , :N64_dt5 )
-    k4 = (:N16384_dt10, :N4096_dt10, :N1024_dt10, :N256_dt10, :N64_dt10)
-
     for j in 1:5
         ep1 = epreds[k1[j]] .|> abs
         ep2 = epreds[k2[j]] .|> abs
@@ -775,13 +832,13 @@ function makeplots_hyper(
         ud3 = udiags[k3[j]]
         ud4 = udiags[k4[j]]
 
-        # fige
+        # FIGE
         lines!(axe1, xdiag, ed1; kw_lin[j]...)
         lines!(axe2, xdiag, ed2; kw_lin[j]...)
         lines!(axe3, xdiag, ed3; kw_lin[j]...)
         lines!(axe4, xdiag, ed4; kw_lin[j]...)
 
-        # figp
+        # FIGP
 
         if j == 1
             # FOM
@@ -824,7 +881,7 @@ function makeplots_hyper(
         end
     end
 
-    # fige, figp
+    # FIGE, FIGP
     linkaxes!(axe1, axe2, axe3, axe4)
     linkaxes!(axp1, axp2, axp3, axp4)
 
@@ -834,12 +891,12 @@ function makeplots_hyper(
     Label(fige[2,1], L"(a) $Δt =  1Δt_0$", fontsize = 16)
     Label(fige[2,2], L"(b) $Δt =  2Δt_0$", fontsize = 16)
     Label(fige[4,1], L"(c) $Δt =  5Δt_0$", fontsize = 16)
-    Label(fige[4,2], L"(c) $Δt = 10Δt_0$", fontsize = 16)
+    Label(fige[4,2], L"(d) $Δt = 10Δt_0$", fontsize = 16)
 
     Label(figp[2,1], L"(a) $Δt =  1Δt_0$", fontsize = 16)
     Label(figp[2,2], L"(b) $Δt =  2Δt_0$", fontsize = 16)
     Label(figp[4,1], L"(c) $Δt =  5Δt_0$", fontsize = 16)
-    Label(figp[4,2], L"(c) $Δt = 10Δt_0$", fontsize = 16)
+    Label(figp[4,2], L"(d) $Δt = 10Δt_0$", fontsize = 16)
 
     colsize!(fige.layout, 1, Relative(0.50))
     colsize!(fige.layout, 2, Relative(0.50))
@@ -878,44 +935,44 @@ function makeplots_hyper(
     save(joinpath(outdir, "hyper_$(casename)_e.pdf"), fige)
     save(joinpath(outdir, "hyper_$(casename)_p.pdf"), figp)
 
-    nothing
+    return df
 end
 
 #======================================================#
-h5dir  = joinpath(@__DIR__, "h5files")
 outdir = joinpath(@__DIR__, "results")
+datadir = joinpath(@__DIR__, "datafiles")
 
-e1file = joinpath(h5dir, "advect1d.h5")
-e2file = joinpath(h5dir, "advect2d.h5")
-e4file = joinpath(h5dir, "burgers2d.h5")
-e5file = joinpath(h5dir, "ks1d.h5")
+e1file = joinpath(datadir, "advect1d.h5")
+e2file = joinpath(datadir, "advect2d.h5")
+e4file = joinpath(datadir, "burgers2d.h5")
+e5file = joinpath(datadir, "ks1d.h5")
 
-e3file1 = joinpath(h5dir, "burgers1dcase1.h5")
-e3file2 = joinpath(h5dir, "burgers1dcase2.h5")
-e3file3 = joinpath(h5dir, "burgers1dcase3.h5")
-e3file4 = joinpath(h5dir, "burgers1dcase4.h5")
-e3file5 = joinpath(h5dir, "burgers1dcase5.h5")
-e3file6 = joinpath(h5dir, "burgers1dcase6.h5")
+e3file1 = joinpath(datadir, "burgers1dcase1.h5")
+e3file2 = joinpath(datadir, "burgers1dcase2.h5")
+e3file3 = joinpath(datadir, "burgers1dcase3.h5")
+e3file4 = joinpath(datadir, "burgers1dcase4.h5")
+e3file5 = joinpath(datadir, "burgers1dcase5.h5")
+e3file6 = joinpath(datadir, "burgers1dcase6.h5")
 
 # makeplots(e1file, outdir, "exp1"; ifdt = true)
 # makeplots(e2file, outdir, "exp2"; ifdt = false)
 # makeplots(e4file, outdir, "exp4")
 # makeplots(e5file, outdir, "exp5")
 #
-# # makeplots(e3file1, outdir, "exp3case1")
-# # makeplots(e3file3, outdir, "exp3case3")
-# # makeplots(e3file2, outdir, "exp3case2")
 # makeplots(e3file4, outdir, "exp3case4")
 # makeplots(e3file5, outdir, "exp3case5")
-# # makeplots(e3file6, outdir, "exp3case6")
-#
 # makeplots_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
+
+e4case4file = joinpath(datadir, "burgers2dcase4.h5")
+e4case5file = joinpath(datadir, "burgers2dcase5.h5")
+
+makeplots(e4case4file, outdir, "exp4case4")
+makeplots(e4case5file, outdir, "exp4case5")
 
 e2hyper = joinpath(@__DIR__, "..", "experiments_SNFROM", "advect_fourier2D", "dump", "hypercompiled.jld2")
 e4hyper = joinpath(@__DIR__, "..", "experiments_SNFROM", "burgers_fourier2D", "dump", "hypercompiled.jld2")
 
-makeplots_hyper(e2hyper, "exp2")
-makeplots_hyper(e4hyper, "exp4")
-
+# df_exp2 = makeplots_hyper(e2hyper, "exp2")
+# df_exp4 = makeplots_hyper(e4hyper, "exp4")
 #======================================================#
 nothing

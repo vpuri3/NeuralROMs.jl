@@ -11,7 +11,7 @@ end
 
 using CUDA, LuxCUDA, LuxDeviceUtils
 using OrdinaryDiffEq, LinearSolve, LinearAlgebra
-using Plots, JLD2
+using Plots, JLD2, Setfield
 
 CUDA.allowscalar(false)
 
@@ -62,29 +62,32 @@ function advect1D(Nx, Ny, ν, cx, cy, mu = nothing, p = nothing;
     prob = ODEProblem{false}(odefunc, u0, tspan, p)
 
     # solve
-    sol = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
-        CUDA.@time sol = solve(prob, odealg)
+    statsFOM = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
+        CUDA.@timed solve(prob, odealg)
     else
-        @time sol = solve(prob, odealg)
+        @time solve(prob, odealg)
     end
 
-    nothing
+    @set! statsFOM.value = nothing
+    @show statsFOM.time
+
+    statsFOM
 end
 
-Nx, Ny = 128, 128
+FOMstats = begin
+    Nx, Ny = 128, 128
 
-intx = IntervalDomain(-1.0f0, 1.0f0; periodic = true)
-inty = IntervalDomain(-1.0f0, 1.0f0; periodic = true)
-domain = intx × inty
+    intx = IntervalDomain(-1.0f0, 1.0f0; periodic = true)
+    inty = IntervalDomain(-1.0f0, 1.0f0; periodic = true)
+    domain = intx × inty
 
-ν = 0f0
-cx, cy = 0.25f0, 0.25f0
-tspan = (0f0, 4.0f0)
-ntsave = 500
-mu = nothing
+    ν = 0f0
+    cx, cy = 0.25f0, 0.25f0
+    tspan = (0f0, 4.0f0)
+    ntsave = 500
+    mu = nothing
 
-device = gpu_device()
-advect1D(Nx, Ny, ν, cx, cy, mu; domain, tspan, ntsave, device)
-
-nothing
+    device = gpu_device()
+    advect1D(Nx, Ny, ν, cx, cy, mu; domain, tspan, ntsave, device)
+end
 #
