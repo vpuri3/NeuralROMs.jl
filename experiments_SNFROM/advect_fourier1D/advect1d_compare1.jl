@@ -1,6 +1,6 @@
 #
 using NeuralROMs
-using Plots, LaTeXStrings
+using CairoMakie, LaTeXStrings
 
 joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "compare.jl") |> include
 #======================================================#
@@ -118,29 +118,46 @@ function plot_compare_advect1d_l()
     end
 
     xlabel = L"N_{ROM}"
-    ylabel = L"ε"
-    plt = plot(;
-        title = L"Advection 1D $N_{ROM}$ vs $ε$",
-        xlabel, ylabel, legend = :topright, framestyle = :box,
-        yaxis = :log, xticks = 1:16, yticks = 10.0 .^ Array(-8:0),
+    ylabel = L"e"
+    xlabelsize = ylabelsize = 16
+
+    colors = (:orange, :green, :blue, :red, :brown,)
+    styles = (:solid, :dash, :dashdot, :dashdotdot, :dot)
+    labels = (L"POD-ROM$$", L"CAE-ROM$$", L"SNFL-ROM$$", L"SNFW-ROM$$",)
+
+    kwl = Tuple(
+        (; color = colors[i], linestyle = styles[i], label = labels[i], linewidth = 2)
+        for i in 1:4
     )
 
-    kws = (w = 2.0, marker = 5,)
-    suffix = ("PCA", "CAE", "SNL", "SNW")
-    colors = (:orange, :green, :blue, :red, :brown,)
+    kws = Tuple(
+        (; color = colors[i],)
+        for i in 1:4
+    )
 
-    plot!(plt, latents, e_PCA; label = suffix[1], c = colors[1], kws...)
-    plot!(plt, latents, e_CAE; label = suffix[2], c = colors[2], kws...)
-    plot!(plt, latents, e_SNL; label = suffix[3], c = colors[3], kws...)
-    plot!(plt, latents, e_SNW; label = suffix[4], c = colors[4], kws...)
+    fig = Figure(; size = (600, 400), backgroundcolor = :white, grid = :off)
+    ax  = Makie.Axis(fig[1,1]; xlabel, ylabel, xlabelsize, ylabelsize, yscale = log10)
 
-    png(plt, joinpath(@__DIR__, "compare_ll_case1.png"))
-    plt
+    lines!(ax, latents, e_PCA; kwl[1]...)
+    lines!(ax, latents, e_CAE; kwl[2]...)
+    lines!(ax, latents, e_SNL; kwl[3]...)
+    lines!(ax, latents, e_SNW; kwl[4]...)
+
+    Makie.scatter!(ax, latents, e_PCA; kws[1]...)
+    Makie.scatter!(ax, latents, e_CAE; kws[2]...)
+    Makie.scatter!(ax, latents, e_SNL; kws[3]...)
+    Makie.scatter!(ax, latents, e_SNW; kws[4]...)
+
+    Legend(fig[0,1], ax; orientation = :horizontal, framevisible = false, unique = true)
+
+    path = joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_nrom.pdf")
+    save(path, fig)
+
+    fig
 end
 
 #======================================================#
 # compare_advect1d_l()
-plt = plot_compare_advect1d_l()
-display(plt)
+plot_compare_advect1d_l()
 #======================================================#
 nothing
