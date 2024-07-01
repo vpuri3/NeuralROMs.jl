@@ -470,6 +470,7 @@ function evolve_SNF(
     end
 
     plrnd = begin
+        # FIX: want [N_ROM, NT]
         _data, _, _ = makedata_SNF(datafile; Ix = [1,], _Ib = [case], verbose)
         _prm = _data[1][2]
         hyper[1](_prm, hyper[2], hyper[3])[1] # [N_ROM, N_CASES]

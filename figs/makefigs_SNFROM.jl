@@ -10,6 +10,8 @@ function makeplots(
     ifdt::Bool = false,
 )
 
+    mkpath(outdir)
+
     data = h5open(datafile)
     xFOM = data["xFOM"] |> Array # [in_dim, grid...]
     tFOM = data["tFOM"] |> Array # [Nt]
@@ -63,6 +65,8 @@ function makeplots(
         nothing, nothing, nothing, nothing, nothing
     end
 
+    close(data)
+
     #======================================================#
 
     in_dim  = size(xFOM, 1)
@@ -81,7 +85,7 @@ function makeplots(
     i1, i2 = Itplt[2], Itplt[5]
 
     ## normalize
-    nr = sum(abs2, uFOM; dims = 2:in_dim+1) ./ Nxyz .|> sqrt
+    nr = sum(abs2, uFOM; dims = 1:in_dim+1) ./ Nfom .|> sqrt
 
     ePCA = (uFOM - uPCA) ./ nr
     eCAE = (uFOM - uCAE) ./ nr
@@ -447,11 +451,14 @@ function makeplots(
 end
 #======================================================#
 
-function makeplots_exp3(
-    datafiles::String...;
+function makeplots_parametric(
+    datafiles::NTuple{N, String},
     outdir::String,
-    ifdt::Bool = false,
-)
+    casename::String,
+) where{N}
+
+    mkpath(outdir)
+
     figp = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
     fige = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
 
@@ -482,16 +489,28 @@ function makeplots_exp3(
     # FIGP
     #===============================#
 
-    labels = (
-        L"$\mu = 0.500$ (Training)",
-        L"$\mu = 0.525$ (Interpolation)",
-        L"$\mu = 0.550$ (Training)",
-        L"$\mu = 0.575$ (Interpolation)",
-        L"$\mu = 0.600$ (Training)",
-        L"$\mu = 0.625$ (Extrapolation)",
-    )
+    labels = if occursin("exp3", casename)
+        (
+            L"$\mu = 0.500$ (Training)",
+            L"$\mu = 0.525$ (Interpolation)",
+            L"$\mu = 0.550$ (Training)",
+            L"$\mu = 0.575$ (Interpolation)",
+            L"$\mu = 0.600$ (Training)",
+            L"$\mu = 0.625$ (Extrapolation)",
+        )
+    elseif occursin("exp4", casename)
+        (
+            L"$\mu = 0.900$ (Training)",
+            L"$\mu = 0.933$ (Training)",
+            L"$\mu = 0.966$ (Training)",
+            L"$\mu = 1.000$ (Interpolation)",
+            L"$\mu = 1.033$ (Training)",
+            L"$\mu = 1.066$ (Training)",
+            L"$\mu = 1.100$ (Training)",
+        )
+    end
 
-    colors = (:blue, :orange, :green, :red, :purple, :brown,)
+    colors = (:blue, :orange, :green, :red, :purple, :brown, :magenta)
 
     for (i, datafile) in enumerate(datafiles)
         data = h5open(datafile)
@@ -504,6 +523,10 @@ function makeplots_exp3(
         qCAE = data["qCAE"] |> Array # encder prediction
         qSNL = data["qSNL"] |> Array
         qSNW = data["qSNW"] |> Array
+
+        @show size(pCAE), size(qCAE)
+        @show size(pSNL), size(qSNL) # wrong size.
+        @show size(pSNW), size(qSNW) # wrong size.
 
         color = colors[i]
         label = labels[i]
@@ -543,7 +566,7 @@ function makeplots_exp3(
 
     ylims!(axp1, -8, 20)
 
-    save(joinpath(outdir, "exp3p.pdf"), figp)
+    save(joinpath(outdir, "$(casename)p.pdf"), figp)
 
     #===============================#
     # FIGE
@@ -553,29 +576,38 @@ function makeplots_exp3(
     styles = (:solid, :dash, :dashdot, :dashdotdot, :dot)
     labels = (L"POD-ROM$$", L"CAE-ROM$$", L"SNFL-ROM$$", L"SNFW-ROM$$",)
 
-    in_dim, out_dim = 1, 1
-    Nxyz = 1024
+    in_dim, out_dim, grid = if occursin("exp3", casename)
+        1, 1, (1024,)
+    elseif occursin("exp4", casename)
+        2, 2, (512, 512)
+    end
+
+    Nxyz = prod(grid)
+    Nfom = Nxyz * out_dim
 
     for (j, datafile) in enumerate(datafiles[4:6])
         data = h5open(datafile)
-        tFOM = Array(data["tFOM"])
-        uFOM = Array(data["uFOM"])[1, :, :]
-        uPCA = Array(data["uPCA"])[1, :, :]
-        uCAE = Array(data["uCAE"])[1, :, :]
-        uSNL = Array(data["uSNL"])[1, :, :]
-        uSNW = Array(data["uSNW"])[1, :, :]
 
-        nr = sum(abs2, uFOM; dims = 1:in_dim) ./ prod(size(uFOM)[1:in_dim]) .|> sqrt
+        tFOM = data["tFOM"] |> Array
+        uFOM = data["uFOM"] |> Array
+        uPCA = data["uPCA"] |> Array
+        uCAE = data["uCAE"] |> Array
+        uSNL = data["uSNL"] |> Array
+        uSNW = data["uSNW"] |> Array
+
+        close(data)
+
+        nr = sum(abs2, uFOM; dims = 1:in_dim+1) ./ Nfom .|> sqrt
 
         ePCA = (uFOM - uPCA) ./ nr
         eCAE = (uFOM - uCAE) ./ nr
         eSNL = (uFOM - uSNL) ./ nr
         eSNW = (uFOM - uSNW) ./ nr
 
-        e2tPCA = sum(abs2, ePCA; dims = 1:in_dim) / Nxyz |> vec
-        e2tCAE = sum(abs2, eCAE; dims = 1:in_dim) / Nxyz |> vec
-        e2tSNL = sum(abs2, eSNL; dims = 1:in_dim) / Nxyz |> vec
-        e2tSNW = sum(abs2, eSNW; dims = 1:in_dim) / Nxyz |> vec
+        e2tPCA = sum(abs2, ePCA; dims = 1:in_dim+1) / Nfom |> vec
+        e2tCAE = sum(abs2, eCAE; dims = 1:in_dim+1) / Nfom |> vec
+        e2tSNL = sum(abs2, eSNL; dims = 1:in_dim+1) / Nfom |> vec
+        e2tSNW = sum(abs2, eSNW; dims = 1:in_dim+1) / Nfom |> vec
 
         e2tPCA = sqrt.(e2tPCA) .+ 1f-12
         e2tCAE = sqrt.(e2tCAE) .+ 1f-12
@@ -616,7 +648,7 @@ function makeplots_exp3(
     colsize!(fige.layout, 2, Relative(0.33))
     colsize!(fige.layout, 3, Relative(0.33))
 
-    save(joinpath(outdir, "exp3e.pdf"), fige)
+    save(joinpath(outdir, "$(casename)e.pdf"), fige)
 
     nothing
 end
@@ -664,10 +696,13 @@ end
 #======================================================#
 function makeplots_hyper(
     e2hyper::String,
+    outdir::String,
     casename::String,
 )
-    ### Get fields
 
+    mkpath(outdir)
+
+    # Get fields
     grid = if occursin("exp2", casename)
         128, 128
     elseif occursin("exp4", casename)
@@ -719,10 +754,10 @@ function makeplots_hyper(
     e3 = Tuple(sqrt(sum(abs2, epreds[k]) / length(udata)) for k in k3)
     e4 = Tuple(sqrt(sum(abs2, epreds[k]) / length(udata)) for k in k4)
 
-    @show round.(e1 .* 100, sigdigits = 4)
-    @show round.(e2 .* 100, sigdigits = 4)
-    @show round.(e3 .* 100, sigdigits = 4)
-    @show round.(e4 .* 100, sigdigits = 4)
+    # @show round.(e1 .* 100, sigdigits = 4)
+    # @show round.(e2 .* 100, sigdigits = 4)
+    # @show round.(e3 .* 100, sigdigits = 4)
+    # @show round.(e4 .* 100, sigdigits = 4)
     
     println()
 
@@ -730,7 +765,7 @@ function makeplots_hyper(
     t2 = Tuple(times[k] for k in k2)
     t3 = Tuple(times[k] for k in k3)
     t4 = Tuple(times[k] for k in k4)
-    
+
     nn = 1024^3
     
     m1 = Tuple(mems[k] for k in k1) ./ nn
@@ -757,9 +792,9 @@ function makeplots_hyper(
     # @show round.(m3, sigdigits = 4)
     # @show round.(m4, sigdigits = 4)
     
-    println()
-
-    return df
+    # println()
+    #
+    # return df
 
     ### Make plots
 
@@ -931,8 +966,8 @@ function makeplots_hyper(
     colsize!(figc.layout, 5, Relative(0.19))
 
     # save
-    save(joinpath(outdir, "hyper_$(casename)_c.pdf"), figc)
-    save(joinpath(outdir, "hyper_$(casename)_e.pdf"), fige)
+    # save(joinpath(outdir, "hyper_$(casename)_c.pdf"), figc)
+    # save(joinpath(outdir, "hyper_$(casename)_e.pdf"), fige)
     save(joinpath(outdir, "hyper_$(casename)_p.pdf"), figp)
 
     return df
@@ -942,37 +977,48 @@ end
 outdir = joinpath(@__DIR__, "results")
 datadir = joinpath(@__DIR__, "datafiles")
 
+# EXP 1, 2, 5
 e1file = joinpath(datadir, "advect1d.h5")
 e2file = joinpath(datadir, "advect2d.h5")
-e4file = joinpath(datadir, "burgers2d.h5")
 e5file = joinpath(datadir, "ks1d.h5")
 
+# EXP 3
 e3file1 = joinpath(datadir, "burgers1dcase1.h5")
 e3file2 = joinpath(datadir, "burgers1dcase2.h5")
 e3file3 = joinpath(datadir, "burgers1dcase3.h5")
 e3file4 = joinpath(datadir, "burgers1dcase4.h5")
 e3file5 = joinpath(datadir, "burgers1dcase5.h5")
 e3file6 = joinpath(datadir, "burgers1dcase6.h5")
+e3files = (e3file1, e3file2, e3file3, e3file4, e3file5, e3file6)
 
+# EXP 4
+e4file1 = joinpath(datadir, "burgers2dcase1.h5")
+e4file2 = joinpath(datadir, "burgers2dcase2.h5")
+e4file3 = joinpath(datadir, "burgers2dcase3.h5")
+e4file4 = joinpath(datadir, "burgers2dcase4.h5")
+e4file5 = joinpath(datadir, "burgers2dcase5.h5")
+e4file6 = joinpath(datadir, "burgers2dcase6.h5")
+e4file7 = joinpath(datadir, "burgers2dcase7.h5")
+e4files = (e4file1, e4file2, e4file3, e4file4, e4file5, e4file6, e4file7)
+
+# # EXP 1, 2, 5
 # makeplots(e1file, outdir, "exp1"; ifdt = true)
 # makeplots(e2file, outdir, "exp2"; ifdt = false)
-# makeplots(e4file, outdir, "exp4")
-# makeplots(e5file, outdir, "exp5")
+# makeplots(e5file, outdir, "exp5"; ifdt = false)
 #
+# # EXP 3
 # makeplots(e3file4, outdir, "exp3case4")
 # makeplots(e3file5, outdir, "exp3case5")
-# makeplots_exp3(e3file1, e3file2, e3file3, e3file4, e3file5, e3file6; outdir)
+# makeplots_parametric(e3files, outdir, "exp3")
 
-e4case4file = joinpath(datadir, "burgers2dcase4.h5")
-e4case5file = joinpath(datadir, "burgers2dcase5.h5")
+# # EXP 4
+# makeplots(e4file4, outdir, "exp4case4")
+makeplots_parametric(e4files, outdir, "exp4")
 
-makeplots(e4case4file, outdir, "exp4case4")
-makeplots(e4case5file, outdir, "exp4case5")
-
-e2hyper = joinpath(@__DIR__, "..", "experiments_SNFROM", "advect_fourier2D", "dump", "hypercompiled.jld2")
-e4hyper = joinpath(@__DIR__, "..", "experiments_SNFROM", "burgers_fourier2D", "dump", "hypercompiled.jld2")
-
-# df_exp2 = makeplots_hyper(e2hyper, "exp2")
-# df_exp4 = makeplots_hyper(e4hyper, "exp4")
+# e2hyper = joinpath(@__DIR__, "..", "experiments_SNFROM", "advect_fourier2D", "dump", "hypercompiled.jld2")
+# e4hyper = joinpath(@__DIR__, "..", "experiments_SNFROM", "burgers_fourier2D", "dump", "hypercompiled.jld2")
+#
+# df_exp2 = makeplots_hyper(e2hyper, outdir, "exp2")
+# df_exp4 = makeplots_hyper(e4hyper, outdir, "exp4")
 #======================================================#
 nothing
