@@ -559,7 +559,7 @@ function make_optimizer(
         schedules = (schedule_warmup, schedules...,)
         early_stoppings = (early_stopping_warmup, early_stoppings...,)
     end
-    
+
     opts, nepochs, schedules, early_stoppings
 end
 

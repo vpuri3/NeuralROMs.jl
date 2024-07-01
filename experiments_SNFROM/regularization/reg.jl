@@ -4,7 +4,7 @@ using LinearAlgebra, ComponentArrays              # arrays
 using Random, Lux, MLUtils, ParameterSchedulers   # ML
 using OptimizationOptimJL, OptimizationOptimisers # opt
 using LinearSolve, NonlinearSolve, LineSearches   # num
-using Plots, JLD2                                 # vis/ save
+using JLD2, Plots                                 # vis/ save
 using CUDA, LuxCUDA, KernelAbstractions           # GPU
 using LaTeXStrings
 
@@ -22,16 +22,17 @@ function uData(x; σ = 1.0f0)
     pi32 = Float32(pi)
 
     # @. tanh(2f0 * x)
-    # @. sin(1f0 * x)
 
     # @. sin(5f0 * x^1) * exp(-(x/σ)^2)
     # @. sin(3f0 * x^2) * exp(-(x/σ)^2)
 
-    # @. (x - pi32/2f0) * sin(x) * exp(-(x/σ)^2)
-    @. sin(abs(x/2))
+    # @. exp(sin(x))
+    # @. sin(abs(x))
+
+    @. (x - pi32/2f0) * sin(x) * exp(-(x/σ)^2)
 end
 
-function datagen_reg(_N, datafile; N_ = 32768)
+function datagen_reg(datafile; _N = 1024, N_ = 16384)
     pi32 = Float32(pi)
     L = 2pi32
 
@@ -62,12 +63,10 @@ function train_reg(
     E, l, h, w;
     λ1::Real = 0f0,
     λ2::Real = 0f0,
-    σ2inv::Real = 0f0,
     α::Real = 0f0,
     weight_decays::Union{Real,NTuple{M,<:Real}} = 0f0,
     rng::Random.AbstractRNG = Random.default_rng(),
     _batchsize = nothing,
-    cb_epoch = nothing,
     device = Lux.cpu_device(),
 ) where{M}
 
@@ -94,6 +93,7 @@ function train_reg(
     metadata = (; md_data, x̄, ū, σx, σu)
 
     _data = (_x, _u)
+    data_ = (x_, u_)
 
     #--------------------------------------------#
     # architecture hyper-params
@@ -143,7 +143,6 @@ function train_reg(
         _batchsize, weight_decays,
         opts, nepochs, schedules, early_stoppings,
         device, dir, metadata, lossfun,
-        cb_epoch,
     )
 
     @show metadata
@@ -254,7 +253,7 @@ _batchsize = 32
 ## weight norm experiment
 l, h, w = 1, 5, 64
 
-datagen_reg(_N, datafile; N_) |> display
+datagen_reg(datafile; _N, N_) |> display
 
 #############
 modeldir1 = joinpath(@__DIR__, "model1") # vanilla
@@ -262,19 +261,21 @@ modeldir2 = joinpath(@__DIR__, "model2") # L2
 modeldir3 = joinpath(@__DIR__, "model3") # lipschitz
 modeldir4 = joinpath(@__DIR__, "model4") # weight
 
-isdir(modeldir1) && rm(modeldir1, recursive = true)
-isdir(modeldir2) && rm(modeldir2, recursive = true)
-isdir(modeldir3) && rm(modeldir3, recursive = true)
-isdir(modeldir4) && rm(modeldir4, recursive = true)
+# α, weight_decays, λ2 = 0f-5, 0f-2, 0f-2 # vanilla
+# isdir(modeldir1) && rm(modeldir1, recursive = true)
+# _, ST1 = train_reg(datafile, modeldir1, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
 
-α, weight_decays, λ2 = 0f-5, 0f-2, 0f-2 # vanilla
-train_reg(datafile, modeldir1, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
-α, weight_decays, λ2 = 0f-5, 0f-2, 1f-2 # L2
-train_reg(datafile, modeldir2, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
-α, weight_decays, λ2 = 1f-5, 0f-2, 0f-2 # Lipschitz
-train_reg(datafile, modeldir3, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
-α, weight_decays, λ2 = 0f-5, 0f-2, 1f-2 # Weight
-train_reg(datafile, modeldir4, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
+# α, weight_decays, λ2 = 0f-5, 0f-2, 1f-1 # L2
+# isdir(modeldir2) && rm(modeldir2, recursive = true)
+# train_reg(datafile, modeldir2, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
+
+# α, weight_decays, λ2 = 5f-5, 0f-2, 0f-2 # Lipschitz
+# isdir(modeldir3) && rm(modeldir3, recursive = true)
+# train_reg(datafile, modeldir3, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
+
+# α, weight_decays, λ2 = 0f-5, 5f-2, 0f-0 # Weight # 2f-2
+# isdir(modeldir4) && rm(modeldir4, recursive = true)
+# train_reg(datafile, modeldir4, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
 
 # #############
 

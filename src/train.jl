@@ -67,7 +67,9 @@ function train_model(
     end
 
     # callback functions
-    STATS = Int[], Float32[], Float32[] # EPOCH, _LOSS, LOSS_
+
+    # EPOCH, _LOSS, LOSS_, _MSE, MSE_, _MAE, MAE_
+    STATS = Int[], Float32[], Float32[], Float32[], Float32[], Float32[], Float32[]
 
     cb = makecallback(NN, __loader, loader_, lossfun; io, STATS, cb_epoch, notestdata)
     cb_stats = makecallback(NN, __loader, loader_, lossfun; io, stats = true, notestdata)
@@ -164,7 +166,12 @@ function train_model(
 
         cb_stats(p, st)
 
-        savemodel(NN, p, st, metadata, deepcopy(STATS), cb_stats, dir, name, iopt)
+        if iopt == M
+            savemodel!(NN, p, st, metadata, STATS, cb_stats, dir, name, iopt)
+        else
+            savemodel!(NN, p, st, metadata, deepcopy(STATS), cb_stats, dir, name, iopt)
+        end
+
     end
 
     # TODO - output a train.log file with timings.
@@ -179,12 +186,12 @@ function train_model(
 end
 
 #===============================================================#
-function savemodel(
+function savemodel!( # modifies STATS
     NN::Lux.AbstractExplicitLayer,
     p::Union{NamedTuple, AbstractVector},
     st::NamedTuple,
     metadata,
-    STATS::NTuple{3, Vector},
+    STATS::NTuple{7, Vector},
     cb::Function,
     dir::String,
     name::String,
@@ -203,8 +210,8 @@ function savemodel(
     model = NN, p, st
 
     # training plot
-    plt = plot_training(STATS...)
-    png(plt, joinpath(dir, "plt_training_$(count)"))
+    plt = plot_training!(STATS...)
+    png(plt, joinpath(dir, "plt_training"))
     display(plt)
 
     # save model
@@ -363,7 +370,7 @@ function makecallback(
     _loader::Union{CuIterator, MLUtils.DataLoader},
     loader_::Union{CuIterator, MLUtils.DataLoader},
     lossfun;
-    STATS::Union{Nothing, NTuple{3, Any}} = nothing,
+    STATS::Union{Nothing, NTuple{7, Vector}} = nothing,
     stats::Bool = false,
     io::IO = stdout,
     cb_epoch = nothing, # (NN, p, st) -> nothing
@@ -382,6 +389,15 @@ function makecallback(
     end
 
     if !isnothing(STATS)
+
+        if lossfun === mse
+            STATS = (STATS[1:3]..., STATS[2:3]..., STATS[6], STATS[7])
+        end
+
+        if lossfun === mae
+            STATS = (STATS[1:5]...,  STATS[2:3]...)
+        end
+
         kwargs = (;kwargs..., STATS)
     end
 
@@ -411,7 +427,7 @@ function callback(p, st;
     #
     notestdata::Bool = false,
 )
-    EPOCH, _LOSS, LOSS_ = isnothing(STATS) ? ntuple(Returns(nothing), 3) : STATS
+    EPOCH, _LOSS, LOSS_, _MSE, MSE_, _MAE, MAE_ = isnothing(STATS) ? ntuple(Returns(nothing), 7) : STATS
 
     if !isnothing(epoch)
         cbstep = 1
@@ -429,8 +445,7 @@ function callback(p, st;
 
     # log training loss
     _l, _stats = if !isnothing(_loss)
-        _l, _stats = _loss(p, st)
-        _l, _stats
+        _loss(p, st)
     else
         nothing, nothing
     end
@@ -449,6 +464,22 @@ function callback(p, st;
 
     !isnothing(_LOSS) && !isnothing(_l) && push!(_LOSS, _l)
     !isnothing(LOSS_) && !isnothing(l_) && push!(LOSS_, l_)
+
+    if !isnothing(_MSE) & haskey(_stats, :mse)
+        push!(_MSE, _stats.mse)
+    end
+
+    if !isnothing(MSE_) & haskey(stats_, :mse)
+        push!(MSE_, stats_.mse)
+    end
+
+    if !isnothing(_MAE) & haskey(_stats, :mae)
+        push!(_MAE, _stats.mae)
+    end
+
+    if !isnothing(MAE_) & haskey(stats_, :mae)
+        push!(MAE_, stats_.mae)
+    end
 
     isnothing(io) && return
 
@@ -796,7 +827,7 @@ function update_minconfig(
 end
 
 #===============================================================#
-function plot_training(EPOCH, _LOSS, LOSS_)
+function plot_training!(EPOCH, _LOSS, LOSS_, _MSE, MSE_, _MAE, MAE_)
     z = findall(iszero, EPOCH)
 
     # fix EPOCH to account for multiple training loops
@@ -814,8 +845,19 @@ function plot_training(EPOCH, _LOSS, LOSS_)
         yticks = (@. 10.0^(-7:1)),
     )
 
-    plot!(plt, EPOCH, _LOSS, w = 2.0, c = :green, label = "Train Dataset") # (; ribbon = (lower, upper))
-    plot!(plt, EPOCH, LOSS_, w = 2.0, c = :red, label = "Test Dataset")
+    # (; ribbon = (lower, upper))
+    plot!(plt, EPOCH, _LOSS, w = 2.0, s = :solid, c = :red , label = "LOSS (Train)")
+    plot!(plt, EPOCH, LOSS_, w = 2.0, s = :solid, c = :blue, label = "LOSS (Test)")
+
+    if !isempty(_MSE)
+        plot!(plt, EPOCH, _MSE, w = 2.0, s = :dash, c = :magenta, label = "MSE (Train)")
+        plot!(plt, EPOCH, MSE_, w = 2.0, s = :dash, c = :cyan   , label = "MSE (Test)")
+    end
+
+    if !isempty(_MAE)
+        plot!(plt, EPOCH, _MAE, w = 2.0, s = :dot, c = :magenta, label = "MAE (Train)")
+        plot!(plt, EPOCH, MAE_, w = 2.0, s = :dot, c = :cyan   , label = "MAE (Test)")
+    end
 
     vline!(plt, EPOCH[z[2:end]], c = :black, w = 2.0, label = nothing)
 

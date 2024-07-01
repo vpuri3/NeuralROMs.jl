@@ -1,29 +1,21 @@
 #
 using LinearAlgebra, LaTeXStrings, JLD2
 using CairoMakie
-
-let
-    pkgpath = dirname(dirname(pathof(NeuralROMs)))
-    figpath = joinpath(pkgpath, "figs")
-    !(figpath in LOAD_PATH) && push!(LOAD_PATH, figpath)
-end
-
-using CairoMakie
->>>>>>> 9854823 (updated regularization)
+using NeuralROMs
 
 function f(x; σ = 1.0f0)
     pi32 = Float32(pi)
 
-    # @. (x - pi32/2f0) * sin(x) * exp(-(x/σ)^2)
-    @. sin(abs(x/2))
+    @. (x - pi32/2f0) * sin(x) * exp(-(x/σ)^2)
 end
 
 function makemodel(modelfile::String)
     model = jldopen(modelfile)
     NN, p, st = model["model"]
     md = model["metadata"]
+    ST = model["STATS"]
     close(model)
-    NeuralModel(NN, st, md), p
+    NeuralModel(NN, st, md), p, ST
 end
 
 datafile = joinpath(@__DIR__, "data_reg.jld2")
@@ -36,12 +28,13 @@ data = jldopen(datafile)
 x, _ = data["data_"]
 close(data)
 
-x = x[1:128:end]
+# x = x[1:16:end]
+x = x[1:1:end]
 
-model1, p1 = makemodel(modelfile1)
-model2, p2 = makemodel(modelfile2)
-model3, p3 = makemodel(modelfile3)
-model4, p4 = makemodel(modelfile4)
+model1, p1, ST1 = makemodel(modelfile1)
+model2, p2, ST2 = makemodel(modelfile2)
+model3, p3, ST3 = makemodel(modelfile3)
+model4, p4, ST4 = makemodel(modelfile4)
 
 xbatch = reshape(x, 1, :)
 autodiff = AutoForwardDiff()
@@ -73,20 +66,23 @@ e2d2 = abs.(u2d2 - ud2) ./ n .+ 1f-12
 e3d2 = abs.(u3d2 - ud2) ./ n .+ 1f-12
 e4d2 = abs.(u4d2 - ud2) ./ n .+ 1f-12
 
-e1_s = e1' * e1 / N |> sqrt
-e2_s = e2' * e2 / N |> sqrt
-e3_s = e3' * e3 / N |> sqrt
-e4_s = e4' * e4 / N |> sqrt
+e1_s = e1' * e1 / N # |> sqrt
+e2_s = e2' * e2 / N # |> sqrt
+e3_s = e3' * e3 / N # |> sqrt
+e4_s = e4' * e4 / N # |> sqrt
 
-e1d1_s = e1d1' * e1d1 / N |> sqrt
-e2d1_s = e2d1' * e2d1 / N |> sqrt
-e3d1_s = e3d1' * e3d1 / N |> sqrt
-e4d1_s = e4d1' * e4d1 / N |> sqrt
+e1d1_s = e1d1' * e1d1 / N # |> sqrt
+e2d1_s = e2d1' * e2d1 / N # |> sqrt
+e3d1_s = e3d1' * e3d1 / N # |> sqrt
+e4d1_s = e4d1' * e4d1 / N # |> sqrt
 
-e1d2_s = e1d2' * e1d2 / N |> sqrt
-e2d2_s = e2d2' * e2d2 / N |> sqrt
-e3d2_s = e3d2' * e3d2 / N |> sqrt
-e4d2_s = e4d2' * e4d2 / N |> sqrt
+e1d2_s = e1d2' * e1d2 / N # |> sqrt
+e2d2_s = e2d2' * e2d2 / N # |> sqrt
+e3d2_s = e3d2' * e3d2 / N # |> sqrt
+e4d2_s = e4d2' * e4d2 / N # |> sqrt
+
+println()
+println("0th derivative")
 
 println("Zero: $e1_s")
 println("L2  : $e2_s")
@@ -95,44 +91,97 @@ println("SNFW: $e4_s")
 
 println()
 println("1st derivative")
-println()
 
 println("Zero: $e1d1_s")
 println("L2  : $e2d1_s")
 println("SNFL: $e3d1_s")
 println("SNFW: $e4d1_s")
 
+println()
+println("2nd derivative")
+
+println("Zero: $e1d2_s")
+println("L2  : $e2d2_s")
+println("SNFL: $e3d2_s")
+println("SNFW: $e4d2_s")
+
 #==============================================================#
 
-fig = Figure(; size = (900, 400), backgroundcolor = :white, grid = :off)
+xlabel = L"x"
+xlabelsize = ylabelsize = 16
 
-ax1 = Makie.Axis(fig[1,1]; xlabel = L"x", ylabel = L"u(x)" , xlabelsize = 16, ylabelsize = 16)
-ax2 = Makie.Axis(fig[1,2]; xlabel = L"x", ylabel = L"u'(x)", xlabelsize = 16, ylabelsize = 16)
-ax3 = Makie.Axis(fig[1,3]; xlabel = L"x", ylabel = L"e'(x)", xlabelsize = 16, ylabelsize = 16, yscale = log10)
+# fig = Figure(; size = (600, 400), backgroundcolor = :white, grid = :off)
+fig = Figure(; size = (800, 400), backgroundcolor = :white, grid = :off)
 
-colors = (:orange, :green, :blue, :red,)
-styles = (:solid, :dot, :dashdot, :dashdotdot,)
-labels = (L"No regularization$$", L"$L_2$ reg.", L"Lipschitz reg.$$", L"Weight reg.$$",)
+ax1 = Makie.Axis(fig[1,1]; xlabel, ylabel = L"u(x)"  , xlabelsize, ylabelsize)
+ax2 = Makie.Axis(fig[2,1]; xlabel, ylabel = L"u'(x)" , xlabelsize, ylabelsize)
+ax3 = Makie.Axis(fig[3,1]; xlabel, ylabel = L"u''(x)", xlabelsize, ylabelsize)
 
-lines!(ax1, x,  u, color = :black, linestyle = :solid, label = L"Data$$", linewidth = 2)
-lines!(ax1, x, u1, color = colors[1], linestyle = styles[1], label = labels[1], linewidth = 2)
-lines!(ax1, x, u2, color = colors[2], linestyle = styles[2], label = labels[2], linewidth = 2)
-lines!(ax1, x, u3, color = colors[3], linestyle = styles[3], label = labels[3], linewidth = 2)
-lines!(ax1, x, u4, color = colors[4], linestyle = styles[4], label = labels[4], linewidth = 2)
+colors = [:black, :orange, :green, :blue, :red,]
+styles = [:solid, :solid, :dash, :dashdot, :dashdotdot,]
+# labels = [L"Ground truth$$", L"No regularization$$", L"$L_2$ regularization", L"Lipschitz regularization$$", L"Weight regularization$$",]
+labels = [L"Ground truth$$", L"No regularization$$", L"$L_2$ regularization $(γ=10^{-1})$", L"Lipschitz regularization $(α=5⋅10^{-5})$", L"Weight regularization $(γ=5⋅10^{-2})$",]
 
-lines!(ax2, x,  ud1, color = :black, linestyle = :solid, label = labels[1], linewidth = 2)
-lines!(ax2, x, u1d1, color = colors[1], linestyle = styles[1], label = labels[1], linewidth = 2)
-lines!(ax2, x, u2d1, color = colors[2], linestyle = styles[2], label = labels[2], linewidth = 2)
-lines!(ax2, x, u3d1, color = colors[3], linestyle = styles[3], label = labels[3], linewidth = 2)
-lines!(ax2, x, u4d1, color = colors[4], linestyle = styles[4], label = labels[4], linewidth = 2)
+kws = Tuple(
+    (; color = colors[i], linestyle = styles[i], label = labels[i], linewidth = 2)
+    for i in 1:5
+)
 
-lines!(ax3, x, e1d1, color = colors[1], linestyle = styles[1], label = labels[1], linewidth = 2)
-lines!(ax3, x, e2d1, color = colors[2], linestyle = styles[2], label = labels[2], linewidth = 2)
-lines!(ax3, x, e3d1, color = colors[3], linestyle = styles[3], label = labels[3], linewidth = 2)
-lines!(ax3, x, e4d1, color = colors[4], linestyle = styles[4], label = labels[4], linewidth = 2)
+lines!(ax1, x,  u; kws[1]...)
+lines!(ax1, x, u1; kws[2]...)
+lines!(ax1, x, u2; kws[3]...)
+lines!(ax1, x, u3; kws[4]...)
+lines!(ax1, x, u4; kws[5]...)
 
-Legend(fig[0,:], ax1; orientation = :horizontal, framevisible = false)
+lines!(ax2, x,  ud1; kws[1]...)
+lines!(ax2, x, u1d1; kws[2]...)
+lines!(ax2, x, u2d1; kws[3]...)
+lines!(ax2, x, u3d1; kws[4]...)
+lines!(ax2, x, u4d1; kws[5]...)
+
+lines!(ax3, x,  ud2; kws[1]...)
+lines!(ax3, x, u1d2; kws[2]...)
+lines!(ax3, x, u2d2; kws[3]...)
+lines!(ax3, x, u3d2; kws[4]...)
+lines!(ax3, x, u4d2; kws[5]...)
+
+# Legend(fig[0,:], ax1; orientation = :vertical, framevisible = false, nbanks = 3, patchsize = (30, 25))
+
+Legend(fig[:,2], ax1; orientation = :vertical, framevisible = false, patchsize = (30,20))
+
+# y axes
+hideydecorations!(ax1; label = false, grid = false)
+hideydecorations!(ax2; label = false, grid = false)
+hideydecorations!(ax3; label = false, grid = false)
+
+Makie.ylims!(ax3, -5, 5)
+
+# x axes
+linkxaxes!(ax1, ax2, ax3)
+hidexdecorations!(ax1)
+hidexdecorations!(ax2)
 
 display(fig)
+regpath = joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_reg.pdf")
+save(regpath, fig)
+
+#==============================================================#
+
+# fig = Figure(; size = (600, 400), backgroundcolor = :white, grid = :off)
+# ax1 = Makie.Axis(fig[1,1]; xlabel = L"Epochs$$", ylabel = L"Relative MSE$$", xlabelsize, ylabelsize, yscale = log10)
+#
+# lines!(ax1, ST1[1], ST1[4]; color = colors[2], label = labels[2], linestyle = :solid, linewidth = 2)
+# lines!(ax1, ST2[1], ST2[4]; color = colors[3], label = labels[3], linestyle = :solid, linewidth = 2)
+# lines!(ax1, ST3[1], ST3[4]; color = colors[4], label = labels[4], linestyle = :solid, linewidth = 2)
+# lines!(ax1, ST4[1], ST4[4]; color = colors[5], label = labels[5], linestyle = :solid, linewidth = 2)
+#
+# lines!(ax1, ST2[1], ST2[5]; color = colors[3], label = labels[3], linestyle = :dash, linewidth = 2)
+# lines!(ax1, ST1[1], ST1[5]; color = colors[2], label = labels[2], linestyle = :dash, linewidth = 2)
+# lines!(ax1, ST3[1], ST3[5]; color = colors[4], label = labels[4], linestyle = :dash, linewidth = 2)
+# lines!(ax1, ST4[1], ST4[5]; color = colors[5], label = labels[5], linestyle = :dash, linewidth = 2)
+#
+# Legend(fig[0,:], ax1; orientation = :vertical, framevisible = false, nbanks = 3, patchsize = (30, 25), unique = true)
+# display(fig)
+
 #==============================================================#
 nothing
