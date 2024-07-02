@@ -217,7 +217,7 @@ function train_SNF(
 
     displaymetadata(metadata)
 
-    plot_training(ST...) |> display
+    plot_training!(ST...) |> display
 
     model, ST, metadata
 end
@@ -469,11 +469,13 @@ function evolve_SNF(
         _ps[:, case]
     end
 
-    plrnd = begin
-        # FIX: want [N_ROM, NT]
+    #==============#
+    # get pl
+    #==============#
+    pl = begin
         _data, _, _ = makedata_SNF(datafile; Ix = [1,], _Ib = [case], verbose)
         _prm = _data[1][2]
-        hyper[1](_prm, hyper[2], hyper[3])[1] # [N_ROM, N_CASES]
+        hyper[1](_prm, hyper[2], hyper[3])[1] # [N_ROM, NT]
     end
 
     #==============#
@@ -563,6 +565,7 @@ function evolve_SNF(
 
     # query decoder to get output field
     Up = eval_model(model, Xdata, ps, getaxes(p0); device)
+    Ul = eval_model(model, Xdata, pl, getaxes(p0); device)
 
     # print error metrics
     if verbose
@@ -585,14 +588,14 @@ function evolve_SNF(
     plt = plot(; title = L"$\tilde{u}$ distribution, case " * "$(case)")
     plt = make_param_scatterplot(ps, Tdata; plt, label = "Dynamics solve", color = :blues, cbar = false)
     png(plt, joinpath(outdir, "evolve_p_scatter_case$(case)"))
-    
+
     plt = plot(; title = L"$\tilde{u}$ evolution, case " * "$(case)")
     plot!(plt, Tdata, ps', w = 3.0, label = "Dynamics solve")
     png(plt, joinpath(outdir, "evolve_p_case$(case)"))
-    
+
     # save files
     filename = joinpath(outdir, "evolve$(case).jld2")
-    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps, Plrnd = plrnd)
+    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps, Plrnd = pl, Ulrnd = Ul)
 
     (Xdata, Tdata, Ud, Up, ps), statsROM
 end

@@ -154,7 +154,7 @@ function makeplots(
     figp = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
     figq = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
 
-    ylabel_t, ylabel_e = if occursin("exp3", casename)
+    ylabel_t, ylabel_e = if occursin("exp3", casename) | occursin("exp4", casename)
         L"u(x, t; \mathbf{μ})", L"ε(t; \mathbf{μ})"
     else
         L"u(x, t)", L"ε(t)"
@@ -193,9 +193,9 @@ function makeplots(
         sq, lq, lp, lt = pplot!(axp2, tFOM, pSNL, qSNL, pdtSNL; kwSNF...)
         sq, lq, lp, lt = pplot!(axp3, tFOM, pSNW, qSNW, pdtSNW; kwSNF...)
 
-        Label(figp[2,1], L"(a) CAE-ROM$$", fontsize = 16)
-        Label(figp[2,2], L"(b) SNFL-ROM$$", fontsize = 16)
-        Label(figp[2,3], L"(c) SNFW-ROM$$", fontsize = 16)
+        Label(figp[2,1], L"(a) CAE‐ROM$$", fontsize = 16)
+        Label(figp[2,2], L"(b) SNFL‐ROM$$", fontsize = 16)
+        Label(figp[2,3], L"(c) SNFW‐ROM$$", fontsize = 16)
 
         colsize!(figp.layout, 1, Relative(0.33))
         colsize!(figp.layout, 2, Relative(0.33))
@@ -238,9 +238,9 @@ function makeplots(
     lq, lp, lt = ptplot!(axp2, tFOM, pSNL, qSNL, pdtSNL; kwSNF...)
     lq, lp, lt = ptplot!(axp3, tFOM, pSNW, qSNW, pdtSNW; kwSNF...)
 
-    Label(figq[2,1], L"(a) CAE-ROM$$", fontsize = 16)
-    Label(figq[2,2], L"(b) SNFL-ROM$$", fontsize = 16)
-    Label(figq[2,3], L"(c) SNFW-ROM$$", fontsize = 16)
+    Label(figq[2,1], L"(a) CAE‐ROM$$", fontsize = 16)
+    Label(figq[2,2], L"(b) SNFL‐ROM$$", fontsize = 16)
+    Label(figq[2,3], L"(c) SNFW‐ROM$$", fontsize = 16)
 
     colsize!(figq.layout, 1, Relative(0.33))
     colsize!(figq.layout, 2, Relative(0.33))
@@ -281,7 +281,7 @@ function makeplots(
 
     colors = (:orange, :green, :blue, :red, :brown,)
     styles = (:solid, :dash, :dashdot, :dashdotdot, :dot)
-    labels = (L"POD-ROM$$", L"CAE-ROM$$", L"SNFL-ROM$$", L"SNFW-ROM$$",)
+    labels = (L"POD‐ROM$$", L"CAE‐ROM$$", L"SNFL‐ROM$$", L"SNFW‐ROM$$",)
 
     levels = if occursin("exp2", casename)
         n = 11
@@ -301,9 +301,9 @@ function makeplots(
         l1, l2, l3
     end
 
-    l1 = (L"(a) FOM$$"    , L"(b) POD-ROM$$", L"(c) CAE-ROM$$" , L"(d) SNFW-ROM$$")
-    l2 = (L"(e) FOM$$"    , L"(f) POD-ROM$$", L"(g) CAE-ROM$$" , L"(h) SNFW-ROM$$")
-    l3 = (L"(i) POD-ROM$$", L"(j) CAE-ROM$$", L"(k) SNFL-ROM$$", L"(l) SNFW-ROM$$")
+    l1 = (L"(a) FOM$$"    , L"(b) POD‐ROM$$", L"(c) CAE‐ROM$$" , L"(d) SNFW‐ROM$$")
+    l2 = (L"(e) FOM$$"    , L"(f) POD‐ROM$$", L"(g) CAE‐ROM$$" , L"(h) SNFW‐ROM$$")
+    l3 = (L"(i) POD‐ROM$$", L"(j) CAE‐ROM$$", L"(k) SNFL‐ROM$$", L"(l) SNFW‐ROM$$")
 
     for (i, (up, ep, eit, e2t)) in enumerate(zip(upreds, epreds, eitpreds, e2tpreds))
 
@@ -524,9 +524,9 @@ function makeplots_parametric(
         qSNL = data["qSNL"] |> Array
         qSNW = data["qSNW"] |> Array
 
-        @show size(pCAE), size(qCAE)
-        @show size(pSNL), size(qSNL) # wrong size.
-        @show size(pSNW), size(qSNW) # wrong size.
+        # @show size(pCAE), size(qCAE)
+        # @show size(pSNL), size(qSNL)
+        # @show size(pSNW), size(qSNW)
 
         color = colors[i]
         label = labels[i]
@@ -539,9 +539,9 @@ function makeplots_parametric(
         pplot!(axp3, tFOM, pSNW, qSNW; sckwq, lnkwq, lnkwp)
     end
 
-    Label(figp[2,1], L"(a) CAE-ROM$$" , fontsize = 16)
-    Label(figp[2,2], L"(b) SNFL-ROM$$", fontsize = 16)
-    Label(figp[2,3], L"(c) SNFW-ROM$$", fontsize = 16)
+    Label(figp[2,1], L"(a) CAE‐ROM$$" , fontsize = 16)
+    Label(figp[2,2], L"(b) SNFL‐ROM$$", fontsize = 16)
+    Label(figp[2,3], L"(c) SNFW‐ROM$$", fontsize = 16)
 
     colsize!(figp.layout, 1, Relative(0.33))
     colsize!(figp.layout, 2, Relative(0.33))
@@ -574,7 +574,27 @@ function makeplots_parametric(
 
     colors = (:orange, :green, :blue, :red, :brown,)
     styles = (:solid, :dash, :dashdot, :dashdotdot, :dot)
-    labels = (L"POD-ROM$$", L"CAE-ROM$$", L"SNFL-ROM$$", L"SNFW-ROM$$",)
+    labels = (L"POD‐ROM$$", L"CAE‐ROM$$", L"SNFL‐ROM$$", L"SNFW‐ROM$$",)
+
+    captions = if occursin("exp3", casename)
+        (
+            L"(a) $μ=0.600$ (training)"     ,
+            L"(b) $μ=0.575$ (interpolation)",
+            L"(c) $μ=0.625$ (extrapolation)",
+        )
+    elseif occursin("exp4", casename)
+        (
+            L"(a) $μ=0.966$ (Training)"     ,
+            L"(b) $μ=1.000$ (Interpolation)",
+            L"(c) $μ=1.033$ (Training)"     ,
+        )
+    end
+
+    figpfiles = if occursin("exp3", casename)
+        datafiles[4:6]
+    elseif occursin("exp4", casename)
+        datafiles[3:5]
+    end
 
     in_dim, out_dim, grid = if occursin("exp3", casename)
         1, 1, (1024,)
@@ -585,7 +605,7 @@ function makeplots_parametric(
     Nxyz = prod(grid)
     Nfom = Nxyz * out_dim
 
-    for (j, datafile) in enumerate(datafiles[4:6])
+    for (j, datafile) in enumerate(figpfiles)
         data = h5open(datafile)
 
         tFOM = data["tFOM"] |> Array
@@ -640,9 +660,9 @@ function makeplots_parametric(
     linkaxes!(axe1, axe2, axe3)
     fige[0,:] = Legend(fige, axe1, patchsize = (30, 10), orientation = :horizontal, framevisible = false)
 
-    Label(fige[2,1], L"(a) $μ=0.600$ (training)"     , fontsize = 16)
-    Label(fige[2,2], L"(b) $μ=0.575$ (interpolation)", fontsize = 16)
-    Label(fige[2,3], L"(c) $μ=0.625$ (extrapolation)", fontsize = 16)
+    Label(fige[2,1], captions[1], fontsize = 16)
+    Label(fige[2,2], captions[2], fontsize = 16)
+    Label(fige[2,3], captions[3], fontsize = 16)
 
     colsize!(fige.layout, 1, Relative(0.33))
     colsize!(fige.layout, 2, Relative(0.33))
@@ -940,8 +960,8 @@ function makeplots_hyper(
     colsize!(figp.layout, 2, Relative(0.50))
 
     # FIGC
-    Label(figc[1:4, -1][1,1], L"Time-step size $(Δt)$"; rotation = pi/2, fontsize = 16)
-    Label(figc[-1, 1:4][1,1], L"Number of hyper-reduction points $(|X_\text{proj}|)$"; fontsize = 16)
+    Label(figc[1:4, -1][1,1], L"Time‐step size $(Δt)$"; rotation = pi/2, fontsize = 16)
+    Label(figc[-1, 1:4][1,1], L"Number of hyper‐reduction points $(|X_\text{proj}|)$"; fontsize = 16)
 
     Label(figc[0,1], L"$|X_\text{proj}| = 16384$", fontsize = 16)
     Label(figc[0,2], L"$|X_\text{proj}| = 4096$" , fontsize = 16)
@@ -1010,11 +1030,11 @@ e4files = (e4file1, e4file2, e4file3, e4file4, e4file5, e4file6, e4file7)
 # makeplots(e3file4, outdir, "exp3case4")
 # makeplots(e3file5, outdir, "exp3case5")
 # makeplots_parametric(e3files, outdir, "exp3")
-
+#
 # # EXP 4
 # makeplots(e4file4, outdir, "exp4case4")
-makeplots_parametric(e4files, outdir, "exp4")
-
+# # makeplots_parametric(e4files, outdir, "exp4")
+#
 # e2hyper = joinpath(@__DIR__, "..", "experiments_SNFROM", "advect_fourier2D", "dump", "hypercompiled.jld2")
 # e4hyper = joinpath(@__DIR__, "..", "experiments_SNFROM", "burgers_fourier2D", "dump", "hypercompiled.jld2")
 #

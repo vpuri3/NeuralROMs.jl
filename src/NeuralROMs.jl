@@ -138,7 +138,7 @@ export
     make_residual, residual_learn
 
 include("train.jl")
-export train_model, callback, optimize, plot_training
+export train_model, callback, optimize, plot_training!
 
 include("vis.jl")
 export

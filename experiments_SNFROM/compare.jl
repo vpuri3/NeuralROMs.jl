@@ -172,8 +172,10 @@ function compare_plots(
         Ud = ev["Udata"]
         Up = ev["Upred"]
         Pp = ev["Ppred"]
-        # Ue = ev["Ulrnd"]
+        Ue = ev["Ulrnd"]
         Pe = isone(i) ? Pp : ev["Plrnd"]
+
+        @show size(Pp), size(Pp)
 
         in_dim  = size(Xd, 1)
         out_dim = size(Ud, 1)
@@ -252,13 +254,15 @@ function compare_plots(
         xd = reshape(Xd, in_dim , grid...)
         ud = reshape(Ud, out_dim, grid..., Nt)
         up = reshape(Up, out_dim, grid..., Nt)
+        ue = reshape(Ue, out_dim, grid..., Nt)
         
         if i == 1
             h5dict = Dict(h5dict...,
                 "xFOM" => xd, "tFOM" => td, "uFOM" => ud,
             )
         end
-        h5dict = Dict(h5dict..., "u$(suffix[i])" => up)
+
+        h5dict = Dict(h5dict..., "u$(suffix[i])" => up, "v$(suffix[i])" => ue)
 
         # everything but PCA
 

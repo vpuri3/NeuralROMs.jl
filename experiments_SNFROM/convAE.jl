@@ -133,7 +133,7 @@ function train_CAE(
 
     displaymetadata(metadata)
 
-    plot_training(ST...) |> display
+    plot_training!(ST...) |> display
 
     model, ST, metadata
 end
@@ -405,6 +405,8 @@ function evolve_CAE(
     verbose::Bool = true,
     device = Lux.cpu_device(),
 )
+    mkpath(outdir)
+
     # load data
     Xdata, Tdata, mu, Udata, md_data = loaddata(datafile)
 
@@ -448,8 +450,8 @@ function evolve_CAE(
     Ud_perm = permutedims(Ud_norm, (2, 1, 3))
     Ud_resh = reshape(Ud_perm, grid..., out_dim, Nt) # [Nx, Ny, out_dim, Nt]
 
-    _ps = encoder[1](Ud_resh, encoder[2], encoder[3])[1]
-    p0 = _ps[:, 1]
+    pl = encoder[1](Ud_resh, encoder[2], encoder[3])[1]
+    p0 = pl[:, 1]
 
     #==============#
     # make model
@@ -478,10 +480,10 @@ function evolve_CAE(
     )
 
     #==============#
-    # visualization
+    # analysis
     #==============#
 
-    mkpath(outdir)
+    Ul = eval_model(model, Xdata, pl, getaxes(p0); device)
 
     # field visualizations
     grid = get_prob_grid(prob)
@@ -498,7 +500,7 @@ function evolve_CAE(
 
     # save files
     filename = joinpath(outdir, "evolve$case.jld2")
-    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps, Plrnd = _ps)
+    jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps, Plrnd = pl, Ulrnd = Ul)
 
     Xdata, Tdata, Ud, Up, ps
 end

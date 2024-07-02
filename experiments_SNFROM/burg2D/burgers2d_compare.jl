@@ -66,7 +66,7 @@ modelfile_SNW = joinpath(modeldir_SNW, "model_07.jld2")
 
 # evolve_SNF(prob, datafile, modelfile_SNL, 1; rng, device)
 # evolve_SNF(prob, datafile, modelfile_SNL, 2; rng, device)
-# evolve_SNF(prob, datafile, modelfile_SNL, 3; rng, device)
+evolve_SNF(prob, datafile, modelfile_SNL, 3; rng, device)
 # evolve_SNF(prob, datafile, modelfile_SNL, 4; rng, device)
 # evolve_SNF(prob, datafile, modelfile_SNL, 5; rng, device)
 # evolve_SNF(prob, datafile, modelfile_SNL, 6; rng, device)
