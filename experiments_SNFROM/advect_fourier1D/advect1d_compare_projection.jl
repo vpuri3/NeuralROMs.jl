@@ -123,7 +123,7 @@ function plot_compare_advect1d_l()
 
     colors = (:orange, :green, :blue, :red, :brown,)
     styles = (:solid, :dash, :dashdot, :dashdotdot, :dot)
-    labels = (L"POD‐ROM$$", L"CAE‐ROM$$", L"SNFL-ROM$$", L"SNFW-ROM$$",)
+    labels = (L"POD‐ROM$$", L"CAE‐ROM$$", L"SNFL‐ROM$$", L"SNFW‐ROM$$",)
 
     kwl = Tuple(
         (; color = colors[i], linestyle = styles[i], label = labels[i], linewidth = 2)
@@ -136,7 +136,10 @@ function plot_compare_advect1d_l()
     )
 
     fig = Makie.Figure(; size = (600, 400), backgroundcolor = :white, grid = :off)
-    ax  = Makie.Axis(fig[1,1]; xlabel, ylabel, xlabelsize, ylabelsize, yscale = log10)
+    ax  = Makie.Axis( fig[1,1]; xlabel, ylabel, xlabelsize, ylabelsize,
+        # xscale = log2,
+        yscale = log10,
+    )
 
     Makie.lines!(ax, latents, e_PCA; kwl[1]...)
     Makie.lines!(ax, latents, e_CAE; kwl[2]...)
