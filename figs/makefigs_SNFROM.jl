@@ -149,7 +149,7 @@ function makeplots(
     #======================================================#
 
     figt = Figure(; size = ( 900, 400), backgroundcolor = :white, grid = :off)
-    figc = Figure(; size = (1000, 800), backgroundcolor = :white, grid = :off)
+    figc = Figure(; size = (1000, 850), backgroundcolor = :white, grid = :off)
     fige = Figure(; size = ( 600, 400), backgroundcolor = :white, grid = :off)
     figp = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
     figq = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
@@ -1021,20 +1021,20 @@ e4file6 = joinpath(datadir, "burgers2dcase6.h5")
 e4file7 = joinpath(datadir, "burgers2dcase7.h5")
 e4files = (e4file1, e4file2, e4file3, e4file4, e4file5, e4file6, e4file7)
 
-# # EXP 1, 2, 5
-# makeplots(e1file, outdir, "exp1"; ifdt = true)
-# makeplots(e2file, outdir, "exp2"; ifdt = false)
-# makeplots(e5file, outdir, "exp5"; ifdt = false)
-#
-# # EXP 3
-# makeplots(e3file4, outdir, "exp3case4")
-# makeplots(e3file5, outdir, "exp3case5")
-# makeplots_parametric(e3files, outdir, "exp3")
-#
-# # EXP 4
-# makeplots(e4file4, outdir, "exp4case4")
-# # makeplots_parametric(e4files, outdir, "exp4")
-#
+# EXP 1, 2, 5
+makeplots(e1file, outdir, "exp1"; ifdt = true)
+makeplots(e2file, outdir, "exp2"; ifdt = false)
+makeplots(e5file, outdir, "exp5"; ifdt = false)
+
+# EXP 3
+makeplots(e3file4, outdir, "exp3case4")
+makeplots(e3file5, outdir, "exp3case5")
+makeplots_parametric(e3files, outdir, "exp3")
+
+# EXP 4
+makeplots(e4file4, outdir, "exp4case4")
+# makeplots_parametric(e4files, outdir, "exp4")
+
 # e2hyper = joinpath(@__DIR__, "..", "experiments_SNFROM", "advect_fourier2D", "dump", "hypercompiled.jld2")
 # e4hyper = joinpath(@__DIR__, "..", "experiments_SNFROM", "burgers_fourier2D", "dump", "hypercompiled.jld2")
 #
