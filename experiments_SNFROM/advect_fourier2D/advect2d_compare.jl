@@ -14,7 +14,7 @@ device = Lux.gpu_device()
 
 _Ib, Ib_ = [1,], [1,]
 Ix  = Colon()
-_It = Colon() # LinRange(1, 1000, 100) .|> Base.Fix1(round, Int32)
+_It = Colon()
 makedata_kws = (; Ix, _Ib, Ib_, _It, It_ = :)
 case = Ib_[1]
 
@@ -71,9 +71,11 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 # small DT
 #==================#
 
+evolve_kw = (;)
+
 T  = 4.0f0
 Nt = 500
-It = LinRange(1, Nt, 50) .|> Base.Fix1(round, Int)
+It = LinRange(1, Nt, 100) .|> Base.Fix1(round, Int)
 data_kws = (; Ix = :, It)
 evolve_kw = (; Δt = T, data_kws, adaptive = false)
 
@@ -81,9 +83,9 @@ outdir_CAE = joinpath(modeldir_CAE, "dt")
 outdir_SNL = joinpath(modeldir_SNL, "dt")
 outdir_SNW = joinpath(modeldir_SNW, "dt")
 
-# evolve_CAE(prob, datafile, modelfile_CAE, 1; rng, outdir = outdir_CAE, evolve_kw...,)
-# evolve_SNF(prob, datafile, modelfile_SNL, 1; rng, outdir = outdir_SNL, evolve_kw..., device)
-# evolve_SNF(prob, datafile, modelfile_SNW, 1; rng, outdir = outdir_SNW, evolve_kw..., device)
+evolve_CAE(prob, datafile, modelfile_CAE, 1; rng, outdir = outdir_CAE, evolve_kw...,)
+evolve_SNF(prob, datafile, modelfile_SNL, 1; rng, outdir = outdir_SNL, evolve_kw..., device)
+evolve_SNF(prob, datafile, modelfile_SNW, 1; rng, outdir = outdir_SNW, evolve_kw..., device)
 
 #==================#
 # make figures
@@ -94,6 +96,4 @@ modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
 labels = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
 
 p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid; ifdt = true)
-
 #======================================================#
-nothing

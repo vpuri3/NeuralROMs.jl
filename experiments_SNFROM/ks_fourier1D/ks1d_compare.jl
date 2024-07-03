@@ -65,9 +65,15 @@ modelfile_INR = joinpath(modeldir_INR, "model_07.jld2")
 # postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
 # postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 
+#==================#
+# small DT
+#==================#
+
+evolve_kw = (;)
+
 # T  = 0.1f0
 # Nt = 1000
-# It = LinRange(1, Nt, 5) .|> Base.Fix1(round, Int)
+# It = LinRange(1, Nt, 100) .|> Base.Fix1(round, Int)
 # data_kws = (; Ix = :, It)
 # evolve_kw = (; Δt = T, data_kws, adaptive = false)
 #
@@ -82,11 +88,10 @@ modelfile_INR = joinpath(modeldir_INR, "model_07.jld2")
 #==================#
 # make figures
 #==================#
-grid = (256,)
-casename = "ks1d"
-modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
-labels = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)",)
-
-p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid; ifdt = true)
+# grid = (256,)
+# casename = "ks1d"
+# modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
+# labels = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)",)
+#
+# p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid; ifdt = true)
 #======================================================#
-nothing

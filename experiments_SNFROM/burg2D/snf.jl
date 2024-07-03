@@ -22,12 +22,12 @@ grid = (512, 512,)
 # _Ib, Ib_ = [1, 2, 3, 5, 6, 7], [4,]
 # makedata_kws = (; Ix = :, _Ib, Ib_, _It = :, It_ = :)
 # train_params = (; E = 210, wd = 128, γ = 1f-2, makedata_kws, _batchsize, batchsize_)
-# train_SNF_compare(latent, datafile, modeldir_SNW, train_params; rng, device)
+# train_SNF_compare(latent, datafile, modeldir, train_params; rng, device)
 
 # # modeldir/results
 # postprocess_SNF(prob, datafile, modelfile; rng, device)
 
-function timings(casenum::Integer = 1)
+function timings_burg2D(casenum::Integer = 1)
     statsROM = (;)
 
     for dt_mult in reverse([1, 2, 5, 10]) # time-step
@@ -66,6 +66,8 @@ function timings(casenum::Integer = 1)
     statsROM, statsROM
 end
 
-sROM, sFOM = timings(4)
+sROM, sFOM = timings_burg2D(4)
+# e2hyper = joinpath(modeldir, "hypercompiled.jld2")
+# df_exp2 = makeplots_hyper(e2hyper, outdir, "exp2")
 #======================================================#
 nothing
