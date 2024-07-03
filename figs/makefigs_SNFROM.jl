@@ -402,6 +402,7 @@ function makeplots(
         lines!(axe2, tdtFOM, e2tdtSNW; linewidth = 3, label = labels[4], color = colors[4], linestyle = styles[4])
 
         linkaxes!(axe1, axe2)
+        hideydecorations!(axe2; grid = false)
 
         Label(fige[2,1], L"(a) Dynamics evaluation $(Δt = Δt_0)$", fontsize = 16)
         Label(fige[2,2], L"(b) Dynamics evaluation $(Δt = 10Δt_0)$", fontsize = 16)
