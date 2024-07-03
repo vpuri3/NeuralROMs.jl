@@ -609,7 +609,7 @@ function makeplots_parametric(
     axislegend(axp3, elems, lSNF; position = :lb, patchsize = (40, 10))
 
     xlims!(axp1, -8, -1)
-    ylims!(axp1, -8, 10)
+    ylims!(axp1, -8, 13)
 
     save(joinpath(outdir, "$(casename)p.pdf"), figp)
 
@@ -748,19 +748,29 @@ function makeplots_parametric(
         end # ifdt
     end
 
-    linkaxes!(axe1, axe2, axe3)
-    fige[0,:] = Legend(fige, axe1; patchsize = (50, 10), orientation = :horizontal, framevisible = false, labelsize = fontsize)
+    if ifdt
+        linkaxes!(axe1, axe2, axe3, axe4, axe5, axe6)
 
-    Label(fige[2,1], captions[1]; fontsize)
-    Label(fige[2,2], captions[2]; fontsize)
-    Label(fige[2,3], captions[3]; fontsize)
+        hideydecorations!(axe2; grid = false)
+        hideydecorations!(axe3; grid = false)
 
-    colsize!(fige.layout, 1, Relative(0.33))
-    colsize!(fige.layout, 2, Relative(0.33))
-    colsize!(fige.layout, 3, Relative(0.33))
+        hideydecorations!(axe5; grid = false)
+        hideydecorations!(axe6; grid = false)
+    else
+        linkaxes!(axe1, axe2, axe3)
+        fige[0,:] = Legend(fige, axe1; patchsize = (50, 10), orientation = :horizontal, framevisible = false, labelsize = fontsize)
 
-    hideydecorations!(axe2; grid = false)
-    hideydecorations!(axe3; grid = false)
+        Label(fige[2,1], captions[1]; fontsize)
+        Label(fige[2,2], captions[2]; fontsize)
+        Label(fige[2,3], captions[3]; fontsize)
+
+        colsize!(fige.layout, 1, Relative(0.33))
+        colsize!(fige.layout, 2, Relative(0.33))
+        colsize!(fige.layout, 3, Relative(0.33))
+
+        hideydecorations!(axe2; grid = false)
+        hideydecorations!(axe3; grid = false)
+    end
 
     save(joinpath(outdir, "$(casename)e.pdf"), fige)
 
@@ -837,16 +847,16 @@ e4files = (e4file1, e4file2, e4file3, e4file4, e4file5, e4file6, e4file7)
 
 #======================================================#
 
-# EXP 1, 2, 5
-makeplots(e1file, outdir, "exp1"; ifdt = true)
-makeplots(e2file, outdir, "exp2"; ifdt = false)
-makeplots(e5file, outdir, "exp5"; ifdt = true)
-
-# EXP 3
-makeplots(e3file4, outdir, "exp3case4")
-makeplots_parametric(e3files, outdir, "exp3"; ifdt = false)
-
-# EXP 4
-makeplots(e4file4, outdir, "exp4case4")
+# # EXP 1, 2, 5
+# makeplots(e1file, outdir, "exp1"; ifdt = true)
+# makeplots(e2file, outdir, "exp2"; ifdt = false)
+# makeplots(e5file, outdir, "exp5"; ifdt = true)
+#
+# # EXP 3
+# makeplots(e3file4, outdir, "exp3case4")
+# makeplots_parametric(e3files, outdir, "exp3"; ifdt = false)
+#
+# # EXP 4
+# makeplots(e4file4, outdir, "exp4case4")
 
 #======================================================#

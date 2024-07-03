@@ -68,9 +68,9 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 # small DT
 #==================#
 
-# T  = 4.0f0
+# T  = 0.5f0
 # Nt = 500
-# It = LinRange(1, Nt, 50) .|> Base.Fix1(round, Int)
+# It = LinRange(1, Nt, 100) .|> Base.Fix1(round, Int)
 # data_kws = (; Ix = :, It)
 # evolve_kw = (; Δt = T, data_kws, adaptive = false)
 #
