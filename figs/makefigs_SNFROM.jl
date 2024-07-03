@@ -85,7 +85,7 @@ function makeplots(
     i1, i2 = Itplt[2], Itplt[5]
 
     ## normalize
-    nr = sum(abs2, uFOM; dims = 1:in_dim+1) ./ Nfom .|> sqrt
+    nr = sum(abs2, uFOM; dims = 2:in_dim+1) ./ Nxyz .|> sqrt
 
     ePCA = (uFOM - uPCA) ./ nr
     eCAE = (uFOM - uCAE) ./ nr
@@ -456,15 +456,20 @@ end
 function makeplots_parametric(
     datafiles::NTuple{N, String},
     outdir::String,
-    casename::String,
+    casename::String;
+    ifdt::Bool = false,
 ) where{N}
 
     mkpath(outdir)
 
-    figp = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
-    fige = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
+    figp = Figure(; size = (1200, 450), backgroundcolor = :white, grid = :off)
+    fige = if ifdt
+        Figure(; size = (1200, 900), backgroundcolor = :white, grid = :off)
+    else
+        Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
+    end
 
-    fontsize = 16
+    fontsize = 20
 
     axkwp = (;
         xlabel = L"\tilde{u}_1(t; \mathbf{μ})",
@@ -488,6 +493,12 @@ function makeplots_parametric(
     axe1 = Axis(fige[1,1]; axkwe...)
     axe2 = Axis(fige[1,2]; axkwe...)
     axe3 = Axis(fige[1,3]; axkwe...)
+
+    if ifdt
+        axe4 = Axis(fige[2,1]; axkwe...)
+        axe5 = Axis(fige[2,2]; axkwe...)
+        axe6 = Axis(fige[2,3]; axkwe...)
+    end
 
     #===============================#
     # FIGP
@@ -518,6 +529,7 @@ function makeplots_parametric(
 
     for (i, datafile) in enumerate(datafiles)
         data = h5open(datafile)
+
         tFOM = data["tFOM"] |> Array # [Nt]
         #
         pCAE = data["pCAE"] |> Array
@@ -528,19 +540,31 @@ function makeplots_parametric(
         qSNL = data["qSNL"] |> Array
         qSNW = data["qSNW"] |> Array
 
-        # @show size(pCAE), size(qCAE)
-        # @show size(pSNL), size(qSNL)
-        # @show size(pSNW), size(qSNW)
+        # DT
+        pdtCAE, pdtSNL, pdtSNW = if ifdt
+            pdtCAE = data["pdtCAE"] |> Array
+            pdtSNL = data["pdtSNL"] |> Array
+            pdtSNW = data["pdtSNW"] |> Array
+
+            pdtCAE, pdtSNL, pdtSNW
+        else
+            nothing, nothing, nothing
+        end
+
+        close(data)
 
         color = colors[i]
         label = labels[i]
         sckwq = (; color, markersize = 15, marker = :star5,)
         lnkwq = (; color, label, linewidth = 2.5, linestyle = :solid,)
         lnkwp = (; color, linewidth = 4, linestyle = :dot,)
+        lnkwt = (; color, linewidth = 4, linestyle = :dash,)
 
-        pplot!(axp1, tFOM, pCAE, qCAE; sckwq, lnkwq, lnkwp)
-        pplot!(axp2, tFOM, pSNL, qSNL; sckwq, lnkwq, lnkwp)
-        pplot!(axp3, tFOM, pSNW, qSNW; sckwq, lnkwq, lnkwp)
+        kw = (; ifdt, sckwq, lnkwq, lnkwp, lnkwt)
+
+        pplot!(axp1, tFOM, pCAE, qCAE, pdtCAE; kw...)
+        pplot!(axp2, tFOM, pSNL, qSNL, pdtSNL; kw...)
+        pplot!(axp3, tFOM, pSNW, qSNW, pdtSNW; kw...)
     end
 
     Label(figp[2,1], L"(a) CAE‐ROM$$" ; fontsize)
@@ -551,24 +575,41 @@ function makeplots_parametric(
     colsize!(figp.layout, 2, Relative(0.33))
     colsize!(figp.layout, 3, Relative(0.33))
 
-    figp[0,:] = Legend(figp, axp1; orientation = :horizontal, framevisible = false, fontsize)
+    nbanks = if occursin("exp3", casename)
+        2
+    elseif occursin("exp4", casename)
+        4
+    end
 
-    elems = [
-        [
-            LineElement(; linestyle = :solid, color = :black, linewidth = 3),
-            MarkerElement(; marker = :star5, color = :black, markersize = 15, points = Point2f[(0.05,0.5)])
-        ],
-        LineElement(; linestyle = :dot, color = :black, linewidth = 6),
+    figp[0,:] = Legend(figp, axp1; orientation = :horizontal, framevisible = false, labelsize = fontsize, nbanks)
+
+    eq = [
+        LineElement(; linestyle = :solid, color = :black, linewidth = 3),
+        MarkerElement(; marker = :star5, color = :black, markersize = 15, points = Point2f[(0.05,0.5)])
     ]
 
-    l1 = [L"Learned prediction $e_{θ_e}(ū(t; \mathbf{\mu}))$"  , L"\text{Dynamics evaluation}"]
-    l2 = [L"Learned prediction $\Xi_\varrho(t, \mathbf{\mu})$" , L"\text{Dynamics evaluation}"]
+    lp = LineElement(; linestyle = :dot , color = :black, linewidth = 4)
+    lt = LineElement(; linestyle = :dash, color = :black, linewidth = 4)
 
-    axislegend(axp1, elems, l1; position = :lt, patchsize = (40, 10))
-    axislegend(axp2, elems, l2; position = :lt, patchsize = (40, 10))
-    axislegend(axp3, elems, l2; position = :lt, patchsize = (40, 10))
+    elems = ifdt ? [eq, lp, lt] : [eq, lp]
+    lCAE  = if ifdt
+        [L"Learned prediction $e_{θ_e}(ū(t; \mathbf{\mu}))$", L"Dynamics evaluation $(Δt = Δt_0)$", L"Dynamics evaluation $(Δt = 10Δt_0)$"]
+    else
+        [L"Learned prediction $e_{θ_e}(ū(t; \mathbf{\mu}))$", L"Dynamics evaluation$$"]
+    end
 
-    ylims!(axp1, -8, 20)
+    lSNF = if ifdt
+        [L"Learned prediction $\Xi_\varrho(t, \mathbf{\mu})$", L"Dynamics evaluation $(Δt=Δt_0)$", L"Dynamics evaluation $(Δt=10Δt_0)$"]
+    else
+        [L"Learned prediction $\Xi_\varrho(t, \mathbf{\mu})$", L"Dynamics evaluation$$"]
+    end
+
+    axislegend(axp1, elems, lCAE; position = :lt, patchsize = (40, 10))
+    axislegend(axp2, elems, lSNF; position = :rb, patchsize = (40, 10))
+    axislegend(axp3, elems, lSNF; position = :lb, patchsize = (40, 10))
+
+    xlims!(axp1, -8, -1)
+    ylims!(axp1, -8, 10)
 
     save(joinpath(outdir, "$(casename)p.pdf"), figp)
 
@@ -595,9 +636,9 @@ function makeplots_parametric(
     end
 
     figpfiles = if occursin("exp3", casename)
-        datafiles[4:6]
+        datafiles[[5,4,6]] # training, interpolation, extrapolation
     elseif occursin("exp4", casename)
-        datafiles[3:5]
+        datafiles[3:5]     # training, interpolation, training
     end
 
     in_dim, out_dim, grid = if occursin("exp3", casename)
@@ -613,11 +654,25 @@ function makeplots_parametric(
         data = h5open(datafile)
 
         tFOM = data["tFOM"] |> Array
+        #
         uFOM = data["uFOM"] |> Array
         uPCA = data["uPCA"] |> Array
         uCAE = data["uCAE"] |> Array
         uSNL = data["uSNL"] |> Array
         uSNW = data["uSNW"] |> Array
+
+        tdtFOM, udtFOM, udtCAE, udtSNL, udtSNW = if ifdt
+            tdtFOM = data["tdtFOM"] |> Array
+            udtFOM = data["udtFOM"] |> Array
+            udtCAE = data["udtCAE"] |> Array
+            udtCAE = data["udtCAE"] |> Array
+            udtSNL = data["udtSNL"] |> Array
+            udtSNW = data["udtSNW"] |> Array
+
+            tdtFOM, udtFOM, udtCAE, udtSNL, udtSNW
+        else
+            nothing, nothing, nothing, nothing, nothing
+        end
 
         close(data)
 
@@ -638,31 +693,63 @@ function makeplots_parametric(
         e2tSNL = sqrt.(e2tSNL) .+ 1f-12
         e2tSNW = sqrt.(e2tSNW) .+ 1f-12
 
+        if ifdt
+            nrdt = sum(abs2, udtFOM; dims = 2:in_dim+1) ./ Nxyz .|> sqrt
+
+            edtCAE = (udtFOM - udtCAE) ./ nrdt
+            edtSNL = (udtFOM - udtSNL) ./ nrdt
+            edtSNW = (udtFOM - udtSNW) ./ nrdt
+
+            e2tdtCAE = sum(abs2, edtCAE; dims = 1:in_dim+1) / Nfom |> vec
+            e2tdtSNL = sum(abs2, edtSNL; dims = 1:in_dim+1) / Nfom |> vec
+            e2tdtSNW = sum(abs2, edtSNW; dims = 1:in_dim+1) / Nfom |> vec
+
+            e2tdtCAE = sqrt.(e2tdtCAE) .+ 1f-12
+            e2tdtSNL = sqrt.(e2tdtSNL) .+ 1f-12
+            e2tdtSNW = sqrt.(e2tdtSNW) .+ 1f-12
+        end
+
         plt_kw = Tuple(
             (; linewidth = 3, color = colors[i], linestyle = styles[i], label = labels[i])
             for i in 1:4
         )
 
-        if j == 1     # interpolation
-            lines!(axe2, tFOM, e2tPCA; plt_kw[1]...)
-            lines!(axe2, tFOM, e2tCAE; plt_kw[2]...)
-            lines!(axe2, tFOM, e2tSNL; plt_kw[3]...)
-            lines!(axe2, tFOM, e2tSNW; plt_kw[4]...)
-        elseif j == 2 # training
+        if j == 1
             lines!(axe1, tFOM, e2tPCA; plt_kw[1]...)
             lines!(axe1, tFOM, e2tCAE; plt_kw[2]...)
             lines!(axe1, tFOM, e2tSNL; plt_kw[3]...)
             lines!(axe1, tFOM, e2tSNW; plt_kw[4]...)
-        elseif j == 3 # extrapolation
+        elseif j == 2
+            lines!(axe2, tFOM, e2tPCA; plt_kw[1]...)
+            lines!(axe2, tFOM, e2tCAE; plt_kw[2]...)
+            lines!(axe2, tFOM, e2tSNL; plt_kw[3]...)
+            lines!(axe2, tFOM, e2tSNW; plt_kw[4]...)
+        elseif j == 3
             lines!(axe3, tFOM, e2tPCA; plt_kw[1]...)
             lines!(axe3, tFOM, e2tCAE; plt_kw[2]...)
             lines!(axe3, tFOM, e2tSNL; plt_kw[3]...)
             lines!(axe3, tFOM, e2tSNW; plt_kw[4]...)
         end
+
+        if ifdt
+            if j == 1
+                lines!(axe4, tdtFOM, e2tdtCAE; plt_kw[2]...)
+                lines!(axe4, tdtFOM, e2tdtSNL; plt_kw[3]...)
+                lines!(axe4, tdtFOM, e2tdtSNW; plt_kw[4]...)
+            elseif j == 2
+                lines!(axe5, tdtFOM, e2tdtCAE; plt_kw[2]...)
+                lines!(axe5, tdtFOM, e2tdtSNL; plt_kw[3]...)
+                lines!(axe5, tdtFOM, e2tdtSNW; plt_kw[4]...)
+            elseif j == 3
+                lines!(axe6, tdtFOM, e2tdtCAE; plt_kw[2]...)
+                lines!(axe6, tdtFOM, e2tdtSNL; plt_kw[3]...)
+                lines!(axe6, tdtFOM, e2tdtSNW; plt_kw[4]...)
+            end
+        end # ifdt
     end
 
     linkaxes!(axe1, axe2, axe3)
-    fige[0,:] = Legend(fige, axe1; patchsize = (30, 10), orientation = :horizontal, framevisible = false, fontsize)
+    fige[0,:] = Legend(fige, axe1; patchsize = (50, 10), orientation = :horizontal, framevisible = false, labelsize = fontsize)
 
     Label(fige[2,1], captions[1]; fontsize)
     Label(fige[2,2], captions[2]; fontsize)
@@ -757,7 +844,7 @@ makeplots(e5file, outdir, "exp5"; ifdt = true)
 
 # EXP 3
 makeplots(e3file4, outdir, "exp3case4")
-makeplots_parametric(e3files, outdir, "exp3")
+makeplots_parametric(e3files, outdir, "exp3"; ifdt = false)
 
 # EXP 4
 makeplots(e4file4, outdir, "exp4case4")

@@ -1,21 +1,21 @@
-Epoch [0 / 0]	TRAIN LOSS: 4.6674384e-5 || TEST LOSS: 4.6674384e-5
+Epoch [0 / 0]	TRAIN LOSS: 8.6545784e-5 || TEST LOSS: 8.6545784e-5
 #======================#
 TRAIN STATS
-R² score:             0.9999939
-MSE (mean SQR error): 5.804345e-6
-RMSE (Root MSE):      0.002409221
-MAE (mean ABS error): 0.0013567806
-maxAE (max ABS error) 0.17953563
-Lipschitz bound:      5423.1904
+R² score:             0.9999912
+MSE (mean SQR error): 8.378841e-6
+RMSE (Root MSE):      0.0028946227
+MAE (mean ABS error): 0.0017447654
+maxAE (max ABS error) 0.18228485
+Lipschitz bound:      5894.3115
 
 #======================#
 #======================#
 TEST  STATS
-R² score:             0.9999939
-MSE (mean SQR error): 5.804345e-6
-RMSE (Root MSE):      0.002409221
-MAE (mean ABS error): 0.0013567806
-maxAE (max ABS error) 0.17953563
-Lipschitz bound:      5423.1904
+R² score:             0.9999912
+MSE (mean SQR error): 8.378841e-6
+RMSE (Root MSE):      0.0028946227
+MAE (mean ABS error): 0.0017447654
+maxAE (max ABS error) 0.18228485
+Lipschitz bound:      5894.3115
 
 #======================#

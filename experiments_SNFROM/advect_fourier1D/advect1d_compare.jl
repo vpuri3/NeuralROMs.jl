@@ -80,7 +80,7 @@ modelfile_INR = joinpath(modeldir_INR, "model_07.jld2")
 # Nt = 500
 # It = LinRange(1, Nt, 50) .|> Base.Fix1(round, Int)
 # data_kws = (; Ix = :, It)
-# evolve_kw = (; Δt = T, data_kws, adaptive = true)
+# evolve_kw = (; Δt = T, data_kws, adaptive = false)
 #
 # outdir_SNW = joinpath(modeldir_SNW, "dt")
 # outdir_SNL = joinpath(modeldir_SNL, "dt")

@@ -64,36 +64,46 @@ modelfile_SNW = joinpath(modeldir_SNW, "model_07.jld2")
 # postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 # postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
 
-# evolve_SNF(prob, datafile, modelfile_SNL, 1; rng, device)
-# evolve_SNF(prob, datafile, modelfile_SNL, 2; rng, device)
-evolve_SNF(prob, datafile, modelfile_SNL, 3; rng, device)
-# evolve_SNF(prob, datafile, modelfile_SNL, 4; rng, device)
-# evolve_SNF(prob, datafile, modelfile_SNL, 5; rng, device)
-# evolve_SNF(prob, datafile, modelfile_SNL, 6; rng, device)
-# evolve_SNF(prob, datafile, modelfile_SNL, 7; rng, device)
+cases = 1:7
+cases = [4,]
 
-# evolve_SNF(prob, datafile, modelfile_SNW, 1; rng, device)
-# evolve_SNF(prob, datafile, modelfile_SNW, 2; rng, device)
-# evolve_SNF(prob, datafile, modelfile_SNW, 3; rng, device)
-# evolve_SNF(prob, datafile, modelfile_SNW, 4; rng, device)
-# evolve_SNF(prob, datafile, modelfile_SNW, 5; rng, device)
-# evolve_SNF(prob, datafile, modelfile_SNW, 6; rng, device)
-# evolve_SNF(prob, datafile, modelfile_SNW, 7; rng, device)
+# for case in cases
+#     evolve_CAE(prob, datafile, modelfile_CAE, case; rng)
+#     evolve_SNF(prob, datafile, modelfile_SNL, case; rng, device)
+#     evolve_SNF(prob, datafile, modelfile_SNW, case; rng, device)
+# end
+
+#==================#
+# small DT
+#==================#
+
+# T  = 0.5f0
+# Nt = 500
+# It = LinRange(1, Nt, 50) .|> Base.Fix1(round, Int)
+# data_kws = (; Ix = :, It)
+# evolve_kw = (; Δt = T, data_kws, adaptive = false)
+#
+# outdir_SNW = joinpath(modeldir_SNW, "dt")
+# outdir_SNL = joinpath(modeldir_SNL, "dt")
+# outdir_CAE = joinpath(modeldir_CAE, "dt")
+#
+# for case in cases
+#     evolve_CAE(prob, datafile, modelfile_CAE, case; rng, outdir = outdir_CAE, evolve_kw...,)
+#     evolve_SNF(prob, datafile, modelfile_SNL, case; rng, outdir = outdir_SNL, evolve_kw..., device)
+#     evolve_SNF(prob, datafile, modelfile_SNW, case; rng, outdir = outdir_SNW, evolve_kw..., device)
+# end
 
 #==================#
 # make figures
 #==================#
 
-casename = "burgers2d"
-modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
-labels = ("POD ($(2*l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
-
-# _, p1, e1 = compare_plots(modeldirs, labels, @__DIR__, casename * "case1", 1, grid)
-# _, p2, e2 = compare_plots(modeldirs, labels, @__DIR__, casename * "case2", 2, grid)
-# _, p3, e3 = compare_plots(modeldirs, labels, @__DIR__, casename * "case3", 3, grid)
-# _, p4, e4 = compare_plots(modeldirs, labels, @__DIR__, casename * "case4", 4, grid)
-# _, p5, e5 = compare_plots(modeldirs, labels, @__DIR__, casename * "case5", 5, grid)
-# _, p6, e6 = compare_plots(modeldirs, labels, @__DIR__, casename * "case6", 6, grid)
-# _, p7, e7 = compare_plots(modeldirs, labels, @__DIR__, casename * "case7", 7, grid)
+# casename = "burgers2d"
+# modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
+# labels = ("POD ($(2*l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
+#
+# for case in cases
+#     _casename = casename * "case$case"
+#     @show _casename
+#     compare_plots(modeldirs, labels, @__DIR__, _casename, case, grid; ifdt = true)
+# end
 #======================================================#
-nothing
