@@ -264,15 +264,15 @@ modeldir4 = joinpath(@__DIR__, "model4") # weight
 # α, weight_decays, λ2 = 0f-5, 0f-2, 0f-2 # vanilla
 # isdir(modeldir1) && rm(modeldir1, recursive = true)
 # _, ST1 = train_reg(datafile, modeldir1, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
-
+#
 # α, weight_decays, λ2 = 0f-5, 0f-2, 1f-1 # L2
 # isdir(modeldir2) && rm(modeldir2, recursive = true)
 # train_reg(datafile, modeldir2, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
-
+#
 # α, weight_decays, λ2 = 5f-5, 0f-2, 0f-2 # Lipschitz
 # isdir(modeldir3) && rm(modeldir3, recursive = true)
 # train_reg(datafile, modeldir3, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
-
+#
 # α, weight_decays, λ2 = 0f-5, 5f-2, 0f-0 # Weight # 2f-2
 # isdir(modeldir4) && rm(modeldir4, recursive = true)
 # train_reg(datafile, modeldir4, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
