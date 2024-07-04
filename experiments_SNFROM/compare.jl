@@ -3,6 +3,9 @@ using NeuralROMs
 using LinearAlgebra, Plots, LaTeXStrings
 using JLD2, HDF5
 
+import CairoMakie
+import CairoMakie: Makie
+
 joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "PCA.jl")      |> include
 joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "convAE.jl")   |> include
 joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "convINR.jl")  |> include
@@ -41,7 +44,7 @@ function train_CAE_compare(
     modeldir::String,
     train_params = (;);
     rng::Random.AbstractRNG = Random.default_rng(),
-    device = Lux.cpu_device(),
+    device = Lux.gpu_device(),
 )
     E   = haskey(train_params, :E  ) ? train_params.E   : 1400
     w   = haskey(train_params, :w  ) ? train_params.w   : 32
@@ -73,7 +76,7 @@ function train_CINR_compare(
     modeldir::String,
     train_params = (;);
     rng::Random.AbstractRNG = Random.default_rng(),
-    device = Lux.cpu_device(),
+    device = Lux.gpu_device(),
 )
     E   = haskey(train_params, :E  ) ? train_params.E   : 1400
     h   = haskey(train_params, :h  ) ? train_params.we  : 5
@@ -106,7 +109,7 @@ function train_SNF_compare(
     modeldir::String,
     train_params = (;);
     rng::Random.AbstractRNG = Random.default_rng(),
-    device = Lux.cpu_device(),
+    device = Lux.gpu_device(),
 )
     E = haskey(train_params, :E) ? train_params.E : 1400
 
@@ -310,91 +313,141 @@ end
 # hyper-reduction experiments
 #======================================================#
 
+function hyper_timings(
+    prob::NeuralROMs.AbstractPDEProblem,
+    datafile::String,
+    modelfile::String,
+    casename::String,
+    casenum::Integer,
+    fomfile::String,
+)
+    grid = get_prob_grid(prob)
+    modeldir = dirname(modelfile)
+
+    statsROM = (;)
+
+    dt_mults = [1, 2, 5, 10]
+    iskips = if occursin("exp2", casename)
+        [1, 2, 4, 8, 16]
+    elseif occursin("exp4", casename)
+        [4, 8, 16, 32, 64]
+    end
+
+    for dt_mult in reverse(dt_mults)
+        for iskip in reverse(iskips)
+
+            # hyper-indices
+            ids = zeros(Bool, grid...)
+            @views ids[1:iskip:end, 1:iskip:end] .= true
+            hyper_indices = findall(isone, vec(ids))
+            hyper_reduction_path = joinpath(modeldir, "hyper.jld2")
+
+            # time-step
+            It = LinRange(1, 500, 500 ÷ dt_mult) .|> Base.Fix1(round, Int)
+            data_kws = (; Ix = :, It)
+
+            evolve_kw = (;
+                Δt = 10f0,
+                data_kws,
+                hyper_reduction_path,
+                hyper_indices,
+                learn_ic = false,
+                verbose = false,
+                benchmark = true,
+                adaptive = false
+            )
+
+            # directory
+            N = length(hyper_indices)
+            casename = "N$(N)_dt$(dt_mult)"
+            outdir = joinpath(modeldir, "hyper_$(casename)")
+
+            # run
+            _, stats = evolve_SNF(prob, datafile, modelfile, casenum; rng, outdir, evolve_kw..., device)
+            statsROM = (; statsROM..., Symbol(casename) => stats)
+        end
+    end
+
+    # FOM stats
+    statsFOM = include(fomfile)
+
+    statsfile = joinpath(modeldir, "hyperstats.jld2")
+    jldsave(statsfile; statsROM, statsFOM)
+
+    statsROM, statsFOM, statsfile
+end
+
+
 function hyper_plots(
     datafile::String,
     modeldir::String,
-    casenum::Integer,
+    outdir::String,
+    casename::String,
+    casenum::Integer;
+    makefigs::Bool = true,
 )
+    mkpath(outdir)
+
+    # get data
 
     statsfile = joinpath(modeldir, "hyperstats.jld2")
     statsROM = jldopen(statsfile)["statsROM"]
     statsFOM = jldopen(statsfile)["statsFOM"]
 
-    tims = (;)
-    mems = (;) # GPU memory
-    uprs = (;) # at final time-step
-
-    xdata, _, _, udata, _ = loaddata(datafile)
-    udata = udata[:, :, casenum, end]
-
-    for case in keys(statsROM)
-        evolvefile = joinpath(modeldir, "hyper_" * String(case), "evolve$(casenum).jld2")
-        ev = jldopen(evolvefile)
-
-        tims = (; tims..., case => getproperty(statsROM, case).time)
-        mems = (; mems..., case => getproperty(statsROM, case).gpu_bytes)
-        uprs = (; uprs..., case => ev["Upred"][:, :, end])
-
-        close(ev)
-    end
-
-    tims = (; tims..., FOM = statsFOM.time)
-    mems = (; mems..., FOM = statsFOM.gpu_bytes)
-
-    times    = round.(values(tims), sigdigits = 4)
-    speedups = round.(statsFOM.time ./ values(tims), sigdigits = 4)
-    @show times
-    @show speedups
-
-    savefile = joinpath(modeldir, "hypercompiled.jld2")
-    jldsave(savefile; xdata, udata, tims, mems, uprs)
-end
-
-#======================================================#
-
-function makeplots_hyper(
-    e2hyper::String,
-    outdir::String,
-    casename::String,
-)
-
-    mkpath(outdir)
-
-    # Get fields
+    # get FOM data
     grid = if occursin("exp2", casename)
         128, 128
     elseif occursin("exp4", casename)
         512, 512
     end
 
-    file = jldopen(e2hyper)
-    xdata = file["xdata"]
-    udata = file["udata"]
-    upreds = file["uprs"]
-    times = file["tims"]
-    mems  = file["mems"]
-    close(file)
+    xdata, _, _, udata, _ = loaddata(datafile)
+    udata = udata[:, :, casenum, end]
 
-    xdiag = diag(reshape(xdata[1, :, :], grid))
     udata = if occursin("exp2", casename)
         reshape(udata, grid)
     elseif occursin("exp4", casename)
         reshape(udata[1, :], grid)
     end
 
+    # get stats, predictions
+
+    times  = (;)
+    mems   = (;) # GPU memory
+    upreds = (;) # at final time-step
+
+    for case in keys(statsROM)
+        evolvefile = joinpath(modeldir, "hyper_" * String(case), "evolve$(casenum).jld2")
+        ev = jldopen(evolvefile)
+
+        times  = (; times... , case => getproperty(statsROM, case).time)
+        mems   = (; mems...  , case => getproperty(statsROM, case).gpu_bytes)
+        upreds = (; upreds..., case => ev["Upred"][:, :, end])
+
+        close(ev)
+    end
+
+    times = (; times..., FOM = statsFOM.time)
+    mems  = (; mems... , FOM = statsFOM.gpu_bytes)
+
+    # compute errors
+
     ups = collect(reshape(upred[1, :], grid) for upred in upreds)
     ups = cat(ups...; dims = 3)
 
     nr  = sqrt(sum(abs2, udata) / length(udata))
-    eps = @. (ups - udata) / nr
+    ers = @. (ups - udata) / nr
 
     icases = keys(upreds)
     ncases = length(upreds)
 
-    epreds = NamedTuple{icases}(eps[:, :, i] for i in 1:ncases)
-    ediags = NamedTuple{icases}(diag(eps[:, :, i]) for i in 1:ncases)
+    epreds = NamedTuple{icases}(ers[:, :, i] for i in 1:ncases)
+    ediags = NamedTuple{icases}(diag(ers[:, :, i]) for i in 1:ncases)
     udiags = NamedTuple{icases}(diag(ups[:, :, i]) for i in 1:ncases)
+    xdiag  = diag(reshape(xdata[1, :, :], grid))
     uddiag = diag(udata)
+
+    Ns = [16384, 4096, 1024, 256, 64]
 
     k1 = (:N16384_dt1 , :N4096_dt1 , :N1024_dt1 , :N256_dt1 , :N64_dt1 )
     k2 = (:N16384_dt2 , :N4096_dt2 , :N1024_dt2 , :N256_dt2 , :N64_dt2 )
@@ -402,233 +455,223 @@ function makeplots_hyper(
     k4 = (:N16384_dt10, :N4096_dt10, :N1024_dt10, :N256_dt10, :N64_dt10)
 
     # create dataframe / table
-    df = nothing
 
     tFOM = times.FOM
     mFOM = mems.FOM
 
-    e1 = Tuple(sqrt(sum(abs2, epreds[k]) / length(udata)) for k in k1)
-    e2 = Tuple(sqrt(sum(abs2, epreds[k]) / length(udata)) for k in k2)
-    e3 = Tuple(sqrt(sum(abs2, epreds[k]) / length(udata)) for k in k3)
-    e4 = Tuple(sqrt(sum(abs2, epreds[k]) / length(udata)) for k in k4)
+    e1 = collect(sqrt(sum(abs2, epreds[k]) / length(udata)) for k in k1)
+    e2 = collect(sqrt(sum(abs2, epreds[k]) / length(udata)) for k in k2)
+    e3 = collect(sqrt(sum(abs2, epreds[k]) / length(udata)) for k in k3)
+    e4 = collect(sqrt(sum(abs2, epreds[k]) / length(udata)) for k in k4)
 
-    # @show round.(e1 .* 100, sigdigits = 4)
-    # @show round.(e2 .* 100, sigdigits = 4)
-    # @show round.(e3 .* 100, sigdigits = 4)
-    # @show round.(e4 .* 100, sigdigits = 4)
-    
+    @show round.(e1 .* 100, sigdigits = 4)
+    @show round.(e2 .* 100, sigdigits = 4)
+    @show round.(e3 .* 100, sigdigits = 4)
+    @show round.(e4 .* 100, sigdigits = 4)
+
     println()
 
-    t1 = Tuple(times[k] for k in k1)
-    t2 = Tuple(times[k] for k in k2)
-    t3 = Tuple(times[k] for k in k3)
-    t4 = Tuple(times[k] for k in k4)
+    t1 = collect(times[k] for k in k1)
+    t2 = collect(times[k] for k in k2)
+    t3 = collect(times[k] for k in k3)
+    t4 = collect(times[k] for k in k4)
 
     nn = 1024^3
-    
-    m1 = Tuple(mems[k] for k in k1) ./ nn
-    m2 = Tuple(mems[k] for k in k2) ./ nn
-    m3 = Tuple(mems[k] for k in k3) ./ nn
-    m4 = Tuple(mems[k] for k in k4) ./ nn
-    
+
+    m1 = collect(mems[k] for k in k1) ./ nn
+    m2 = collect(mems[k] for k in k2) ./ nn
+    m3 = collect(mems[k] for k in k3) ./ nn
+    m4 = collect(mems[k] for k in k4) ./ nn
+
     s1 = tFOM ./ t1
     s2 = tFOM ./ t2
     s3 = tFOM ./ t3
     s4 = tFOM ./ t4
 
-    # @show tFOM
-    # @show round.(s1, sigdigits = 4)
-    # @show round.(s2, sigdigits = 4)
-    # @show round.(s3, sigdigits = 4)
-    # @show round.(s4, sigdigits = 4)
-    #
-    # println()
-    #
-    # @show mFOM / nn
-    # @show round.(m1, sigdigits = 4)
-    # @show round.(m2, sigdigits = 4)
-    # @show round.(m3, sigdigits = 4)
-    # @show round.(m4, sigdigits = 4)
+    @show tFOM
+    @show round.(t1, sigdigits = 4)
+    @show round.(t2, sigdigits = 4)
+    @show round.(t3, sigdigits = 4)
+    @show round.(t4, sigdigits = 4)
+
+    println()
+
+    @show round.(s1, sigdigits = 4)
+    @show round.(s2, sigdigits = 4)
+    @show round.(s3, sigdigits = 4)
+    @show round.(s4, sigdigits = 4)
     
-    # println()
-    #
-    # return df
+    println()
+    
+    @show mFOM / nn
+    @show round.(m1, sigdigits = 4)
+    @show round.(m2, sigdigits = 4)
+    @show round.(m3, sigdigits = 4)
+    @show round.(m4, sigdigits = 4)
 
     ### Make plots
 
-    figc = Figure(; size = (750, 750), backgroundcolor = :white, grid = :off)
-    fige = Figure(; size = (750, 850), backgroundcolor = :white, grid = :off)
-    figp = Figure(; size = (750, 850), backgroundcolor = :white, grid = :off)
+    makefigs || return
 
-    # FIGC
-    nlevels = 11
-    levels = if occursin("exp2", casename)
-        10.0 .^ range(-4, 0, nlevels)
-    elseif occursin("exp4", casename)
-        10.0 .^ range(-5, 0, nlevels)
-    end
-
-    kw_axc = (; aspect = 1, xlabel = L"x", ylabel = L"y")
-    kw_ctr = (; extendlow = :cyan, extendhigh = :magenta, colorscale = log10, levels)
-
-    # FIGE, FIGP
-
-    colors = (:orange, :green, :blue, :red, :brown,)
-    styles = (:solid, :dash, :dashdot, :dashdotdot, :dot)
-    labels = (L"$|X_\text{proj}|=16384$", L"$|X_\text{proj}|=4096$", L"$|X_\text{proj}|=1024$", L"$|X_\text{proj}|=256$", L"$|X_\text{proj}|=64$",)
-
-    kw_axe = (;
-        xlabel = L"y = x",
-        ylabel = L"ε(t; \mathbf{μ})",
-        yscale = log10,
-        xlabelsize = 16,
-        ylabelsize = 16,
-    )
-
-    kw_axp = (;
-        xlabel = L"y = x",
-        ylabel = L"u(x, t; \mathbf{μ})",
-        xlabelsize = 16,
-        ylabelsize = 16,
-    )
-
-    kw_fom = (; linewidth = 3, color = :black, linestyle = :solid, label = L"FOM$$")
-
-    kw_lin = Tuple(
-        (; linewidth = 3, color = colors[j], linestyle = styles[j], label = labels[j])
-        for j in 1:5
-    )
-
-    axe1 = Axis(fige[1, 1]; kw_axe...)
-    axe2 = Axis(fige[1, 2]; kw_axe...)
-    axe3 = Axis(fige[3, 1]; kw_axe...)
-    axe4 = Axis(fige[3, 2]; kw_axe...)
-
-    axp1 = Axis(figp[1, 1]; kw_axp...)
-    axp2 = Axis(figp[1, 2]; kw_axp...)
-    axp3 = Axis(figp[3, 1]; kw_axp...)
-    axp4 = Axis(figp[3, 2]; kw_axp...)
-
-    for j in 1:5
-        ep1 = epreds[k1[j]] .|> abs
-        ep2 = epreds[k2[j]] .|> abs
-        ep3 = epreds[k3[j]] .|> abs
-        ep4 = epreds[k4[j]] .|> abs
-
-        ed1 = ediags[k1[j]] .|> abs
-        ed2 = ediags[k2[j]] .|> abs
-        ed3 = ediags[k3[j]] .|> abs
-        ed4 = ediags[k4[j]] .|> abs
-
-        ud1 = udiags[k1[j]]
-        ud2 = udiags[k2[j]]
-        ud3 = udiags[k3[j]]
-        ud4 = udiags[k4[j]]
-
-        # FIGE
-        lines!(axe1, xdiag, ed1; kw_lin[j]...)
-        lines!(axe2, xdiag, ed2; kw_lin[j]...)
-        lines!(axe3, xdiag, ed3; kw_lin[j]...)
-        lines!(axe4, xdiag, ed4; kw_lin[j]...)
-
-        # FIGP
-
-        if j == 1
-            # FOM
-            lines!(axp1, xdiag, uddiag; kw_fom...)
-            lines!(axp2, xdiag, uddiag; kw_fom...)
-            lines!(axp3, xdiag, uddiag; kw_fom...)
-            lines!(axp4, xdiag, uddiag; kw_fom...)
-        end
-
-        lines!(axp1, xdiag, ud1; kw_lin[j]...)
-        lines!(axp2, xdiag, ud2; kw_lin[j]...)
-        lines!(axp3, xdiag, ud3; kw_lin[j]...)
-        lines!(axp4, xdiag, ud4; kw_lin[j]...)
-
-        # FIGC
-        ax1j = Axis(figc[1,j]; kw_axc...)
-        ax2j = Axis(figc[2,j]; kw_axc...)
-        ax3j = Axis(figc[3,j]; kw_axc...)
-        ax4j = Axis(figc[4,j]; kw_axc...)
-
-        cf1j = contourf!(ax1j, xdiag, xdiag, ep1; kw_ctr...)
-        cf2j = contourf!(ax2j, xdiag, xdiag, ep2; kw_ctr...)
-        cf3j = contourf!(ax3j, xdiag, xdiag, ep3; kw_ctr...)
-        cf4j = contourf!(ax4j, xdiag, xdiag, ep4; kw_ctr...)
-
-        tightlimits!(ax1j)
-        tightlimits!(ax2j)
-        tightlimits!(ax3j)
-        tightlimits!(ax4j)
-
-        hidedecorations!(ax1j; label = false)
-        hidedecorations!(ax2j; label = false)
-        hidedecorations!(ax3j; label = false)
-        hidedecorations!(ax4j; label = false)
-
-        if j == 5
-            # ticks = [1f-5, 1f-4, 1f-3, 1f-2, 1f-1,]
-            # Colorbar(figc[4, :], cf1j; ticks, vertical = false)
-            Colorbar(figc[5, :], cf1j; vertical = false)
-        end
-    end
-
-    # FIGE, FIGP
-    linkaxes!(axe1, axe2, axe3, axe4)
-    linkaxes!(axp1, axp2, axp3, axp4)
-
-    fige[0,:] = Legend(fige, axe1, patchsize = (30, 10), orientation = :horizontal, framevisible = false)
-    figp[0,:] = Legend(figp, axp1, patchsize = (30, 10), orientation = :horizontal, framevisible = false)
-
-    Label(fige[2,1], L"(a) $Δt =  1Δt_0$", fontsize = 16)
-    Label(fige[2,2], L"(b) $Δt =  2Δt_0$", fontsize = 16)
-    Label(fige[4,1], L"(c) $Δt =  5Δt_0$", fontsize = 16)
-    Label(fige[4,2], L"(d) $Δt = 10Δt_0$", fontsize = 16)
-
-    Label(figp[2,1], L"(a) $Δt =  1Δt_0$", fontsize = 16)
-    Label(figp[2,2], L"(b) $Δt =  2Δt_0$", fontsize = 16)
-    Label(figp[4,1], L"(c) $Δt =  5Δt_0$", fontsize = 16)
-    Label(figp[4,2], L"(d) $Δt = 10Δt_0$", fontsize = 16)
-
-    colsize!(fige.layout, 1, Relative(0.50))
-    colsize!(fige.layout, 2, Relative(0.50))
+    # fontsize = 16
+    #
+    # # FIGE, FIGM
+    # fige = Makie.Figure(; size = (900, 400), backgroundcolor = :white, grid = :off)
+    #
+    # # styles = (:solid, :dash, :dashdot, :dashdotdot, :dot)
+    # colors = (:orange, :green, :blue, :red, :brown,)
+    # styles = (:solid, :solid, :solid, :solid, :solid)
+    # labels = (L"Δt=Δt₀", L"Δt=2Δt₀", L"Δt=5Δt₀", L"Δt=10Δt₀",)
+    #
+    # xlabel = L"Number of hyper‐reduction points $(X_\text{proj})$"
+    #
+    # kw_e1 = (;
+    #     xlabel,
+    #     ylabel = L"Speedup$$",
+    #     xscale = log2,
+    #     yscale = log10,
+    #     xlabelsize = fontsize,
+    #     ylabelsize = fontsize,
+    # )
+    #
+    # kw_e2 = (;
+    #     xlabel,
+    #     ylabel = L"ε(t=T; μ)",
+    #     xscale = log2,
+    #     yscale = log10,
+    #     xlabelsize = fontsize,
+    #     ylabelsize = fontsize,
+    # )
+    #
+    # axe1 = Makie.Axis(fige[1,1]; kw_e1...)
+    # axe2 = Makie.Axis(fige[1,2]; kw_e2...)
+    #
+    # kw_l = Tuple(
+    #     (; linewidth = 2, color = colors[i], linestyle = styles[i], label = labels[i],) for i in 1:4
+    # )
+    #
+    # Makie.scatterlines!(axe1, Ns, s1; kw_l[1]...)
+    # Makie.scatterlines!(axe1, Ns, s2; kw_l[2]...)
+    # Makie.scatterlines!(axe1, Ns, s3; kw_l[3]...)
+    # Makie.scatterlines!(axe1, Ns, s4; kw_l[4]...)
+    #
+    # Makie.scatterlines!(axe2, Ns, e1; kw_l[1]...)
+    # Makie.scatterlines!(axe2, Ns, e2; kw_l[2]...)
+    # Makie.scatterlines!(axe2, Ns, e3; kw_l[3]...)
+    # Makie.scatterlines!(axe2, Ns, e4; kw_l[4]...)
+    #
+    # save(joinpath(outdir, "hyper_$(casename)_s.pdf"), fige)
     
-    colsize!(figp.layout, 1, Relative(0.50))
-    colsize!(figp.layout, 2, Relative(0.50))
-
-    # FIGC
-    Label(figc[1:4, -1][1,1], L"Time‐step size $(Δt)$"; rotation = pi/2, fontsize = 16)
-    Label(figc[-1, 1:4][1,1], L"Number of hyper‐reduction points $(|X_\text{proj}|)$"; fontsize = 16)
-
-    Label(figc[0,1], L"$|X_\text{proj}| = 16384$", fontsize = 16)
-    Label(figc[0,2], L"$|X_\text{proj}| = 4096$" , fontsize = 16)
-    Label(figc[0,3], L"$|X_\text{proj}| = 1024$" , fontsize = 16)
-    Label(figc[0,4], L"$|X_\text{proj}| = 256$"  , fontsize = 16)
-    Label(figc[0,5], L"$|X_\text{proj}| = 64$"   , fontsize = 16)
-
-    Label(figc[1,0], L"$Δt =  1Δt_0$"; fontsize = 16, rotation = pi/2)
-    Label(figc[2,0], L"$Δt =  2Δt_0$"; fontsize = 16, rotation = pi/2)
-    Label(figc[3,0], L"$Δt =  5Δt_0$"; fontsize = 16, rotation = pi/2)
-    Label(figc[4,0], L"$Δt = 10Δt_0$"; fontsize = 16, rotation = pi/2)
-
-    rowsize!(figc.layout, 1, Relative(0.22))
-    rowsize!(figc.layout, 2, Relative(0.22))
-    rowsize!(figc.layout, 3, Relative(0.22))
-    rowsize!(figc.layout, 4, Relative(0.22))
-
-    colsize!(figc.layout, 1, Relative(0.19))
-    colsize!(figc.layout, 2, Relative(0.19))
-    colsize!(figc.layout, 3, Relative(0.19))
-    colsize!(figc.layout, 4, Relative(0.19))
-    colsize!(figc.layout, 5, Relative(0.19))
-
-    # save
-    # save(joinpath(outdir, "hyper_$(casename)_c.pdf"), figc)
+    # # FIGE, FIGP
+    #
+    # fige = Makie.Figure(; size = (600, 300), backgroundcolor = :white, grid = :off)
+    # figp = Makie.Figure(; size = (600, 300), backgroundcolor = :white, grid = :off)
+    #
+    # kw_axe = (;
+    #     xlabel = L"y = x",
+    #     ylabel = L"ε(t; \mathbf{μ})",
+    #     yscale = log10,
+    #     xlabelsize = fontsize,
+    #     ylabelsize = fontsize,
+    # )
+    #
+    # kw_axp = (;
+    #     xlabel = L"y = x",
+    #     ylabel = L"u(x, t; \mathbf{μ})",
+    #     xlabelsize = fontsize,
+    #     ylabelsize = fontsize,
+    # )
+    #
+    # kw_fom = (; linewidth = 3, color = :black, linestyle = :solid, label = L"FOM$$")
+    #
+    # kw_lin = Tuple(
+    #     (; linewidth = 2, color = colors[j], linestyle = styles[j], label = labels[j])
+    #     for j in 1:5
+    # )
+    #
+    # axe1 = Makie.Axis(fige[1, 1]; kw_axe...)
+    # axe2 = Makie.Axis(fige[1, 2]; kw_axe...)
+    # axe3 = Makie.Axis(fige[1, 3]; kw_axe...)
+    # axe4 = Makie.Axis(fige[1, 4]; kw_axe...)
+    #
+    # axp1 = Makie.Axis(figp[1, 1]; kw_axp...)
+    # axp2 = Makie.Axis(figp[1, 2]; kw_axp...)
+    # axp3 = Makie.Axis(figp[1, 3]; kw_axp...)
+    # axp4 = Makie.Axis(figp[1, 4]; kw_axp...)
+    #
+    # for j in 1:5
+    #     ed1 = ediags[k1[j]] .|> abs
+    #     ed2 = ediags[k2[j]] .|> abs
+    #     ed3 = ediags[k3[j]] .|> abs
+    #     ed4 = ediags[k4[j]] .|> abs
+    #
+    #     ud1 = udiags[k1[j]]
+    #     ud2 = udiags[k2[j]]
+    #     ud3 = udiags[k3[j]]
+    #     ud4 = udiags[k4[j]]
+    #
+    #     # FIGE
+    #     Makie.lines!(axe1, xdiag, ed1; kw_lin[j]...)
+    #     Makie.lines!(axe2, xdiag, ed2; kw_lin[j]...)
+    #     Makie.lines!(axe3, xdiag, ed3; kw_lin[j]...)
+    #     Makie.lines!(axe4, xdiag, ed4; kw_lin[j]...)
+    #
+    #     # FIGP
+    #
+    #     if j == 1
+    #         # FOM
+    #         Makie.lines!(axp1, xdiag, uddiag; kw_fom...)
+    #         Makie.lines!(axp2, xdiag, uddiag; kw_fom...)
+    #         Makie.lines!(axp3, xdiag, uddiag; kw_fom...)
+    #         Makie.lines!(axp4, xdiag, uddiag; kw_fom...)
+    #     end
+    #
+    #     Makie.lines!(axp1, xdiag, ud1; kw_lin[j]...)
+    #     Makie.lines!(axp2, xdiag, ud2; kw_lin[j]...)
+    #     Makie.lines!(axp3, xdiag, ud3; kw_lin[j]...)
+    #     Makie.lines!(axp4, xdiag, ud4; kw_lin[j]...)
+    # end
+    #
+    # # FIGE, FIGP
+    # Makie.linkaxes!(axe1, axe2, axe3, axe4)
+    # Makie.linkaxes!(axp1, axp2, axp3, axp4)
+    #
+    # fige[0,:] = Makie.Legend(fige, axe1, patchsize = (30, 5), orientation = :vertical, framevisible = false, nbanks = 3)
+    # figp[0,:] = Makie.Legend(figp, axp1, patchsize = (30, 5), orientation = :vertical, framevisible = false, nbanks = 3)
+    #
+    # Makie.Label(fige[2,1], L"(a) $Δt =  1Δt_0$"; fontsize)
+    # Makie.Label(fige[2,2], L"(b) $Δt =  2Δt_0$"; fontsize)
+    # Makie.Label(fige[2,3], L"(c) $Δt =  5Δt_0$"; fontsize)
+    # Makie.Label(fige[2,4], L"(d) $Δt = 10Δt_0$"; fontsize)
+    #
+    # Makie.Label(figp[2,1], L"(a) $Δt =  1Δt_0$"; fontsize)
+    # Makie.Label(figp[2,2], L"(b) $Δt =  2Δt_0$"; fontsize)
+    # Makie.Label(figp[2,3], L"(c) $Δt =  5Δt_0$"; fontsize)
+    # Makie.Label(figp[2,4], L"(d) $Δt = 10Δt_0$"; fontsize)
+    #
+    # Makie.colsize!(fige.layout, 1, Makie.Relative(0.25))
+    # Makie.colsize!(fige.layout, 2, Makie.Relative(0.25))
+    # Makie.colsize!(fige.layout, 3, Makie.Relative(0.25))
+    # Makie.colsize!(fige.layout, 4, Makie.Relative(0.25))
+    #
+    # Makie.colsize!(figp.layout, 1, Makie.Relative(0.25))
+    # Makie.colsize!(figp.layout, 2, Makie.Relative(0.25))
+    # Makie.colsize!(figp.layout, 3, Makie.Relative(0.25))
+    # Makie.colsize!(figp.layout, 4, Makie.Relative(0.25))
+    #
+    # Makie.hideydecorations!(axe2; grid = false)
+    # Makie.hideydecorations!(axe3; grid = false)
+    # Makie.hideydecorations!(axe4; grid = false)
+    #
+    # Makie.hideydecorations!(axp2; grid = false)
+    # Makie.hideydecorations!(axp3; grid = false)
+    # Makie.hideydecorations!(axp4; grid = false)
+    #
+    # # save
     # save(joinpath(outdir, "hyper_$(casename)_e.pdf"), fige)
-    save(joinpath(outdir, "hyper_$(casename)_p.pdf"), figp)
+    # save(joinpath(outdir, "hyper_$(casename)_p.pdf"), figp)
 
-    return df
+    return nothing
 end
 
 #======================================================#

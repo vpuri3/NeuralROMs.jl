@@ -1,6 +1,7 @@
 #
 using FourierSpaces
 using NeuralROMs
+using BenchmarkTools
 
 let
     # add test dependencies to env stack
@@ -62,13 +63,11 @@ function advect1D(Nx, Ny, ν, cx, cy, mu = nothing, p = nothing;
     prob = ODEProblem{false}(odefunc, u0, tspan, p)
 
     # solve
-    statsFOM = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
-        CUDA.@timed solve(prob, odealg)
-    else
-        @time solve(prob, odealg)
-    end
+    timeFOM  = @belapsed CUDA.@sync $solve($prob, $odealg)
+    statsFOM = CUDA.@timed solve(prob, odealg)
 
     @set! statsFOM.value = nothing
+    @set! statsFOM.time  = timeFOM
     @show statsFOM.time
 
     statsFOM

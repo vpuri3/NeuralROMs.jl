@@ -351,8 +351,11 @@ function makeplots(
                 axt0.xlabel = L"x = y"
                 axt1.xlabel = L"x = y"
 
-                axt0.ylabel = L"u(x = y, t)"
-                axt1.ylabel = L"u(x = y, t)"
+                if occursin("exp4", casename)
+                    axt0.ylabel = axt1.ylabel = L"u(x = y, t; \mathbf{μ})"
+                else
+                    axt0.ylabel = axt1.ylabel = L"u(x = y, t)"
+                end
 
                 lines!(axt0, xdiag, uddiag1; linewidth = 3, label = L"FOM$$", color = :black)
                 lines!(axt1, xdiag, uddiag2; linewidth = 3, label = L"FOM$$", color = :black)
@@ -857,6 +860,6 @@ e4files = (e4file1, e4file2, e4file3, e4file4, e4file5, e4file6, e4file7)
 # makeplots_parametric(e3files, outdir, "exp3"; ifdt = false)
 #
 # # EXP 4
-# makeplots(e4file4, outdir, "exp4case4")
+makeplots(e4file4, outdir, "exp4case4")
 
 #======================================================#

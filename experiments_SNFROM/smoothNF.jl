@@ -4,9 +4,10 @@ using LinearAlgebra, ComponentArrays              # arrays
 using Random, Lux, MLUtils, ParameterSchedulers   # ML
 using OptimizationOptimJL, OptimizationOptimisers # opt
 using LinearSolve, NonlinearSolve, LineSearches   # num
-using Plots, JLD2, Setfield                       # vis / save
+using Plots, JLD2, Setfield, LaTeXStrings         # vis / save
 using CUDA, LuxCUDA, KernelAbstractions           # GPU
-using LaTeXStrings
+using BenchmarkTools
+import Logging
 
 CUDA.allowscalar(false)
 
@@ -437,6 +438,7 @@ function evolve_SNF(
     hyper_indices = nothing,
     hyper_reduction_path::Union{String, Nothing} = nothing,
     verbose::Bool = true,
+    benchmark::Bool = false,
     device = Lux.gpu_device(),
 )
     mkpath(outdir)
@@ -540,20 +542,24 @@ function evolve_SNF(
     # evolve
     #==============#
 
-    statsROM = if device isa Lux.LuxDeviceUtils.AbstractLuxGPUDevice
-        CUDA.@timed _, ps, _ = evolve_model(
-            prob, model, timealg, scheme, data, p0, Δt;
-            adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
-        )
+    args = (prob, device(model), timealg, scheme, (device(data[1:2])..., data[3]), device(p0), Δt)
+    kwargs = (; adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,)
+    
+    if benchmark # assume CUDA
+        Logging.disable_logging(Logging.Warn)
+        timeROM = @belapsed CUDA.@sync $evolve_model($args...; $kwargs...)
+    end
+
+    statsROM = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
+        CUDA.@timed _, ps, _ = evolve_model(args...; kwargs...)
     else
-        @timed _, ps, _ = evolve_model(
-            prob, model, timealg, scheme, data, p0, Δt;
-            adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,
-        )
+        @timed _, ps, _ = evolve_model(args...; kwargs...)
     end
 
     @set! statsROM.value = nothing
-
+    if benchmark
+        @set! statsROM.time  = timeROM
+    end
     @show statsROM.time
 
     #==============#

@@ -97,17 +97,12 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
     tspan = tspan .|> T
     prob  = ODEProblem(ddt, u0, tspan, p; abstol, reltol)
 
-    # odealg = OrdinaryDiffEq.RK4()
-    # dt = 1f-2
-
     # solve
-    statsFOM = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
-        CUDA.@timed solve(prob, odealg)#; dt)
-    else
-        @timed solve(prob, odealg)
-    end
+    timeFOM  = @belapsed CUDA.@sync $solve($prob, $odealg)
+    statsFOM = CUDA.@timed solve(prob, odealg)
 
     @set! statsFOM.value = nothing
+    @set! statsFOM.time  = timeFOM
     @show statsFOM.time
 
     statsFOM
@@ -120,5 +115,4 @@ FOMstats = begin
     odealg = SSPRK43()
     burgers2D(Nx, Ny, ν; device, odealg)
 end
-
 #

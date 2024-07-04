@@ -29,19 +29,19 @@ odecb = begin
     DiscreteCallback((u,t,int) -> true, affect!, save_positions=(false,false))
 end
 
-function uIC(x, y; μ = 0.9) # 0.9 - 1.1
-    u = @. μ * sin(2π * x) * sin(2π * y)
+function uIC(x, y, μ) # 0.9 - 1.1
+    u = @. μ * sin(2π * x) * sin(2π * y) # [N, K]
 
-    u[x .< 0.0] .= 0
-    u[y .< 0.0] .= 0
+    u[x .< 0.0f0, :] .= 0
+    u[y .< 0.0f0, :] .= 0
 
-    u[x .> 0.5] .= 0
-    u[y .> 0.5] .= 0
+    u[x .> 0.5f0, :] .= 0
+    u[y .> 0.5f0, :] .= 0
 
-    ComponentArray(;vx = u, vy = copy(u))
+    ComponentArray(; vx = u, vy = copy(u))
 end
 
-function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
+function burgers2D(Nx, Ny, ν, mu = nothing, p = nothing;
     tspan=(0.f0, 0.5f0),
     ntsave=500,
     odealg=SSPRK43(),
@@ -49,7 +49,10 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
     device = cpu_device(),
     dir = nothing,
 )
-    N = Nx * Ny
+    if isnothing(mu)
+        mu = LinRange(0.9f0, 1.1f0, 7)
+    end
+    mu = reshape(mu, 1, :)
 
     abstol = reltol = 1e-6 |> T
 
@@ -61,7 +64,7 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
     x, y = points(V)
 
     """ IC """
-    u0 = uIC(x,y) .|> T
+    u0 = uIC(x,y, mu) .|> T
     ps = ComponentArray(vel=u0)
     V = make_transform(V, u0.vx; p=ps)
 
@@ -76,22 +79,22 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
     Ax = -diffusionOp(ν, V, discr)
     Ay = -diffusionOp(ν, V, discr)
 
-    Cx = advectionOp((zero(x), zero(x)), V, discr;
+    Cx = advectionOp((zero(u0.vx), zero(u0.vy)), V, discr;
         vel_update_funcs = (
             (v,u,p,t) -> copy!(v, p.vel.vx),
             (v,u,p,t) -> copy!(v, p.vel.vy),
         ),
     )
 
-    Cy = advectionOp((zero(x), zero(x)), V, discr;
+    Cy = advectionOp((zero(u0.vx), zero(u0.vy)), V, discr;
         vel_update_funcs = (
             (v,u,p,t) -> copy!(v, p.vel.vx),
             (v,u,p,t) -> copy!(v, p.vel.vy),
         ),
     )
 
-    Dtx = cache_operator(Ax - Cx, x)
-    Dty = cache_operator(Ay - Cy, x)
+    Dtx = cache_operator(Ax - Cx, u0.vx)
+    Dty = cache_operator(Ay - Cy, u0.vy)
 
     function ddt(u, p, t)
         ps = ComponentArray(vel=u)
@@ -111,47 +114,33 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
         callback = odecb,)
     @show sol.retcode
 
-    u = sol   |> Array |> cpu_device()
+    u = sol.u |> cpu_device()
     t = sol.t |> cpu_device()
     V = V     |> cpu_device()
     x, y = points(V)
 
-    vx = @views u[:vx, :]
-    vy = @views u[:vy, :]
+    u = hcat(u...)
 
-    vx = reshape(vx, size(vx, 1), 1, size(vx, 2))
-    vy = reshape(vy, size(vy, 1), 1, size(vy, 2))
+    Np = Nx * Ny
+    Nt = length(t)
+    Nb = length(mu)
 
-    u = similar(vx, 2, N, 1, ntsave) # [out_dim, Nx*Ny, Nb, Nt]
+    Ng = Np * Nb
+    vx = reshape(u[1:Ng    , :], 1, Np, Nb, Nt)
+    vy = reshape(u[1+Ng:end, :], 1, Np, Nb, Nt)
 
-    u[1, :, 1, :] = vx
-    u[2, :, 1, :] = vy
-
-    ## compute derivatives
-    # vxdx, vydy = begin
-    #     Nx, Nb, Nt = size(u)
-    #     u_re = reshape(u, Nx, Nb * Nt)
-    #
-    #     V  = make_transform(V, u_re; p=p)
-    #     Dx = gradientOp(V)[1]
-    #
-    #     du_re  = Dx * u_re
-    #     d2u_re = Dx * du_re
-    #
-    #     reshape(du_re, Nx, Nb, Nt), reshape(d2u_re, Nx, Nb, Nt)
-    # end
+    u = cat(vx, vy; dims = 1)
 
     if !isnothing(dir)
         mkpath(dir)
 
         mu = isnothing(mu) ? fill(nothing, size(u, 2)) |> Tuple : mu
-        x_save = reshape(vcat(x', y'), 2, N)
+        x_save = reshape(vcat(x', y'), 2, Np)
         grid = (Nx, Ny,)
         metadata = (; Nx, Ny, ν, grid, readme = "u [Nx, Nbatch, Nt]")
 
         filename = joinpath(dir, "data.jld2")
         jldsave(filename; x = x_save, u, t, mu, metadata)
-
 
         for case in 1:size(u, 3)
             x_re = reshape(x , Nx, Ny)
@@ -170,7 +159,7 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
             vx_slice = hcat(vx_slice...)
             
             anim = animate(vx_slice, V1D, t; w = 2.0, title = "vx(x=y)")
-            filename = joinpath(dir, "burgers_slice3" * ".gif")
+            filename = joinpath(dir, "burgers_case$(case)_slice3" * ".gif")
             gif(anim, filename, fps = 30)
 
             ############
@@ -188,14 +177,8 @@ function burgers2D(Nx, Ny, ν, mu = [0.9], p = nothing;
             for (i, id) in enumerate(It)
                 _u_re = vx_re[:, :, id]
 
-                p1 = heatmap(_x, _y, _u_re';
-                    xlabel = L"x", ylabel = L"y", cmap = :viridis,
-                )
-
-                p2 = meshplt(x_re, y_re, _u_re)
-
-                png(p1, joinpath(dir, "heatmap_$i"))
-                png(p2, joinpath(dir, "meshplt_$i"))
+                p1 = heatmap(_x, _y, _u_re'; xlabel = L"x", ylabel = L"y", cmap = :viridis,)
+                png(p1, joinpath(dir, "heatmap_case$(case)_$i"))
             end
         end
     end
