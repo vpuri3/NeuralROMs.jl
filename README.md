@@ -7,14 +7,15 @@ Specifically, we introduce [smooth neural field ROM (SNF-ROM)](https://arxiv.org
 
 ### Abstract
 
-Reduced order modeling lowers the computational cost of solving PDEs by learning a low-order spatial representation from data and dynamically evolving these representations using manifold projections of the governing equations.
-While commonly used, linear subspace reduced-order models (ROMs) are often suboptimal for problems with a slow decay of Kolmogorov $n$-width, such as advection-dominated fluid flows at high Reynolds numbers.
+Reduced order modeling lowers the computational cost of solving PDEs by learning a low-dimensional spatial representation from data and dynamically evolving these representations using manifold projections of the governing equations.
+The commonly used linear subspace reduced-order models (ROMs) are often suboptimal for problems with a slow decay of Kolmogorov n-width, such as advection-dominated fluid flows at high Reynolds numbers.
 There has been a growing interest in nonlinear ROMs that use state-of-the-art representation learning techniques to accurately capture such phenomena with fewer degrees of freedom.
-We propose smooth neural field ROM (SNF-ROM), a nonlinear reduced modeling framework that combines grid-free reduced representations with Galerkin projection.
+We propose smooth neural field ROM (SNF-ROM), a nonlinear reduced order modeling framework that combines grid-free reduced representations with Galerkin projection.
 The SNF-ROM architecture constrains the learned ROM trajectories to a smoothly varying path, which proves beneficial in the dynamics evaluation when the reduced manifold is traversed in accordance with the governing PDEs.
 Furthermore, we devise robust regularization schemes to ensure the learned neural fields are smooth and differentiable.
 This allows us to compute physics-based dynamics of the reduced system nonintrusively with automatic differentiation and evolve the reduced system with classical time-integrators.
 SNF-ROM leads to fast offline training as well as enhanced accuracy and stability during the online dynamics evaluation.
+Numerical experiments reveal that SNF-ROM is able to accelerate the full-order computation by up to 199x.
 We demonstrate the efficacy of SNF-ROM on a range of advection-dominated linear and nonlinear PDE problems where we consistently outperform state-of-the-art ROMs.
 
 ### Method
