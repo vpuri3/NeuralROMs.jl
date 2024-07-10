@@ -66,7 +66,7 @@ $ julia
 ```julia
 julia> import Pkg
 
-julia> Pkg.activate() # switch environment
+julia> Pkg.activate(".") # switch environment
 
 julia> Pkg.instantiate() # download environment
 ```
