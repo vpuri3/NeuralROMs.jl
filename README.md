@@ -5,10 +5,8 @@ Specifically, we introduce [smooth neural field ROM (SNF-ROM)](https://arxiv.org
 
 ## Smooth neural field ROM
 
-> SNF-ROM: Projection-based nonlinear reduced order modeling with smooth neural fields
->
-> [Vedant Puri](https://vpuri3.github.io/), [Aviral Prakash](https://scholar.google.com/citations?user=KgbgFP0AAAAJ&hl=en&oi=ao), [Levent Burak Kara](http://vdel.me.cmu.edu/), [Yongjie Jessica Zhang](https://www.meche.engineering.cmu.edu/faculty/zhang-computational-bio-modeling-lab.html)
->
+> SNF-ROM: Projection-based nonlinear reduced order modeling with smooth neural fields  
+> [Vedant Puri](https://vpuri3.github.io/), [Aviral Prakash](https://scholar.google.com/citations?user=KgbgFP0AAAAJ&hl=en&oi=ao), [Levent Burak Kara](http://vdel.me.cmu.edu/), [Yongjie Jessica Zhang](https://www.meche.engineering.cmu.edu/faculty/zhang-computational-bio-modeling-lab.html)  
 > [Project page](https://vpuri3.github.io/NeuralROMs.jl/dev/) / [Paper](https://arxiv.org/abs/2405.14890)
 
 #### Offline stage
