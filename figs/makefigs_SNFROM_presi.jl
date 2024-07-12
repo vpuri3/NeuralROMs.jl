@@ -28,7 +28,7 @@ function makeplots(
     qCAE = data["qCAE"] |> Array # encder prediction
     qSNL = data["qSNL"] |> Array
     qSNW = data["qSNW"] |> Array
-    
+
     #======================================================#
 
     in_dim  = size(xFOM, 1)
@@ -50,30 +50,36 @@ function makeplots(
 
     #======================================================#
 
-    fig1 = Figure(; size = (600, 400), backgroundcolor = :white, grid = :off)
+    fig1 = Figure(; size = (600, 200), backgroundcolor = :white, grid = :off)
 
     kw_ax = (;
     )
+
     kw_sc = (;
-        linewidth = 0.5,
-        color = :black,
+        linewidth = 0.0,
+        color = :blue,
         strokewidth = 0, 
-        markersize = 7.5,
+        markersize = 40,
     )
 
-    Ngif  = 250
+    Ngif  = 24 * 2
     Itgif = LinRange(1, Nt, Ngif) .|> Base.Fix1(round, Int)
-    Ix = LinRange(1, grid[1], 128) .|> Base.Fix1(round, Int)
+    Ix = LinRange(1, grid[1], 12) .|> Base.Fix1(round, Int)
 
     ax1 = Axis(fig1[1,1]; kw_ax...)
 
     hidedecorations!(ax1)
+    hidespines!(ax1)
 
     y = Observable(uFOM[Ix, Itgif[1]])
     p = scatterlines!(ax1, xFOM[Ix], y; kw_sc...)
 
-    if occursin(casename, "exp5")
+    if occursin("exp5", casename)
         ylims!(ax1, -2.5, 4.5)
+    elseif occursin("exp3", casename)
+        ylims!(ax1, 0.9, 1.7)
+    elseif occursin("exp4", casename)
+        ylims!(ax1, -0.1, 1.1)
     end
 
     function animstep(i)
@@ -81,7 +87,7 @@ function makeplots(
     end
 
     giffile = joinpath(outdir, casename * ".gif")
-    record(animstep, fig1, giffile, 1:length(Itgif); framerate = Ngif ÷ 5,)
+    record(animstep, fig1, giffile, 1:length(Itgif); framerate = Ngif ÷ 2,)
 
     # Itplt = [1, Nt ÷ 2, Nt]
     # p1 = scatterlines!(ax1, xFOM[Ix], uFOM[Ix, Itplt[1]]; kw_sc...)
@@ -122,8 +128,8 @@ e4files = (e4file1, e4file4, e4file7)
 
 # makeplots(e1file , outdir, "exp1")
 # makeplots(e2file , outdir, "exp2")
-# makeplots(e3file1, outdir, "exp3case1")
-# makeplots(e4file1, outdir, "exp4case1")
+makeplots(e3file1, outdir, "exp3case1")
+makeplots(e4file1, outdir, "exp4case1")
 # makeplots(e5file , outdir, "exp5")
 
 #======================================================#
