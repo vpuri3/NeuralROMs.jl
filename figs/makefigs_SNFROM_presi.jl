@@ -1,7 +1,17 @@
 #
-# using GLMakie
+using GLMakie
 using CairoMakie
 using LinearAlgebra, HDF5, JLD2, LaTeXStrings
+
+backend = CairoMakie
+
+if backend === GLMakie
+    @info "Activating GLMakie"
+    GLMakie.activate!()
+elseif backend === CairoMakie
+    @info "Activating CairoMakie"
+    CairoMakie.activate!()
+end
 
 #======================================================#
 
@@ -11,7 +21,16 @@ function makeplots(
     casename::String;
     ifdt::Bool = false,
     ifcrom::Bool = false,
+    ifFOM::Bool = true,
+    ifPCA::Bool = true,
+    ifCAE::Bool = true,
+    ifSNL::Bool = true,
+    ifSNW::Bool = true,
 )
+    framerate = 24
+    imgext = backend === GLMakie ? ".png" : ".svg"
+
+    #======================================================#
     mkpath(outdir)
 
     data = h5open(datafile)
@@ -88,9 +107,13 @@ function makeplots(
     if in_dim == 1
         xFOM = vec(xFOM)
     elseif in_dim == 2
-        # get diagonal
-        # xdiag = diag(xFOM[1, :, :])
-        # uidagFOM = hcat(Tuple(diag(uFOM[1, :, :, i]) for i in 1:Nt)...)
+        xdiagFOM = diag(xFOM[1, :, :])
+        udiagFOM = hcat(Tuple(diag(uFOM[1, :, :, i]) for i in 1:Nt)...)
+           
+        udiagPCA = hcat(Tuple(diag(uPCA[1, :, :, i]) for i in 1:Nt)...)
+        udiagCAE = hcat(Tuple(diag(uCAE[1, :, :, i]) for i in 1:Nt)...)
+        udiagSNL = hcat(Tuple(diag(uSNL[1, :, :, i]) for i in 1:Nt)...)
+        udiagSNW = hcat(Tuple(diag(uSNW[1, :, :, i]) for i in 1:Nt)...)
     end
 
     #======================================================#
@@ -153,9 +176,9 @@ function makeplots(
     # Blob animation
     #======================================================#
 
-    if occursin("exp3", casename) #| occursin("exp4", casename)
+    if occursin("exp3", casename) | occursin("exp3", casename)
 
-        Ngif  = 24 * 2
+        Ngif  = framerate * 2
         Itgif = LinRange(1, Nt, Ngif) .|> Base.Fix1(round, Int)
         Ix = LinRange(1, grid[1], 12) .|> Base.Fix1(round, Int)
         
@@ -178,10 +201,19 @@ function makeplots(
         hidedecorations!(axb)
         hidespines!(axb)
 
-        y1 = Observable(uFOM[Ix, Itgif[1]])
-        y2 = Observable(uFOM[ :, Itgif[1]])
-        scatter!(axb, xFOM[Ix], y1; kw_sc...)
-        lines!(  axb, xFOM[ :], y2; kw_ln...)
+        if in_dim == 1
+            y1 = Observable(uFOM[Ix, Itgif[1]])
+            y2 = Observable(uFOM[ :, Itgif[1]])
+            scatter!(axb, xFOM[Ix], y1; kw_sc...)
+            lines!(  axb, xFOM[ :], y2; kw_ln...)
+        elseif in_dim == 2
+
+            y1 = Observable(udiagFOM[Ix, Itgif[1]])
+            y2 = Observable(udiagFOM[ :, Itgif[1]])
+
+            scatter!(axb, xdiagFOM[Ix], y1; kw_sc...)
+            lines!(  axb, xdiagFOM[ :], y2; kw_ln...)
+        end
 
         if occursin("exp5", casename)
             ylims!(axb, -2.5, 4.5)
@@ -192,16 +224,23 @@ function makeplots(
         end
 
         function anim_blob(i)
-            y1[] = uFOM[Ix, Itgif[i]]
-            y2[] = uFOM[ :, Itgif[i]]
+            if in_dim == 1
+                y1[] = uFOM[Ix, Itgif[i]]
+                y2[] = uFOM[ :, Itgif[i]]
+            elseif in_dim == 2
+                y1[] = udiagFOM[Ix, Itgif[i]]
+                y2[] = udiagFOM[ :, Itgif[i]]
+            end
         end
 
         # p1 = scatterlines!(axb, xFOM[Ix], uFOM[Ix, Nt]; kw_sc...)
 
-        gifb = joinpath(outdir, casename * "-blob-FOM.gif")
-        save(joinpath(outdir, casename * "-blob-FOM0.svg"), figb)
-        record(anim_blob, figb, gifb, 1:Ngif; framerate = Ngif ÷ 2,)
-        save(joinpath(outdir, casename * "-blob-FOM1.svg"), figb)
+        gifb = joinpath(outdir, casename * "-figb.gif")
+        save(joinpath(outdir, casename * "-figb0" * imgext), figb)
+        record(anim_blob, figb, gifb, 1:Ngif; framerate,)
+        save(joinpath(outdir, casename * "-figb1" * imgext), figb)
+
+        println("$casename: FIGB done")
     end
 
     #======================================================#
@@ -210,7 +249,7 @@ function makeplots(
 
     i1, i2 = LinRange(1, Nt, 5) .|> Base.Fix1(round, Int) |> extrema
 
-    # placeholder
+    # placeholder to initialize observables
     ih = if occursin("exp3", casename) | occursin("exp4", casename)
         i1
     else
@@ -229,6 +268,15 @@ function makeplots(
     obs_uCAE = Observable(uCAE[ii..., ih])
     obs_uSNL = Observable(uSNL[ii..., ih])
     obs_uSNW = Observable(uSNW[ii..., ih])
+
+    if in_dim == 2
+        obs_udiagFOM = Observable(udiagFOM[:, ih])
+
+        obs_udiagPCA = Observable(udiagPCA[:, ih])
+        obs_udiagCAE = Observable(udiagCAE[:, ih])
+        obs_udiagSNL = Observable(udiagSNL[:, ih])
+        obs_udiagSNW = Observable(udiagSNW[:, ih])
+    end
 
     # E
     obs_ePCA = Observable(ePCA[ii..., ih])
@@ -286,6 +334,15 @@ function makeplots(
         obs_uSNL.val = @view uSNL[ii..., it]
         obs_uSNW.val = @view uSNW[ii..., it]
 
+        if in_dim == 2
+            obs_udiagFOM.val = @view udiagFOM[:, it]
+
+            obs_udiagPCA.val = @view udiagPCA[:, it]
+            obs_udiagCAE.val = @view udiagCAE[:, it]
+            obs_udiagSNL.val = @view udiagSNL[:, it]
+            obs_udiagSNW.val = @view udiagSNW[:, it]
+        end
+
         # E
         obs_ePCA.val = @view ePCA[ii..., it]
         obs_eCAE.val = @view eCAE[ii..., it]
@@ -299,8 +356,11 @@ function makeplots(
 
         # Q
         obs_qCAE.val = @view qCAE[:, 1:it]
-        obs_qSNL.val = @view qSNL[:, 1:it]
-        obs_qSNW.val = @view qSNW[:, 1:it]
+
+        if !occursin("exp4", casename) # TODO: rerun on Eagle
+            obs_qSNL.val = @view qSNL[:, 1:it]
+            obs_qSNW.val = @view qSNW[:, 1:it]
+        end
 
         # P
         obs_pCAE.val = @view pCAE[:, 1:it]
@@ -326,6 +386,15 @@ function makeplots(
         notify(obs_uCAE)
         notify(obs_uSNL)
         notify(obs_uSNW)
+
+        if in_dim == 2
+            notify(obs_udiagFOM)
+
+            notify(obs_udiagPCA)
+            notify(obs_udiagCAE)
+            notify(obs_udiagSNL)
+            notify(obs_udiagSNW)
+        end
 
         # E
         notify(obs_ePCA)
@@ -358,14 +427,13 @@ function makeplots(
 
 
     #======================================================#
-    # line plot animation + img
+    # everything
     #======================================================#
 
     figt = Figure(; size = ( 600, 400), backgroundcolor = :white, grid = :off)
     fige = Figure(; size = ( 600, 400), backgroundcolor = :white, grid = :off)
 
     figp = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
-    figc = Figure(; size = (1200, 400), backgroundcolor = :white, grid = :off)
 
     ylabel_t, ylabel_e = if occursin("exp3", casename) | occursin("exp4", casename)
         L"u(x, t; \mathbf{μ})", L"ε(t; \mathbf{μ})"
@@ -380,7 +448,8 @@ function makeplots(
     # FIGP
     #==========================#
 
-    if size(pCAE, 1) == 2
+    if size(pCAE, 1) == 2 & !(occursin("exp4", casename)) # TODO: get exp4 from eagle
+
         axkwp = (; xlabel = L"\tilde{u}_1(t)", ylabel = L"\tilde{u}_2(t)", xlabelsize = 16, ylabelsize = 16)
 
         axp1 = Axis(figp[1,1]; axkwp...)
@@ -423,40 +492,173 @@ function makeplots(
         Legend(figp[0,:], elems, labels; orientation = :horizontal, patchsize = (50, 10), framevisible = false)
 
         gifp = joinpath(outdir, casename * "-figp.gif")
-        record(anim_func, figp, gifp, 1:Ngif; framerate = 24)
-        save(joinpath(outdir, casename * "-figp.svg"), figp)
+        record(anim_func, figp, gifp, 1:Ngif; framerate)
+        save(joinpath(outdir, casename * "-figp" * imgext), figp)
     end
 
+    println("$casename: FIGP done")
+
     #==========================#
-    # FIGT, FIGC
+    # FIGT, FIGE
     #==========================#
 
-    colors = (:orange, :green, :blue, :red, :brown,)
-    styles = (:solid, :dash, :dashdot, :dashdotdot, :dot)
-    labels = (L"POD‐ROM$$", L"CAE‐ROM$$", L"SNFL‐ROM (ours)$$", L"SNFW‐ROM (ours)$$",)
-
-    levels = if occursin("exp2", casename)
-        n = 11
-
-        l1 = range(-0.2, 1.2, n)
-        l2 = range(-0.2, 1.2, n)
-        l3 = 10.0 .^ range(-4, 0, n)
-
-        l1, l2, l3
-    elseif occursin("exp4", casename)
-        n = 11
-
-        l1 = range(-0.2, 1.1, n)
-        l2 = range(-0.2, 1.1, n)
-        l3 = 10.0 .^ range(-5, 0, n)
-
-        l1, l2, l3
-    end
-
+    colors = (:black, :orange, :green, :blue, :red, :brown,)
+    styles = (:solid, :solid, :dash, :dashdot, :dashdotdot, :dot)
     labels = (L"FOM$$", L"POD‐ROM$$", L"CAE‐ROM$$", L"SNFL‐ROM (ours)$$", L"SNFW‐ROM (ours)$$")
 
-    lines!(axt, xFOM, uFOM[])
+    ln_kw = Tuple(
+        (; linewidth = 3, label = labels[i], color = colors[i], linestyle = styles[i],)
+        for i in 1:5
+    )
 
+    # FIGT
+    if in_dim == 1
+        ifFOM && lines!(axt, xFOM, obs_uFOM; ln_kw[1]...)
+
+        ifPCA && lines!(axt, xFOM, obs_uPCA; ln_kw[2]...)
+        ifCAE && lines!(axt, xFOM, obs_uCAE; ln_kw[3]...)
+        ifSNL && lines!(axt, xFOM, obs_uSNL; ln_kw[4]...)
+        ifSNW && lines!(axt, xFOM, obs_uSNW; ln_kw[5]...)
+
+    elseif in_dim == 2
+        ifFOM && lines!(axt, xdiagFOM, obs_udiagFOM; ln_kw[1]...)
+                 
+        ifPCA && lines!(axt, xdiagFOM, obs_udiagPCA; ln_kw[2]...)
+        ifCAE && lines!(axt, xdiagFOM, obs_udiagCAE; ln_kw[3]...)
+        ifSNL && lines!(axt, xdiagFOM, obs_udiagSNL; ln_kw[4]...)
+        ifSNW && lines!(axt, xdiagFOM, obs_udiagSNW; ln_kw[5]...)
+
+        axt.xlabel = L"x = y"
+    end
+
+    # FIGE
+    lines!(axe, obs_tFOM, obs_e2tPCA; ln_kw[2]...)
+    lines!(axe, obs_tFOM, obs_e2tCAE; ln_kw[3]...)
+    lines!(axe, obs_tFOM, obs_e2tSNL; ln_kw[4]...)
+    lines!(axe, obs_tFOM, obs_e2tSNW; ln_kw[5]...)
+
+    # legends
+    if occursin("exp1", casename)
+        figl1 = Figure(; size = ( 800, 100), backgroundcolor = :white, grid = :off)
+        Legend(figl1[1,1], axe, patchsize = (30, 10), orientation = :horizontal, framevisible = false)
+
+        figl2 = Figure(; size = ( 200, 200), backgroundcolor = :white, grid = :off)
+        Legend(figl2[1,1], axe; patchsize = (30, 30), orientation = :vertical, framevisible = false)
+
+        save(joinpath(outdir, "legend1" * imgext), figl1)
+        save(joinpath(outdir, "legend2" * imgext), figl2)
+    end
+    
+    if occursin("exp3", casename)
+        ylims!(fige.content[1], 10^-5, 10^-1)
+    end
+
+    gift = joinpath(outdir, casename * "-figt.gif")
+    gife = joinpath(outdir, casename * "-fige.gif")
+
+    record(anim_func, figt, gift, 1:Ngif; framerate)
+    record(anim_func, fige, gife, 1:Ngif; framerate)
+
+    println("$casename: FIGT done")
+    println("$casename: FIGE done")
+
+    #==========================#
+    # FIGC
+    #==========================#
+
+    figc1 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
+    figc2 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
+    figc3 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
+    figc4 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
+    figc5 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
+
+    if in_dim == 2
+        levels = if occursin("exp2", casename)
+            n = 11
+
+            l1 = range(-0.2, 1.2, n)     # FOM
+            l2 = range(-0.2, 1.2, n)     #
+            l3 = 10.0 .^ range(-4, 0, n) # ER
+
+            l1, l2, l3
+        elseif occursin("exp4", casename)
+            n = 11
+
+            l1 = range(-0.2, 1.1, n)     # FOM
+            l2 = range(-0.2, 1.1, n)     #
+            l3 = 10.0 .^ range(-5, 0, n) # ER
+
+            l1, l2, l3
+        end
+
+        cax_kw = (; aspect = 1, xlabel = L"x", ylabel = L"y")
+        ctr_kw = (; extendlow = :cyan, extendhigh = :magenta,)
+
+        axc1 = Axis(figc1[1,1]; cax_kw...)
+        axc2 = Axis(figc2[1,1]; cax_kw...)
+        axc3 = Axis(figc3[1,1]; cax_kw...)
+        axc4 = Axis(figc4[1,1]; cax_kw...)
+        axc5 = Axis(figc5[1,1]; cax_kw...)
+
+        # cf1 = contourf!(axc1, xdiagFOM, xdiagFOM, obs_uFOM; ctr_kw..., levels = levels[1])
+        # cf2 = contourf!(axc2, xdiagFOM, xdiagFOM, obs_ePCA; ctr_kw..., levels = levels[3], colorscale = log10,)
+        # cf3 = contourf!(axc3, xdiagFOM, xdiagFOM, obs_eCAE; ctr_kw..., levels = levels[3], colorscale = log10,)
+        # cf4 = contourf!(axc4, xdiagFOM, xdiagFOM, obs_eSNL; ctr_kw..., levels = levels[3], colorscale = log10,)
+        # cf5 = contourf!(axc5, xdiagFOM, xdiagFOM, obs_eSNW; ctr_kw..., levels = levels[3], colorscale = log10,)
+
+        hmp_kw = (; lowclip = :cyan, highclip = :magenta,)
+
+        cf1 = heatmap!(axc1, xdiagFOM, xdiagFOM, obs_uFOM; hmp_kw..., colorrange = extrema(levels[1]))
+        cf2 = heatmap!(axc2, xdiagFOM, xdiagFOM, @lift(abs.($obs_ePCA)); hmp_kw..., colorrange = extrema(levels[3]), colorscale = log10,)
+        cf3 = heatmap!(axc3, xdiagFOM, xdiagFOM, @lift(abs.($obs_eCAE)); hmp_kw..., colorrange = extrema(levels[3]), colorscale = log10,)
+        cf4 = heatmap!(axc4, xdiagFOM, xdiagFOM, @lift(abs.($obs_eSNL)); hmp_kw..., colorrange = extrema(levels[3]), colorscale = log10,)
+        cf5 = heatmap!(axc5, xdiagFOM, xdiagFOM, @lift(abs.($obs_eSNW)); hmp_kw..., colorrange = extrema(levels[3]), colorscale = log10,)
+
+        for ax in (axc1, axc2, axc3, axc4, axc5)
+            tightlimits!(ax)
+            hidedecorations!(ax, label = false)
+        end
+
+        Colorbar(figc1[1,2], cf1) # FOM
+        Colorbar(figc2[1,2], cf2) # ER
+        Colorbar(figc3[1,2], cf3)
+        Colorbar(figc4[1,2], cf4)
+        Colorbar(figc5[1,2], cf5)
+
+        gifc1 = joinpath(outdir, casename * "-figc1.mkv")
+
+        gifc2 = joinpath(outdir, casename * "-figc2.mkv")
+        gifc3 = joinpath(outdir, casename * "-figc3.mkv")
+        gifc4 = joinpath(outdir, casename * "-figc4.mkv")
+        gifc5 = joinpath(outdir, casename * "-figc5.mkv")
+
+        record(anim_func, figc1, gifc1, 1:Ngif; framerate)
+        save(joinpath(outdir, casename * "-figc1" * ".png"), figc1)
+        println("$casename: FIGC1 done")
+
+        record(anim_func, figc2, gifc2, 1:Ngif; framerate)
+        save(joinpath(outdir, casename * "-figc2" * ".png"), figc2)
+        println("$casename: FIGC2 done")
+
+        record(anim_func, figc3, gifc3, 1:Ngif; framerate)
+        save(joinpath(outdir, casename * "-figc3" * ".png"), figc3)
+        println("$casename: FIGC3 done")
+
+        record(anim_func, figc4, gifc4, 1:Ngif; framerate)
+        save(joinpath(outdir, casename * "-figc4" * ".png"), figc4)
+        println("$casename: FIGC4 done")
+
+        record(anim_func, figc5, gifc5, 1:Ngif; framerate)
+        save(joinpath(outdir, casename * "-figc5" * ".png"), figc5)
+        println("$casename: FIGC5 done")
+
+        println("$casename: FIGC done")
+    end
+
+    #==========================#
+    # DONE
+    #==========================#
+    return
 end
 
 #======================================================#
@@ -532,8 +734,8 @@ e4files = (e4file1, e4file4, e4file7)
 
 # makeplots(e1file , outdir, "exp1", ifdt = true)
 # makeplots(e2file , outdir, "exp2")
-makeplots(e3file1, outdir, "exp3case1")
-# makeplots(e4file1, outdir, "exp4case1")
+# makeplots(e3file4, outdir, "exp3case4")
+# makeplots(e4file4, outdir, "exp4case4")
 # makeplots(e5file , outdir, "exp5")
 
 #======================================================#
