@@ -446,11 +446,14 @@ function makeplots(
     linkaxes!(axt0, axt1)
     hideydecorations!(axt1; grid = false)
 
-    save(joinpath(outdir, casename * "p1.pdf"), figt) # T
-    save(joinpath(outdir, casename * "p2.pdf"), fige) # E
-    in_dim == 2 && save(joinpath(outdir, casename * "p3.pdf"), figc) # C
-    size(pCAE, 1) == 2 && save(joinpath(outdir, casename * "p4.pdf"), figp) # P vs P
-    save(joinpath(outdir, casename * "p5.pdf"), figq) # P vs T
+    for ext in (".pdf", ".svg")
+        save(joinpath(outdir, casename * "p1" * ext), figt) # T
+        save(joinpath(outdir, casename * "p2" * ext), fige) # E
+        save(joinpath(outdir, casename * "p5" * ext), figq) # P vs T
+
+        in_dim == 2 && save(joinpath(outdir, casename * "p3" * ext), figc) # C
+        size(pCAE, 1) == 2 && save(joinpath(outdir, casename * "p4" * ext), figp) # P vs P
+    end
 
     nothing
 end
@@ -614,7 +617,9 @@ function makeplots_parametric(
     xlims!(axp1, -8, -1)
     ylims!(axp1, -8, 13)
 
-    save(joinpath(outdir, "$(casename)p.pdf"), figp)
+    for ext in (".pdf", ".svg")
+        save(joinpath(outdir, "$(casename)p" * ext), figp)
+    end
 
     #===============================#
     # FIGE
@@ -775,12 +780,16 @@ function makeplots_parametric(
         hideydecorations!(axe3; grid = false)
     end
 
-    save(joinpath(outdir, "$(casename)e.pdf"), fige)
+    for ext in (".pdf", ".svg")
+        save(joinpath(outdir, "$(casename)e" * ext), fige)
+    end
 
     nothing
 end
 
 #======================================================#
+
+# P vs P
 function pplot!(ax, t, p, q, pdt = nothing;
     ifdt = false, 
     sckwq = (;),
@@ -801,6 +810,7 @@ function pplot!(ax, t, p, q, pdt = nothing;
     sq, lq, lp, lt
 end
 
+# P vs T
 function ptplot!(ax, t, p, q, pdt = nothing;
     ifdt = false, 
     lnkwq = (;),
@@ -850,16 +860,16 @@ e4files = (e4file1, e4file2, e4file3, e4file4, e4file5, e4file6, e4file7)
 
 #======================================================#
 
-# # EXP 1, 2, 5
-# makeplots(e1file, outdir, "exp1"; ifdt = true)
-# makeplots(e2file, outdir, "exp2"; ifdt = false)
-# makeplots(e5file, outdir, "exp5"; ifdt = true)
-#
-# # EXP 3
-# makeplots(e3file4, outdir, "exp3case4")
-# makeplots_parametric(e3files, outdir, "exp3"; ifdt = false)
-#
-# # EXP 4
+# EXP 1, 2, 5
+makeplots(e1file, outdir, "exp1"; ifdt = true)
+makeplots(e2file, outdir, "exp2"; ifdt = false)
+makeplots(e5file, outdir, "exp5"; ifdt = true)
+
+# EXP 3
+makeplots(e3file4, outdir, "exp3case4")
+makeplots_parametric(e3files, outdir, "exp3"; ifdt = false)
+
+# EXP 4
 makeplots(e4file4, outdir, "exp4case4")
 
 #======================================================#
