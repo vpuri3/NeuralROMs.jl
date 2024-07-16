@@ -725,6 +725,8 @@ function rom_schematic(
     lines!(ax, xyz; ln_kw...,)
     scatter!(ax, xyz[Isc]; sc_kw...)
 
+    save(joinpath(outdir, "schematic1.png"), fig)
+
     ## AE line
     lFOM = lines!(ax, xCAE; linewidth = 6, color = :green, linestyle = :dash,)
 
@@ -738,6 +740,9 @@ function rom_schematic(
     ## SVD plane
     sf_kw = (; colormap = [:black, :black], alpha = 0.5)
     surface!(ax, xPCA, yPCA, zPCA; sf_kw...)
+
+    # save(joinpath(outdir, "schematic2.png"), fig)
+    save(joinpath(outdir, "schematic3.png"), fig)
 
     ## DONE
     fig
@@ -837,7 +842,7 @@ e4files = (e4file1, e4file4, e4file7)
 # makeplots(e4file4, outdir, "exp4case4")
 # makeplots(e5file , outdir, "exp5")
 
-rs = rom_schematic(joinpath(outdir, "schematic/"))
+# rom_schematic(joinpath(outdir, "schematic/"))
 
 #======================================================#
 nothing
