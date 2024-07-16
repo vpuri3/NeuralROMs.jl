@@ -1,16 +1,22 @@
 #
 using GLMakie
 using CairoMakie
-using LinearAlgebra, HDF5, JLD2, LaTeXStrings
+using Random, LinearAlgebra, HDF5, JLD2, LaTeXStrings
 
-backend = CairoMakie
+rng = Random.default_rng()
+Random.seed!(rng, 0)
 
-if backend === GLMakie
-    @info "Activating GLMakie"
-    GLMakie.activate!()
-elseif backend === CairoMakie
-    @info "Activating CairoMakie"
-    CairoMakie.activate!()
+#======================================================#
+
+function activate_backend(backend::Symbol)
+    if backend === :GLMakie
+        @info "Activating GLMakie"
+        GLMakie.activate!()
+    elseif backend === :CairoMakie
+        @info "Activating CairoMakie"
+        CairoMakie.activate!()
+    end
+    nothing
 end
 
 #======================================================#
@@ -26,9 +32,13 @@ function makeplots(
     ifCAE::Bool = true,
     ifSNL::Bool = true,
     ifSNW::Bool = true,
+
+    backend::Symbol = :CairoMakie,
 )
+    activate_backend(backend)
+
     framerate = 24
-    imgext = backend === GLMakie ? ".png" : ".svg"
+    imgext = backend === :GLMakie ? ".png" : ".svg"
 
     #======================================================#
     mkpath(outdir)
@@ -660,6 +670,95 @@ function makeplots(
     #==========================#
     return
 end
+#======================================================#
+
+function rom_schematic(
+    outdir::String;
+    backend::Symbol = :GLMakie,
+)
+    mkpath(outdir)
+    activate_backend(backend)
+    #===============================#
+
+    N = 1000
+
+    t = LinRange(0, 2, N) |> Array
+
+    # points
+    xyz = map(t) do t
+        [t, 1 * sinpi(-1.5t), 1.5 * cospi(2t)] |> Point3f
+    end
+
+    # PCA
+    X = hcat(map(a -> [a.data...], xyz)...) # [3, N]
+    x̄ = vec(sum(X, dims = 2)) ./ N
+
+    U = svd(X .- x̄).U
+    u1, u2, u3 = U[:, 1], U[:, 2], U[:, 3]
+    U = hcat(u2, u3)
+
+    rPCA, sPCA = makegrid(10, 10)
+    xPCA = @. U[1,1] * rPCA + U[1,2] * sPCA .+ x̄[1]
+    yPCA = @. U[2,1] * rPCA + U[2,2] * sPCA .+ x̄[2]
+    zPCA = @. U[3,1] * rPCA + U[3,2] * sPCA .+ x̄[3]
+
+    # CAE
+    xCAE = xyz .+ 0.005 * collect(Point3f(rand(3)) for _ in 1:N)
+
+    ## FIG
+    fig = Figure(; size = (1000, 700), backgroundcolor = :white, grid = :off)
+    ax  = Axis3(fig[1,1];
+        azimuth = 0.3 * pi,
+        elevation = 0.0625 * pi,
+        aspect = (4,1,1),
+    )
+
+    hidedecorations!(ax)
+    hidespines!(ax)
+
+    ## FOM curve
+
+    ln_kw = (; linewidth = 6, color = :red, linestyle = :solid,)
+    sc_kw = (; color = :white, strokewidth = 2, markersize = 20)
+    Isc = LinRange(1, N, 8) .|> Base.Fix1(round, Int)
+
+    lines!(ax, xyz; ln_kw...,)
+    scatter!(ax, xyz[Isc]; sc_kw...)
+
+    ## AE line
+    lFOM = lines!(ax, xCAE; linewidth = 6, color = :green, linestyle = :dash,)
+
+    ## SVD projection
+    Xproj = U * (U' * (X .- x̄)) .+ x̄ # [3, N]
+    Xproj = map(x -> Point3f(x), eachcol(Xproj))
+    
+    lines!(ax, Xproj; linewidth = 6, color = :orange, linestyle = :dash)
+    # scatter!(ax, Xproj[Isc]; sc_kw..., alpha = 0.5)
+
+    ## SVD plane
+    sf_kw = (; colormap = [:black, :black], alpha = 0.5)
+    surface!(ax, xPCA, yPCA, zPCA; sf_kw...)
+
+    ## DONE
+    fig
+end
+
+function makegrid(Nx, Ny;
+    x0 = -1f0,
+    x1 =  1f0,
+    y0 = -1f0,
+    y1 =  1f0,
+)
+    rx = LinRange(x0, x1, Nx)
+    ry = LinRange(y0, y1, Ny)
+    ox = ones(Nx)
+    oy = ones(Ny)
+
+    x = rx .* oy'
+    y = ox .* ry'
+
+    x, y
+end
 
 #======================================================#
 
@@ -737,6 +836,8 @@ e4files = (e4file1, e4file4, e4file7)
 # makeplots(e3file4, outdir, "exp3case4")
 # makeplots(e4file4, outdir, "exp4case4")
 # makeplots(e5file , outdir, "exp5")
+
+rs = rom_schematic(joinpath(outdir, "schematic/"))
 
 #======================================================#
 nothing
