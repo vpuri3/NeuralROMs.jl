@@ -26,12 +26,14 @@ function makeplots(
     outdir::String,
     casename::String;
     ifdt::Bool = false,
+    onlydt::Bool = false,
     ifcrom::Bool = false,
     ifFOM::Bool = true,
     ifPCA::Bool = true,
     ifCAE::Bool = true,
     ifSNL::Bool = true,
     ifSNW::Bool = true,
+    iffigc::Bool = false,
 
     backend::Symbol = :CairoMakie,
 )
@@ -364,13 +366,10 @@ function makeplots(
         obs_e2tSNL.val = @view e2tSNL[1:it]
         obs_e2tSNW.val = @view e2tSNW[1:it]
 
-        # Q
-        obs_qCAE.val = @view qCAE[:, 1:it]
-
-        if !occursin("exp4", casename) # TODO: rerun on Eagle
-            obs_qSNL.val = @view qSNL[:, 1:it]
-            obs_qSNW.val = @view qSNW[:, 1:it]
-        end
+        # # Q
+        # obs_qCAE.val = @view qCAE[:, 1:it]
+        # obs_qSNL.val = @view qSNL[:, 1:it]
+        # obs_qSNW.val = @view qSNW[:, 1:it]
 
         # P
         obs_pCAE.val = @view pCAE[:, 1:it]
@@ -458,7 +457,7 @@ function makeplots(
     # FIGP
     #==========================#
 
-    if size(pCAE, 1) == 2 & !(occursin("exp4", casename)) # TODO: get exp4 from eagle
+    if size(pCAE, 1) == 2 #& !(occursin("exp4", casename)) # TODO: get exp4 from eagle
 
         axkwp = (; xlabel = L"\tilde{u}_1(t)", ylabel = L"\tilde{u}_2(t)", xlabelsize = 16, ylabelsize = 16)
 
@@ -467,12 +466,12 @@ function makeplots(
         axp3 = Axis(figp[1,3]; axkwp...)
 
         sckwq = (; color = :red  , markersize = 20,)
-        lnkwq = (; color = :red  , linewidth = 2.5,)
-        lnkwp = (; color = :blue , linewidth = 4.0,)
-        lnkwt = (; color = :green, linewidth = 4.0,)
+        lnkwq = (; color = :red  , linewidth = 3.0,)
+        lnkwp = (; color = :blue , linewidth = 5.0,)
+        lnkwt = (; color = :green, linewidth = 5.0,)
 
-        kwCAE = (; ifdt, sckwq, lnkwq, lnkwp, lnkwt)
-        kwSNF = (; ifdt, sckwq, lnkwq, lnkwp, lnkwt)
+        kwCAE = (; ifdt, onlydt, sckwq, lnkwq, lnkwp, lnkwt)
+        kwSNF = (; ifdt, onlydt, sckwq, lnkwq, lnkwp, lnkwt)
 
         sq, lq, lp, lt = pplot!(axp1, obs_tFOM, obs_pCAE, obs_qCAE, obs_pdtCAE; kwCAE...)
         sq, lq, lp, lt = pplot!(axp2, obs_tFOM, obs_pSNL, obs_qSNL, obs_pdtSNL; kwSNF...)
@@ -499,7 +498,11 @@ function makeplots(
             labels = [L"\text{Learned prediction}", L"\text{Dynamics evaluation}"]
         end
 
-        Legend(figp[0,:], elems, labels; orientation = :horizontal, patchsize = (50, 10), framevisible = false)
+        # Legend(figp[0,:], elems, labels; orientation = :horizontal, patchsize = (50, 10), framevisible = false)
+
+        for ax in (axp1, axp2, axp3)
+            hidedecorations!(ax; label = false,)
+        end
 
         gifp = joinpath(outdir, casename * "-figp.gif")
         record(anim_func, figp, gifp, 1:Ngif; framerate)
@@ -517,13 +520,13 @@ function makeplots(
     labels = (L"FOM$$", L"POD‐ROM$$", L"CAE‐ROM$$", L"SNFL‐ROM (ours)$$", L"SNFW‐ROM (ours)$$")
 
     ln_kw = Tuple(
-        (; linewidth = 3, label = labels[i], color = colors[i], linestyle = styles[i],)
+        (; linewidth = 5, label = labels[i], color = colors[i], linestyle = styles[i],)
         for i in 1:5
     )
 
     # FIGT
     if in_dim == 1
-        ifFOM && lines!(axt, xFOM, obs_uFOM; ln_kw[1]...)
+        ifFOM && lines!(axt, xFOM, obs_uFOM; ln_kw[1]..., linewidth = 3)
 
         ifPCA && lines!(axt, xFOM, obs_uPCA; ln_kw[2]...)
         ifCAE && lines!(axt, xFOM, obs_uCAE; ln_kw[3]...)
@@ -531,7 +534,7 @@ function makeplots(
         ifSNW && lines!(axt, xFOM, obs_uSNW; ln_kw[5]...)
 
     elseif in_dim == 2
-        ifFOM && lines!(axt, xdiagFOM, obs_udiagFOM; ln_kw[1]...)
+        ifFOM && lines!(axt, xdiagFOM, obs_udiagFOM; ln_kw[1]..., linewidth = 3)
                  
         ifPCA && lines!(axt, xdiagFOM, obs_udiagPCA; ln_kw[2]...)
         ifCAE && lines!(axt, xdiagFOM, obs_udiagCAE; ln_kw[3]...)
@@ -541,33 +544,40 @@ function makeplots(
         axt.xlabel = L"x = y"
     end
 
+    hidedecorations!(axt; label = false)
+    hidexdecorations!(axe; label = false)
+
+    if occursin("exp4", casename)
+        ylims!(axt, -0.1, 1.1)
+    end
+
     # FIGE
-    lines!(axe, obs_tFOM, obs_e2tPCA; ln_kw[2]...)
-    lines!(axe, obs_tFOM, obs_e2tCAE; ln_kw[3]...)
-    lines!(axe, obs_tFOM, obs_e2tSNL; ln_kw[4]...)
-    lines!(axe, obs_tFOM, obs_e2tSNW; ln_kw[5]...)
+    ifPCA && lines!(axe, obs_tFOM, obs_e2tPCA; ln_kw[2]...)
+    ifCAE && lines!(axe, obs_tFOM, obs_e2tCAE; ln_kw[3]...)
+    ifSNL && lines!(axe, obs_tFOM, obs_e2tSNL; ln_kw[4]...)
+    ifSNW && lines!(axe, obs_tFOM, obs_e2tSNW; ln_kw[5]...)
 
     # legends
     if occursin("exp1", casename)
         figl1 = Figure(; size = ( 800, 100), backgroundcolor = :white, grid = :off)
-        Legend(figl1[1,1], axe, patchsize = (30, 10), orientation = :horizontal, framevisible = false)
+        Legend(figl1[1,1], axt, patchsize = (30, 10), orientation = :horizontal, framevisible = false)
 
         figl2 = Figure(; size = ( 200, 200), backgroundcolor = :white, grid = :off)
-        Legend(figl2[1,1], axe; patchsize = (30, 30), orientation = :vertical, framevisible = false)
+        Legend(figl2[1,1], axt; patchsize = (30, 30), orientation = :vertical, framevisible = false)
 
         save(joinpath(outdir, "legend1" * imgext), figl1)
         save(joinpath(outdir, "legend2" * imgext), figl2)
     end
-    
+
     if occursin("exp3", casename)
-        ylims!(fige.content[1], 10^-5, 10^-1)
+        ylims!(fige.content[1], 10^-5, 10^-0)
     end
 
     gift = joinpath(outdir, casename * "-figt.gif")
-    gife = joinpath(outdir, casename * "-fige.gif")
-
     record(anim_func, figt, gift, 1:Ngif; framerate)
-    record(anim_func, fige, gife, 1:Ngif; framerate)
+
+    save(joinpath(outdir, casename * "-figt" * imgext), figt)
+    save(joinpath(outdir, casename * "-fige" * imgext), fige)
 
     println("$casename: FIGT done")
     println("$casename: FIGE done")
@@ -576,13 +586,14 @@ function makeplots(
     # FIGC
     #==========================#
 
-    figc1 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
-    figc2 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
-    figc3 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
-    figc4 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
-    figc5 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
+    if iffigc & in_dim == 2
+        
+        figc1 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
+        figc2 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
+        figc3 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
+        figc4 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
+        figc5 = Figure(; size = (500, 500), backgroundcolor = :white, grid = :off)
 
-    if in_dim == 2
         levels = if occursin("exp2", casename)
             n = 11
 
@@ -665,6 +676,7 @@ function makeplots(
         println("$casename: FIGC done")
     end
 
+
     #==========================#
     # DONE
     #==========================#
@@ -728,7 +740,7 @@ function rom_schematic(
     save(joinpath(outdir, "schematic1.png"), fig)
 
     ## AE line
-    lFOM = lines!(ax, xCAE; linewidth = 6, color = :green, linestyle = :dash,)
+    lFOM = lines!(ax, xCAE; linewidth = 6, color = :blue, linestyle = :dash,)
 
     ## SVD projection
     Xproj = U * (U' * (X .- x̄)) .+ x̄ # [3, N]
@@ -770,6 +782,7 @@ end
 # P vs P
 function pplot!(ax, t, p, q, pdt = nothing;
     ifdt = false, 
+    onlydt = false,
     sckwq = (;),
     lnkwq = (;),
     lnkwp = (;),
@@ -778,8 +791,8 @@ function pplot!(ax, t, p, q, pdt = nothing;
     if size(p[], 1) == 2
         sq = scatter!(ax, q[][:, 1:1]; marker = :star5, sckwq...)
         lq = lines!(ax, q; linestyle = :solid, lnkwq...)
-        lp = lines!(ax, p; linestyle = :dot  , lnkwp...)
-        lt = ifdt ? lines!(ax, pdt; linestyle = :dash, lnkwt...) : nothing
+        lp = !onlydt ? lines!(ax, p  ; linestyle = :dot , lnkwp...) : nothing
+        lt = ifdt    ? lines!(ax, pdt; linestyle = :dash, lnkwt...) : nothing
     else
         @warn "latent size size(p, 1) == $(size(p, 1)) not supported."
         return nothing, nothing, nothing, nothing
@@ -791,12 +804,13 @@ end
 # P vs T
 function ptplot!(ax, t, p, q, pdt = nothing;
     ifdt = false, 
+    onlydt = false,
     lnkwq = (;),
     lnkwp = (;),
     lnkwt = (;),
 )
     lq = series!(ax, t, q; linestyle = :solid, lnkwq...)
-    lp = series!(ax, t, p; linestyle = :dot  , lnkwp...)
+    lp = !onlydt ? series!(ax, t, p; linestyle = :dot  , lnkwp...) : nothing
     lt = if ifdt
         idt = LinRange(1, length(t), size(pdt, 2)) .|> Base.Fix1(round, Int)
         tdt = t[idt]
@@ -811,6 +825,7 @@ end
 #======================================================#
 # main
 #======================================================#
+
 outdir = joinpath(@__DIR__, "presentation")
 datadir = joinpath(@__DIR__, "datafiles")
 
@@ -836,13 +851,23 @@ e4files = (e4file1, e4file4, e4file7)
 
 #======================================================#
 
-# makeplots(e1file , outdir, "exp1", ifdt = true)
+# rom_schematic(joinpath(outdir, "schematic/"))
+
+makeplots(e1file , outdir, "exp1", ifdt = true, onlydt = true)
 # makeplots(e2file , outdir, "exp2")
 # makeplots(e3file4, outdir, "exp3case4")
 # makeplots(e4file4, outdir, "exp4case4")
 # makeplots(e5file , outdir, "exp5")
 
-# rom_schematic(joinpath(outdir, "schematic/"))
+# # EXP 1
+# makeplots(e1file, outdir, "exp1dt"; ifPCA = true, ifCAE = true, ifSNL = true , ifSNW = false,)
+#
+# # EXP 4
+# makeplots(e4file4, outdir, "exp4case4only0"; ifPCA = false, ifCAE = false, ifSNL = false, ifSNW = false,)
+# makeplots(e4file4, outdir, "exp4case4only1"; ifPCA = true , ifCAE = false, ifSNL = false, ifSNW = false,)
+# makeplots(e4file4, outdir, "exp4case4only2"; ifPCA = false, ifCAE = true , ifSNL = false, ifSNW = false,)
+# makeplots(e4file4, outdir, "exp4case4only3"; ifPCA = false, ifCAE = false, ifSNL = true , ifSNW = false,)
+# makeplots(e4file4, outdir, "exp4case4only123"; ifPCA = true, ifCAE = true, ifSNL = true , ifSNW = false,)
 
 #======================================================#
 nothing

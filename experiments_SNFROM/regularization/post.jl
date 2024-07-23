@@ -109,60 +109,112 @@ println("SNFW: $e4d2_s")
 
 #==============================================================#
 
+# xlabel = L"x"
+# xlabelsize = ylabelsize = 16
+#
+# fig = Makie.Figure(; size = (500, 400), backgroundcolor = :white, grid = :off)
+# # fig = Makie.Figure(; size = (800, 400), backgroundcolor = :white, grid = :off)
+#
+# ax1 = Makie.Axis(fig[1,1]; xlabel, ylabel = L"u(x)"  , xlabelsize, ylabelsize)
+# ax2 = Makie.Axis(fig[2,1]; xlabel, ylabel = L"u'(x)" , xlabelsize, ylabelsize)
+# ax3 = Makie.Axis(fig[3,1]; xlabel, ylabel = L"u''(x)", xlabelsize, ylabelsize)
+#
+# colors = [:black, :orange, :green, :blue, :red,]
+# styles = [:solid, :solid, :dash, :dashdot, :dashdotdot,]
+# labels = [L"Ground truth$$", L"No regularization$$", L"$L_2$ regularization $(γ=10^{-1})$", L"Lipschitz regularization $(α=5⋅10^{-5})$", L"Weight regularization $(γ=5⋅10^{-2})$",]
+#
+# kws = Tuple(
+#     (; color = colors[i], linestyle = styles[i], label = labels[i], linewidth = 2)
+#     for i in 1:5
+# )
+#
+# Makie.lines!(ax1, x,  u; kws[1]...)
+# Makie.lines!(ax1, x, u1; kws[2]...)
+# # Makie.lines!(ax1, x, u2; kws[3]...)
+# Makie.lines!(ax1, x, u3; kws[4]...)
+# Makie.lines!(ax1, x, u4; kws[5]...)
+#
+# Makie.lines!(ax2, x,  ud1; kws[1]...)
+# Makie.lines!(ax2, x, u1d1; kws[2]...)
+# # Makie.lines!(ax2, x, u2d1; kws[3]...)
+# Makie.lines!(ax2, x, u3d1; kws[4]...)
+# Makie.lines!(ax2, x, u4d1; kws[5]...)
+#
+# Makie.lines!(ax3, x,  ud2; kws[1]...)
+# Makie.lines!(ax3, x, u1d2; kws[2]...)
+# # Makie.lines!(ax3, x, u2d2; kws[3]...)
+# Makie.lines!(ax3, x, u3d2; kws[4]...)
+# Makie.lines!(ax3, x, u4d2; kws[5]...)
+#
+# Makie.Legend(fig[0,:], ax1; orientation = :horizontal, framevisible = false, nbanks = 2, patchsize = (30, 25))
+#
+# # Makie.Legend(fig[:,2], ax1; orientation = :vertical, framevisible = false, patchsize = (30,20))
+#
+# # y axes
+# Makie.hideydecorations!(ax1; label = false, grid = false)
+# Makie.hideydecorations!(ax2; label = false, grid = false)
+# Makie.hideydecorations!(ax3; label = false, grid = false)
+#
+# Makie.ylims!(ax3, -5, 5)
+#
+# # x axes
+# Makie.linkxaxes!(ax1, ax2, ax3)
+# Makie.hidexdecorations!(ax1)
+# Makie.hidexdecorations!(ax2)
+#
+# display(fig)
+# regpath = joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_reg.pdf")
+# save(regpath, fig)
+#==============================================================#
+
 xlabel = L"x"
 xlabelsize = ylabelsize = 16
 
-fig = Makie.Figure(; size = (500, 400), backgroundcolor = :white, grid = :off)
-# fig = Makie.Figure(; size = (800, 400), backgroundcolor = :white, grid = :off)
+fig = Makie.Figure(; size = (1000, 600), backgroundcolor = :white, grid = :off)
 
 ax1 = Makie.Axis(fig[1,1]; xlabel, ylabel = L"u(x)"  , xlabelsize, ylabelsize)
-ax2 = Makie.Axis(fig[2,1]; xlabel, ylabel = L"u'(x)" , xlabelsize, ylabelsize)
-ax3 = Makie.Axis(fig[3,1]; xlabel, ylabel = L"u''(x)", xlabelsize, ylabelsize)
+ax2 = Makie.Axis(fig[2,1]; xlabel, ylabel = L"u(x)"  , xlabelsize, ylabelsize)
+ax3 = Makie.Axis(fig[3,1]; xlabel, ylabel = L"u(x)"  , xlabelsize, ylabelsize)
 
 colors = [:black, :orange, :green, :blue, :red,]
 styles = [:solid, :solid, :dash, :dashdot, :dashdotdot,]
 labels = [L"Ground truth$$", L"No regularization$$", L"$L_2$ regularization $(γ=10^{-1})$", L"Lipschitz regularization $(α=5⋅10^{-5})$", L"Weight regularization $(γ=5⋅10^{-2})$",]
 
 kws = Tuple(
-    (; color = colors[i], linestyle = styles[i], label = labels[i], linewidth = 2)
+    (; color = colors[i], linestyle = styles[i], label = labels[i], linewidth = 12)
     for i in 1:5
 )
 
-Makie.lines!(ax1, x,  u; kws[1]...)
+# Fig 1
+Makie.lines!(ax1, x,  u; kws[1]..., linewidth = 20)
 Makie.lines!(ax1, x, u1; kws[2]...)
-# Makie.lines!(ax1, x, u2; kws[3]...)
 Makie.lines!(ax1, x, u3; kws[4]...)
 Makie.lines!(ax1, x, u4; kws[5]...)
 
-Makie.lines!(ax2, x,  ud1; kws[1]...)
+# Fig 2
+Makie.lines!(ax2, x,  ud1; kws[1]..., linewidth = 20)
 Makie.lines!(ax2, x, u1d1; kws[2]...)
-# Makie.lines!(ax2, x, u2d1; kws[3]...)
 Makie.lines!(ax2, x, u3d1; kws[4]...)
 Makie.lines!(ax2, x, u4d1; kws[5]...)
 
-Makie.lines!(ax3, x,  ud2; kws[1]...)
+# Fig 3
+Makie.lines!(ax3, x,  ud2; kws[1]..., linewidth = 20)
 Makie.lines!(ax3, x, u1d2; kws[2]...)
-# Makie.lines!(ax3, x, u2d2; kws[3]...)
 Makie.lines!(ax3, x, u3d2; kws[4]...)
 Makie.lines!(ax3, x, u4d2; kws[5]...)
 
-Makie.Legend(fig[0,:], ax1; orientation = :horizontal, framevisible = false, nbanks = 2, patchsize = (30, 25))
+Makie.hidedecorations!(ax1)
+Makie.hidedecorations!(ax2)
+Makie.hidedecorations!(ax3)
 
-# Makie.Legend(fig[:,2], ax1; orientation = :vertical, framevisible = false, patchsize = (30,20))
+Makie.xlims!(ax1, -1, 1)
+Makie.xlims!(ax2, -1, 1)
+Makie.xlims!(ax3, -1, 1)
 
-# y axes
-Makie.hideydecorations!(ax1; label = false, grid = false)
-Makie.hideydecorations!(ax2; label = false, grid = false)
-Makie.hideydecorations!(ax3; label = false, grid = false)
-
-Makie.ylims!(ax3, -5, 5)
-
-# x axes
-Makie.linkxaxes!(ax1, ax2, ax3)
-Makie.hidexdecorations!(ax1)
-Makie.hidexdecorations!(ax2)
+Makie.ylims!(ax3, -6, 7)
 
 display(fig)
-regpath = joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_reg.pdf")
+regpath = joinpath(pkgdir(NeuralROMs), "figs", "presentation", "method", "exp_reg_full.svg")
 save(regpath, fig)
+nothing
 #==============================================================#
