@@ -34,6 +34,52 @@ function (hn::HyperNet)((x, y)::T, ps, st::NamedTuple) where {T <: Tuple}
 end
 
 #======================================================#
+# Periodic BC layer
+#======================================================#
+
+export PeriodicLayer
+
+"""
+Periodic BC layer (For 1D only rn)
+based on
+- https://github.com/julesberman/RSNG/blob/main/rsng/dnn.py
+- https://github.com/Algopaul/ng_embeddings/blob/main/embedded_ng.ipynb
+"""
+struct PeriodicLayer{I,L,P} <: Lux.AbstractExplicitLayer
+    init::I # should be U(0, 2)
+    width::L
+    periods::P
+end
+
+function PeriodicLayer(width::Integer, periods; init = rand32)
+    PeriodicLayer(init, width, periods)
+end
+
+function Lux.initialparameters(rng::Random.AbstractRNG, l::PeriodicLayer)
+    (;
+        ϕ = l.init(rng, l.width, length(l.periods)),
+    )
+end
+
+function Lux.initialstates(::Random.AbstractRNG, l::PeriodicLayer)
+    T = eltype(l.periods)
+    (;
+        ω = @. T(2) / [l.periods...]
+    )
+end
+
+# Lux.parameterlength(l::PeriodicLayer) = l.len
+# Lux.statelength(l::PeriodicLayer) = length(l.periods)
+
+function (l::PeriodicLayer)(x::AbstractArray, ps, st::NamedTuple)
+    y = @. cospi(st.ω * x + ps.ϕ)
+    return y, st
+end
+
+#======================================================#
+# Permute Layer
+#======================================================#
+
 function PermuteLayer(perm::NTuple{D, Int}) where{D}
     WrappedFunction(Base.Fix2(permutedims, perm))
 end
@@ -101,6 +147,9 @@ function (l::Atten)(x::AbstractArray, ps, st::NamedTuple)
 
     return y, st
 end
+
+#======================================================#
+# Diagonal scaling layer
 #======================================================#
 
 """
@@ -130,7 +179,11 @@ function (l::Diag)(x::AbstractArray, ps, st::NamedTuple)
 
     return y, st
 end
+
 #======================================================#
+# SPLIT ROWS
+#======================================================#
+
 """
 SplitRows
 

@@ -189,7 +189,6 @@ function SpatialHash(
 ) where{D}
 
     embedding = Embedding(nEmbeddings => out_dims; init_weight)
-
     FeatureGrid{D}(shape, index_hash, interpfun, embedding)
 end
 
@@ -202,14 +201,12 @@ function SpatialGrid(
 
     nEmbeddings = prod(shape)
     embedding = Embedding(nEmbeddings => out_dims; init_weight)
-
     FeatureGrid{D}(shape, index_grid, interpfun, embedding)
 end
 
 function (l::FeatureGrid)(xyz::AbstractArray, p, st)
     @assert size(xyz, 1) == length(l.shape)
     wxyz, Ibbox = Zygote.@ignore get_boundingbox(xyz, l.shape, l.embedding.in_dims, l.indexfun)
-
     l((wxyz, Ibbox), p, st)
 end
 

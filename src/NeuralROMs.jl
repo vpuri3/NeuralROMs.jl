@@ -66,6 +66,10 @@ abstract type AbstractSolveScheme end
 export AbstractNeuralModel, AbstractPDEProblem, AbstractTimeAlg,
     AbstractTimeIntegrator, AbstractSolveScheme
 
+include("helpers.jl")
+export loaddata, loadmodel, eval_model,
+    normalize_x, normalize_u, normalize_t
+
 include("utils.jl")
 export init_siren, scale_init, scaled_siren_init
 
