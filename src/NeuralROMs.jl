@@ -84,7 +84,10 @@ export
     finitediff_deriv1, finitediff_deriv2, finitediff_deriv4, finitediff_jacobian
 
 include("layers/basic.jl")
-export Atten, Diag, PermutedBatchNorm, SplitRows, HyperNet
+export
+    HyperNet,
+    PeriodicLayer,
+    PermutedBatchNorm, PermuteLayer, SplitRows
 
 include("layers/encoder_decoder.jl")
 export

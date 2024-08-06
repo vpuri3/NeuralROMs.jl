@@ -23,6 +23,7 @@ function fieldplot(
     Tdata::AbstractArray,
     Udata::AbstractArray,
     Upred::AbstractArray, 
+    ps::AbstractArray,
     grid::Tuple,
     outdir::String,
     prefix::String,
@@ -108,13 +109,27 @@ function fieldplot(
         plt = plot(;
             title = "Error evolution, case = $(case)",
             xlabel = L"Time ($s$)", ylabel = L"ε(t)", legend = false,
-            yaxis = :log, ylims = (10^-5, 1.0),
+            yaxis = :log, ylims = (10^-8, 1.0),
         )
 
         plot!(plt, Tdata, er; linewidth, palette, ylabel = "ε(t)")
         png(plt, joinpath(outdir, "$(prefix)_e$(od)_case$(case)"))
     end
-    
+
+    # TODO: make parameter evolution plots
+    if size(ps, 1) < 5
+        psdir = joinpath(outdir, "plt_ps")
+        mkpath(psdir)
+
+        for i in axes(ps, 1)
+            p = @view ps[i, :]
+            plt = plot(; xlabel = "Time (t)", ylabel = "Param", title = "Param $(i)")
+            plot!(plt, Tdata, p; w = 2, c = :black,)
+            png(plt, joinpath(psdir, "plt_p$(i)"))
+        end
+    end
+
+    nothing
 end
 
 #======================================================#

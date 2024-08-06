@@ -37,8 +37,6 @@ end
 # Periodic BC layer
 #======================================================#
 
-export PeriodicLayer
-
 """
 Periodic BC layer (For 1D only rn)
 based on
@@ -68,13 +66,60 @@ function Lux.initialstates(::Random.AbstractRNG, l::PeriodicLayer)
     )
 end
 
-# Lux.parameterlength(l::PeriodicLayer) = l.len
-# Lux.statelength(l::PeriodicLayer) = length(l.periods)
+Lux.statelength(l::PeriodicLayer) = length(l.periods)
+Lux.parameterlength(l::PeriodicLayer) = l.width * length(l.periods)
 
 function (l::PeriodicLayer)(x::AbstractArray, ps, st::NamedTuple)
     y = @. cospi(st.ω * x + ps.ϕ)
     return y, st
 end
+
+#======================================================#
+# Gaussian Layer (only 1D for now)
+#======================================================#
+
+export GaussianLayer
+
+struct GaussianLayer{F,I} <: Lux.AbstractExplicitLayer
+    init::F
+    in_dim::I
+    out_dim::I
+end
+
+function GaussianLayer(in_dim::Integer, out_dim::Integer; init = rand32)
+    @assert in_dim == out_dim == 1
+    GaussianLayer(init, in_dim, out_dim)
+end
+
+function Lux.initialparameters(rng::Random.AbstractRNG, l::GaussianLayer)
+    (;
+        x̄  = l.init(rng, l.in_dim),
+        σi = l.init(rng, l.in_dim),
+    )
+end
+
+function Lux.initialstates(rng::Random.AbstractRNG, l::GaussianLayer)
+    T = l.init(rng, 1) |> eltype
+    (;
+        c = T[-0.5],
+    )
+end
+
+function (l::GaussianLayer)(x::AbstractArray, ps, st::NamedTuple)
+    z = @. (x - ps.x̄) * ps.σi
+    # y = _rbf(z)
+    y = @. exp( st.c * z^2)
+    return y, st
+end
+
+# @inline _rbf(x) = @. exp(-x^2)
+# function ChainRulesCore.rrule(::typeof(_rbf), x)
+#     T = eltype(x)
+#     y = _rbf(x)
+#     @inline ∇_rbf(ȳ) = ChainRulesCore.NoTangent(), @fastmath(@. -T(2) * x * y * ȳ)
+#
+#     y, ∇_rbf
+# end
 
 #======================================================#
 # Permute Layer
@@ -85,6 +130,9 @@ function PermuteLayer(perm::NTuple{D, Int}) where{D}
 end
 
 #======================================================#
+# PermutedBatchNorm
+#======================================================#
+
 """
 $SIGNATURES
 
@@ -100,84 +148,6 @@ function PermutedBatchNorm(c, num_dims) # assumes channel_dim = 1
         BatchNorm(c),
         Base.Fix2(permutedims, perm1),
     )
-end
-#======================================================#
-"""
-Attention Layer
-
-single layer model with no nonlinearity (single head linear attention)
-
-u = NN(f)
-q = Wq * u
-k = Wk * u
-v = Wv * u
-
-v = activation(q * k') * u
-"""
-struct Atten{I, TI, F} <: Lux.AbstractExplicitLayer
-    in_dims::I
-    out_dims::I
-    init::TI
-    activation::F
-end
-
-function Atten(in_dims::Int, out_dims::Int; init = Lux.glorot_uniform,
-               activation = identity)
-    Atten(in_dims, out_dims, init, activation)
-end
-
-function Lux.initialparameters(rng::Random.AbstractRNG, l::Atten)
-    (;
-     Wq = l.init(rng, l.out_dims, l.in_dims),
-     Wk = l.init(rng, l.out_dims, l.in_dims),
-     Wv = l.init(rng, l.out_dims, l.in_dims),
-    )
-end
-
-Lux.initialstates(::Random.AbstractRNG, l::Atten) = (;)
-Lux.parameterlength(l::Atten) = 3 * l.in_dims * l.out_dims
-Lux.statelength(::Atten) = 0
-
-function (l::Atten)(x::AbstractArray, ps, st::NamedTuple)
-    q = ps.Wq * x
-    k = ps.Wk * x
-    v = ps.Wv * x
-
-    y = l.activation(q * k') * v
-
-    return y, st
-end
-
-#======================================================#
-# Diagonal scaling layer
-#======================================================#
-
-"""
-Diagonal layer
-"""
-struct Diag{L, I} <: Lux.AbstractExplicitLayer
-    len::L
-    init::I
-end
-
-Diag(len::Int; init = Lux.glorot_uniform) = Diag(len, init)
-
-function Lux.initialparameters(rng::Random.AbstractRNG, l::Diag)
-    (;
-     diag = l.init(rng, l.len),
-    )
-end
-
-Lux.initialstates(::Random.AbstractRNG, l::Diag) = (;)
-Lux.parameterlength(l::Diag) = l.len
-Lux.statelength(::Diag) = 0
-
-function (l::Diag)(x::AbstractArray, ps, st::NamedTuple)
-
-    D = Diagonal(ps.diag)
-    y = D * x
-
-    return y, st
 end
 
 #======================================================#

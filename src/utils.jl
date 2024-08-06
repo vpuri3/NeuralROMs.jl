@@ -120,6 +120,7 @@ function unnormalizedata(
 )
     (u .* σ) .+ μ
 end
+
 #===========================================================#
 # periodic differentiation matrices
 # 2nd order central finite difference
