@@ -9,7 +9,8 @@ joinpath(pkgdir(NeuralROMs), "experiments_NGN", "ng_models.jl") |> include
 rng = Random.default_rng()
 Random.seed!(rng, 199)
 
-prob = Advection1D(0.25f0)
+prob = AdvectionDiffusion1D(0.25f0, 0f-2)
+# prob = AdvectionDiffusion1D(0.25f0, 1f-2)
 datafile  = joinpath(@__DIR__, "data_advect1D/", "data.jld2")
 device = Lux.gpu_device()
 
@@ -21,6 +22,7 @@ data_kws = (; Ix = :, It = :)
 #------------------------------------------------------#
 # train_params = (;)
 # evolve_params = (;)
+#
 # makemodel = makemodelDNN
 # modeldir  = joinpath(@__DIR__, "dump_dnn")
 # modelfile = joinpath(modeldir, "projectT0", "model_08.jld2")
@@ -29,14 +31,12 @@ data_kws = (; Ix = :, It = :)
 # Gaussian
 #------------------------------------------------------#
 train_params = (;)
-evolve_params = (;)
+# data_kws = (; Ix = 1:64:256, It = :)
+evolve_params = (; data_kws)
+
 makemodel = makemodelGaussian
 modeldir  = joinpath(@__DIR__, "dump_gaussian")
 modelfile = joinpath(modeldir, "projectT0", "model.jld2")
-
-# TODO
-# - is error due to large time-step size or due to improper integration
-# - see how error varies with number of collocation points.
 
 #------------------------------------------------------#
 # Evolve

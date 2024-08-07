@@ -5,17 +5,8 @@ using Plots, ColorSchemes, LaTeXStrings
 
 #======================================================#
 
-get_prob_domain(::Advection1D) = (-1f0, 1f0)
-get_prob_domain(::Advection2D) = (-1f0, 1f0), (-1f0, 1f0)
-get_prob_domain(::BurgersViscous1D) = (0f0, 2f0)
-get_prob_domain(::BurgersViscous2D) = (-0.25f0, 0.75f0), (-0.25f0, 0.75f0)
-get_prob_domain(::KuramotoSivashinsky1D) = Float32.(-pi, pi)
-
-get_prob_grid(::Advection1D) = (128,)
-get_prob_grid(::Advection2D) = (128, 128)
-get_prob_grid(::BurgersViscous1D) = (1024,)
-get_prob_grid(::BurgersViscous2D) = (512, 512)
-get_prob_grid(::KuramotoSivashinsky1D) = (256,)
+get_prob_grid(::AdvectionDiffusion1D) = (128,)
+get_prob_domain(::AdvectionDiffusion1D) = (-1f0, 1f0)
 
 #===================================================#
 function fieldplot(
@@ -108,15 +99,16 @@ function fieldplot(
         # e(t)
         plt = plot(;
             title = "Error evolution, case = $(case)",
-            xlabel = L"Time ($s$)", ylabel = L"ε(t)", legend = false,
-            yaxis = :log, ylims = (10^-8, 1.0),
+            xlabel = L"Time ($s$)",
+            ylabel = L"ε(t)", legend = false,
+            yaxis = :log,
+            ylims = (10^-8, 1.0),
         )
 
         plot!(plt, Tdata, er; linewidth, palette, ylabel = "ε(t)")
         png(plt, joinpath(outdir, "$(prefix)_e$(od)_case$(case)"))
     end
 
-    # TODO: make parameter evolution plots
     if size(ps, 1) < 5
         psdir = joinpath(outdir, "plt_ps")
         mkpath(psdir)

@@ -18,7 +18,6 @@ begin
 end
 
 #===========================================================#
-
 function ngProject(
     prob::AbstractPDEProblem,
     datafile::String,
@@ -74,8 +73,9 @@ function ngProject(
     model, ST, metadata = makemodelfunc(_data, train_params, periods, metadata, projectdir; rng, verbose, device)
 
     #-------------------------------------------#
+    # visualize
+    #-------------------------------------------#
 
-    # TODO: visualize projection
     if makeplot
         Upred = eval_model(model, Xdata; batchsize = 10, device)
 
@@ -157,14 +157,15 @@ function ngEvolve(
     # solver setup
     #==============#
 
-    # time-stepper
-    Δt = haskey(evolve_params, :Δt) ? evolve_params.Δt : -(-(extrema(Tdata)...))
-    timealg = haskey(evolve_params, :timealg) ? evolve_params.timealg : EulerForward()
+    T        = haskey(evolve_params, :T       ) ? evolve_params.T        : Float32
+    Δt       = haskey(evolve_params, :Δt      ) ? evolve_params.Δt       : -(-(extrema(Tdata)...)) |> T
+    timealg  = haskey(evolve_params, :timealg ) ? evolve_params.timealg  : EulerForward()
     adaptive = haskey(evolve_params, :adaptive) ? evolve_params.adaptive : true
 
     # autodiff
     ϵ_xyz = nothing
-    autodiff = autodiff_xyz = AutoForwardDiff()
+    autodiff = AutoForwardDiff()
+    autodiff_xyz = AutoForwardDiff()
 
     # solver
     linsolve = QRFactorization()
@@ -172,7 +173,8 @@ function ngEvolve(
     nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
     nlsmaxiters = 20
 
-    scheme = GalerkinProjection(linsolve, 1f-3, 1f-6) # abstol_inf, abstol_mse
+    # scheme
+    scheme = GalerkinProjection(linsolve, T(1f-3), T(1f-6)) # abstol_inf, abstol_mse
 
     #==============#
     # Hyper-reduction
@@ -184,15 +186,15 @@ function ngEvolve(
     Xd = @view Xdata[:, IX]
     Td = @view Tdata[:]
 
-    # create data
+    # create data arrays
     data = (Xd, U0, Td)
-    data = Array.(data) # ensure no subarrays
+    data = map(x -> T.(x), data) # ensure no subarrays
 
     #==============#
     # evolve
     #==============#
 
-    args = (prob, device(model), timealg, scheme, (device(data[1:2])..., data[3]), device(p0), Δt)
+    args = (prob, device(model), timealg, scheme, (device(data[1:2])..., data[3]), device(p0 .|> T), Δt)
     kwargs = (; adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,)
     
     if benchmark # assume CUDA
@@ -235,11 +237,12 @@ function ngEvolve(
     # field visualizations
     grid = get_prob_grid(prob)
     fieldplot(Xdata, Tdata, Ud, Up, ps, grid, modeldir, "evolve", case)
-    
+
     # save files
     filename = joinpath(modeldir, "evolve$(case).jld2")
     jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps)
 
+    # return
     (Xdata, Tdata, Ud, Up, ps), statsROM
 end
 #======================================================#

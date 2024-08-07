@@ -3,15 +3,16 @@
 # Gaussian
 #======================================================#
 function makemodelGaussian(
-    data,
-    train_params,
+    data::NTuple{2,Any},
+    train_params::NamedTuple,
     periods,
-    metadata,
-    dir;
+    metadata::NamedTuple,
+    dir::String;
     rng::Random.AbstractRNG = Random.default_rng(),
     verbose::Bool = true,
     device = Lux.gpu_device()
 )
+
     in_dim  = size(data[1], 1)
     out_dim = size(data[2], 1)
 
@@ -61,10 +62,8 @@ function makemodelGaussian(
     p.decoder.σi .= 1 / 0.1f0
 
     #-------------------------------------------#
-
     model = NN, p, st
     jldsave(joinpath(dir, "model.jld2"); model, ST, metadata)
-
     #-------------------------------------------#
 
     model, ST, metadata
