@@ -28,8 +28,8 @@ function loaddata(datafile::String; verbose::Bool = true)
         println("output size $out_dim.")
     end
 
-    @assert eltype(x) === Float32
-    @assert eltype(u) === Float32
+    @assert eltype(x) ∈ (Float32, Float64)
+    @assert eltype(u) ∈ (Float32, Float64)
 
     mu = isnothing(mu) ? fill(nothing, size(u, 3)) |> Tuple : mu
     mu = isa(mu, AbstractArray) ? vec(mu) : mu

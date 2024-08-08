@@ -195,7 +195,7 @@ function ngEvolve(
 
     # create data arrays
     data = (Xd, U0, Td)
-    data = map(x -> T.(x), data) # ensure no subarrays
+    data = map(x -> T.(x), data) # ensure no subarrays, correct eltype
 
     #==============#
     # evolve
@@ -242,7 +242,7 @@ function ngEvolve(
     end
 
     # field visualizations
-    fieldplot(Xdata, Tdata, Ud, Up, ps, get_prob_grid(grid), modeldir, "evolve", case)
+    fieldplot(Xdata, Tdata, Ud, Up, ps, get_prob_grid(prob), modeldir, "evolve", case)
 
     # save files
     filename = joinpath(modeldir, "evolve$(case).jld2")

@@ -5,7 +5,7 @@ using Plots, ColorSchemes, LaTeXStrings
 
 #======================================================#
 
-get_prob_grid(::AdvectionDiffusion1D) = (128,)
+get_prob_grid(::AdvectionDiffusion1D) = (256,)
 get_prob_domain(::AdvectionDiffusion1D) = (-1f0, 1f0)
 
 #===================================================#
