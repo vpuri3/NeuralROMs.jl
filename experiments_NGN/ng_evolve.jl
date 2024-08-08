@@ -32,7 +32,6 @@ function ngProject(
     device = Lux.gpu_device(),
 )
 
-    # isdir(modeldir) && rm(modeldir; recursive = true)
     projectdir = joinpath(modeldir, "project$(case)")
     mkpath(projectdir)
 
@@ -42,6 +41,8 @@ function ngProject(
 
     # load data
     Xdata, Tdata, mu, Udata, md_data = loaddata(datafile; verbose)
+
+    T = eltype(Xdata)
 
     # get sizes
     in_dim  = size(Xdata, 1)
@@ -58,8 +59,10 @@ function ngProject(
     Tdata = @view Tdata[data_kws.It]
 
     # normalize
-    Xnorm, x̄, σx = normalize_x(Xdata)
-    Unorm, ū, σu = normalize_u(Udata)
+    Xnorm, x̄, σx = normalize_x(Xdata, [-1, 1])
+    # Unorm, ū, σu = normalize_u(Udata)
+    # Unorm, ū, σu = Udata, T(Udata)[0], T(Udata)[1]
+    Unorm, ū, σu = normalize_u(Udata, [-1, 1])
 
     readme = ""
     data_kws = (; case, data_kws...,)
@@ -68,7 +71,11 @@ function ngProject(
     )
 
     _data = (Xnorm, Unorm[:, :, case, begin]) .|> Array
-    periods = -(-(get_prob_domain(prob)...)) ./ σx
+    periods = repeat(T[2], in_dim)
+
+    # @show extrema(Xnorm)
+    # @show σx, periods
+    # @assert false
 
     model, ST, metadata = makemodelfunc(_data, train_params, periods, metadata, projectdir; rng, verbose, device)
 
@@ -77,7 +84,8 @@ function ngProject(
     #-------------------------------------------#
 
     if makeplot
-        Upred = eval_model(model, Xdata; batchsize = 10, device)
+        neuralmodel = NeuralModel(model[1], model[3], metadata)
+        Upred = eval_model(neuralmodel, Xdata, model[2]; batchsize = 10, device)
 
         for od in 1:out_dim
             Nx = length(Xdata)
@@ -174,13 +182,17 @@ function ngEvolve(
     nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
     nlsmaxiters = 20
 
+    abstol_inf, abstol_mse = if T === Float32
+        T(1e-3), T(1e-6)
+    elseif T === Float64
+        T(1e-5), T(1e-10)
+    end
+
     # scheme
     scheme = if scheme === :GalerkinProjection
-        # abstol_inf, abstol_mse
-        GalerkinProjection(linsolve, T(1f-3), T(1f-6))
+        GalerkinProjection(linsolve, abstol_inf, abstol_mse)
     elseif scheme === :LSPG
-        # abstol_nls, abstol_inf, abstol_mse
-        LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, T(1f-6), T(1f-3), T(1f-6))
+        LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, T(1f-6), abstol_inf, abstol_mse)
     end
 
     #==============#
@@ -198,12 +210,28 @@ function ngEvolve(
     data = map(x -> T.(x), data) # ensure no subarrays, correct eltype
 
     #==============#
+    # convert eltypes
+    #==============#
+    if T ∉ (Float32, Float64)
+        @error "Unsupported eltype $T detected. Choose T = Float32, or Float64"
+    end
+
+    if T === Float64
+        @info "[NG_EVOLVE] Running calculation on CPU with Float64 precision."
+        xdevice = cpu_device()
+    end
+
+    # convert model eltype
+    Tconv = T === Float32 ? f32 : f64
+    model = Tconv(model)
+
+    #==============#
     # evolve
     #==============#
 
     args = (prob, device(model), timealg, scheme, (device(data[1:2])..., data[3]), device(p0 .|> T), Δt)
     kwargs = (; adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,)
-    
+
     if benchmark # assume CUDA
         Logging.disable_logging(Logging.Warn)
         timeROM = @belapsed CUDA.@sync $evolve_model($args...; $kwargs...)

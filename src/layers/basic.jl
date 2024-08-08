@@ -10,14 +10,20 @@ struct HyperNet{W <: Lux.AbstractExplicitLayer, C <: Lux.AbstractExplicitLayer, 
     ca_axes::A
 end
 
-function HyperNet(wt_gen::Lux.AbstractExplicitLayer, evltr::Lux.AbstractExplicitLayer)
+function HyperNet(
+    weight_gen::Lux.AbstractExplicitLayer,
+    evaluator::Lux.AbstractExplicitLayer
+)
     rng = Random.default_rng()
-    ca_axes = Lux.initialparameters(rng, evltr) |> ComponentArray |> getaxes
-    return HyperNet(wt_gen, evltr, ca_axes)
+    ca_axes = Lux.initialparameters(rng, evaluator) |> ComponentArray |> getaxes
+
+    return HyperNet(weight_gen, evaluator, ca_axes)
 end
 
 function Lux.initialparameters(rng::AbstractRNG, hn::HyperNet)
-    return (weight_generator=Lux.initialparameters(rng, hn.weight_generator),)
+    return (;
+        weight_generator = Lux.initialparameters(rng, hn.weight_generator),
+    )
 end
 
 function (hn::HyperNet)(x, ps, st::NamedTuple)
@@ -32,96 +38,6 @@ function (hn::HyperNet)((x, y)::T, ps, st::NamedTuple) where {T <: Tuple}
     @set! st.evaluator = st_
     return pred, st
 end
-
-#======================================================#
-# Periodic BC layer
-#======================================================#
-
-"""
-Periodic BC layer (For 1D only rn)
-based on
-- https://github.com/julesberman/RSNG/blob/main/rsng/dnn.py
-- https://github.com/Algopaul/ng_embeddings/blob/main/embedded_ng.ipynb
-"""
-struct PeriodicLayer{I,L,P} <: Lux.AbstractExplicitLayer
-    init::I # should be U(0, 2)
-    width::L
-    periods::P
-end
-
-function PeriodicLayer(width::Integer, periods; init = rand32)
-    PeriodicLayer(init, width, periods)
-end
-
-function Lux.initialparameters(rng::Random.AbstractRNG, l::PeriodicLayer)
-    (;
-        ϕ = l.init(rng, l.width, length(l.periods)),
-    )
-end
-
-function Lux.initialstates(::Random.AbstractRNG, l::PeriodicLayer)
-    T = eltype(l.periods)
-    (;
-        ω = @. T(2) / [l.periods...]
-    )
-end
-
-Lux.statelength(l::PeriodicLayer) = length(l.periods)
-Lux.parameterlength(l::PeriodicLayer) = l.width * length(l.periods)
-
-function (l::PeriodicLayer)(x::AbstractArray, ps, st::NamedTuple)
-    y = @. cospi(st.ω * x + ps.ϕ)
-    return y, st
-end
-
-#======================================================#
-# Gaussian Layer (only 1D for now)
-#======================================================#
-
-export GaussianLayer
-
-struct GaussianLayer{F,I} <: Lux.AbstractExplicitLayer
-    init::F
-    in_dim::I
-    out_dim::I
-end
-
-function GaussianLayer(in_dim::Integer, out_dim::Integer; init = rand32)
-    @assert in_dim == out_dim == 1
-    GaussianLayer(init, in_dim, out_dim)
-end
-
-function Lux.initialparameters(rng::Random.AbstractRNG, l::GaussianLayer)
-    T = l.init(rng, 1) |> eltype
-    (;
-        c  = T[1],
-        x̄  = l.init(rng, l.in_dim),
-        σi = l.init(rng, l.in_dim),
-    )
-end
-
-function Lux.initialstates(rng::Random.AbstractRNG, l::GaussianLayer)
-    T = l.init(rng, 1) |> eltype
-    (;
-        oneby2 = T[-0.5],
-    )
-end
-
-function (l::GaussianLayer)(x::AbstractArray, ps, st::NamedTuple)
-    z = @. (x - ps.x̄) * ps.σi
-    # y = ps.c * _rbf(z)
-    y = @. ps.c * exp(st.oneby2 * z^2)
-    return y, st
-end
-
-# @inline _rbf(x) = @. exp(-x^2)
-# function ChainRulesCore.rrule(::typeof(_rbf), x)
-#     T = eltype(x)
-#     y = _rbf(x)
-#     @inline ∇_rbf(ȳ) = ChainRulesCore.NoTangent(), @fastmath(@. -T(2) * x * y * ȳ)
-#
-#     y, ∇_rbf
-# end
 
 #======================================================#
 # Permute Layer

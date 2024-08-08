@@ -28,6 +28,7 @@ modelfile = joinpath(modeldir, "model_05.jld2")
 device = Lux.gpu_device()
 
 δ = 0.01f0
+
 #======================================================#
 # Train MLP
 #======================================================#
@@ -63,41 +64,41 @@ device = Lux.gpu_device()
 # Hash Encoding
 #======================================================#
 
-NN = begin
-    # mis_res = 8
-    # nLevels = 8
-    # out_dims = 2
-    # nEmbeddings = 2^14
-
-    min_res = 8
-    nLevels = 16
-    out_dims = 2
-    nEmbeddings = 2^14
-
-    MLH = MultiLevelSpatialHash(; out_dims, nEmbeddings, nLevels, min_res)
-
-    mlp_w  = 64
-    mlp_in = out_dims * nLevels #+ 3
-
-    MLP = Chain(
-        Dense(mlp_in, mlp_w, relu),
-        Dense(mlp_w, 1; use_bias = false),
-        ClampTanh(δ),
-    )
-
-    Chain(; MLH, MLP)
-end
-
-E = 300
-warmup = false
-precompute_mlh = true
-lrs = (1f-4, 5f-5, 1f-5,)
-beta, epsilon = (0.9f0, 0.99f0), 1f-15
-
-isdir(modeldir) && rm(modeldir, recursive = true)
-model, ST, md = train_SDF(NN, casename, modeldir, E; rng, δ,
-    lrs, warmup, beta, epsilon, precompute_mlh, device,
-)
+# NN = begin
+#     # mis_res = 8
+#     # nLevels = 8
+#     # out_dims = 2
+#     # nEmbeddings = 2^14
+#
+#     min_res = 8
+#     nLevels = 16
+#     out_dims = 2
+#     nEmbeddings = 2^14
+#
+#     MLH = MultiLevelSpatialHash(; out_dims, nEmbeddings, nLevels, min_res)
+#
+#     mlp_w  = 64
+#     mlp_in = out_dims * nLevels #+ 3
+#
+#     MLP = Chain(
+#         Dense(mlp_in, mlp_w, relu),
+#         Dense(mlp_w, 1; use_bias = false),
+#         ClampTanh(δ),
+#     )
+#
+#     Chain(; MLH, MLP)
+# end
+#
+# E = 300
+# warmup = false
+# precompute_mlh = true
+# lrs = (1f-4, 5f-5, 1f-5,)
+# beta, epsilon = (0.9f0, 0.99f0), 1f-15
+#
+# isdir(modeldir) && rm(modeldir, recursive = true)
+# model, ST, md = train_SDF(NN, casename, modeldir, E; rng, δ,
+#     lrs, warmup, beta, epsilon, precompute_mlh, device,
+# )
 
 #======================================================#
 # visualization

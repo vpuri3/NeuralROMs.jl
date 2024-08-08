@@ -111,7 +111,7 @@ function fieldplot(
     end
 
     if size(ps, 1) < 5
-        psdir = joinpath(outdir, "plt_ps")
+        psdir = joinpath(outdir, "plt_param$case")
         mkpath(psdir)
 
         for i in axes(ps, 1)

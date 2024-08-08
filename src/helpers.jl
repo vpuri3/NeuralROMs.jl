@@ -133,20 +133,21 @@ Input size `[out_dim, ...]`
 """
 function normalize_u(u::AbstractArray{T,N}, lims = nothing) where{T,N}
 
-    dims = 2:N
-    out_dim = size(u, 1)
-
     if isnothing(lims)
+        dims = 2:N
         d  = prod(size(u)[dims])
         ū  = sum(u; dims) / d |> vec
         σu = sum(abs2, u .- ū; dims) / d .|> sqrt |> vec
     else
-        e  = collect(extrema(u[o, dims...]) for o in 1:out_dim)
-        ū  = map(x -> first(x), e)
+        @assert length(lims) == 2
+        II = collect(Colon() for _ in 2:N)
+
+        e  = collect(extrema(u[i, II...]) for i in axes(u, 1))
+        ū  = map(x -> T(sum(x)/2), e)
         σu = map(x -> -(x...), e) ./ T(-(lims...))
     end
 
-    u  = normalizedata(u, ū, σu)
+    u = normalizedata(u, ū, σu)
 
     u, ū, σu
 end

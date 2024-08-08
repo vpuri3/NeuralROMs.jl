@@ -70,6 +70,94 @@ function makemodelGaussian(
 end
 
 #======================================================#
+# MFN (Multiplicative Filter Networks)
+#======================================================#
+function makemodelMFN(
+    data,
+    train_params,
+    periods,
+    metadata,
+    dir;
+    rng::Random.AbstractRNG = Random.default_rng(),
+    verbose::Bool = true,
+    device = Lux.gpu_device()
+)
+    in_dim  = size(data[1], 1)
+    out_dim = size(data[2], 1)
+
+    #--------------------------------------------#
+    # get train params
+    #--------------------------------------------#
+
+    h = haskey(train_params, :h) ? train_params.h : 3
+    w = haskey(train_params, :w) ? train_params.w : 8
+    E = haskey(train_params, :E) ? train_params.E : 2100
+    γ = haskey(train_params, :γ) ? train_params.γ : 1f-2
+
+    _batchsize = haskey(train_params, :_batchsize) ? train_params._batchsize : nothing
+    batchsize_ = haskey(train_params, :batchsize_) ? train_params.batchsize_ : nothing
+
+    warmup = haskey(train_params, :warmup) ? train_params.warmup : true
+
+    #--------------------------------------------#
+    # architecture
+    #--------------------------------------------#
+
+    # periodic = NoOpLayer()
+    periodic = PeriodicEmbedding(1:in_dim, periods)
+
+    decoder  = begin
+        i = if periodic isa PeriodicEmbedding
+            2 * in_dim
+        elseif periodic isa PeriodicLayer
+            w
+        elseif periodic isa NoOpLayer
+            in_dim
+        end
+        o = out_dim
+        
+        # GaborMFN()
+        FourierMFN(i, w, o, h)
+    end
+
+    NN = Chain(; periodic, decoder)
+
+    #-------------------------------------------#
+    # training hyper-params
+    #-------------------------------------------#
+
+    _batchsize = isnothing(_batchsize) ? numobs(data) ÷ 10 : _batchsize
+    batchsize_ = isnothing(batchsize_) ? numobs(data) ÷ 1  : batchsize_
+
+    lossfun = mse
+
+    idx = mfn_W_indices(NN, :decoder; rng)
+    weightdecay = IdxWeightDecay(0f0, idx)
+    opts, nepochs, schedules, early_stoppings = make_optimizer(E, warmup, weightdecay)
+
+    #-------------------------------------------#
+
+    train_args = (; h, w, E, γ, _batchsize, batchsize_)
+    metadata   = (; metadata..., train_args)
+
+    display(NN)
+    display(metadata)
+
+    @time model, ST = train_model(NN, data; rng,
+        _batchsize, batchsize_, weight_decays = γ,
+        opts, nepochs, schedules, early_stoppings,
+        device, dir, metadata, lossfun,
+    )
+
+    display(NN)
+    display(metadata)
+
+    plot_training!(ST...) |> display
+
+    model, ST, metadata
+end
+
+#======================================================#
 # DNN
 #======================================================#
 function makemodelDNN(
@@ -92,10 +180,8 @@ function makemodelDNN(
     h = haskey(train_params, :h) ? train_params.h : 1
     w = haskey(train_params, :w) ? train_params.w : 10
     E = haskey(train_params, :E) ? train_params.E : 2100
-    act = haskey(train_params, :act) ? train_params.act : sin
-
     γ = haskey(train_params, :γ) ? train_params.γ : 1f-2
-    λ = haskey(train_params, :λ) ? train_params.λ : 0f-0
+    act = haskey(train_params, :act) ? train_params.act : sin
 
     _batchsize = haskey(train_params, :_batchsize) ? train_params._batchsize : nothing
     batchsize_ = haskey(train_params, :batchsize_) ? train_params.batchsize_ : nothing
@@ -107,8 +193,8 @@ function makemodelDNN(
     #--------------------------------------------#
 
     # periodic = NoOpLayer()
-    periodic = PeriodicEmbedding(1:in_dim, periods)
     # periodic = PeriodicLayer(w, periods)
+    periodic = PeriodicEmbedding(1:in_dim, periods)
 
     decoder = begin
         if act ∈ (sin, cos)
@@ -153,22 +239,26 @@ function makemodelDNN(
 
     lossfun = mse
 
-    idx = ps_W_indices(NN, :decoder; rng)
+    idx = dnn_W_indices(NN, :decoder; rng)
     weightdecay = IdxWeightDecay(0f0, idx)
     opts, nepochs, schedules, early_stoppings = make_optimizer(E, warmup, weightdecay)
 
     #-------------------------------------------#
 
-    train_args = (; h, w, E, λ, γ, _batchsize, batchsize_)
+    train_args = (; h, w, E, γ, _batchsize, batchsize_)
     metadata   = (; metadata..., train_args)
 
     display(NN)
+    display(metadata)
 
     @time model, ST = train_model(NN, data; rng,
         _batchsize, batchsize_, weight_decays = γ,
         opts, nepochs, schedules, early_stoppings,
         device, dir, metadata, lossfun,
     )
+
+    display(NN)
+    display(metadata)
 
     plot_training!(ST...) |> display
 
@@ -227,7 +317,44 @@ end
 
 #===========================================================#
 
-function ps_W_indices(
+function mfn_W_indices(
+    NN,
+    property::Union{Symbol, Nothing} = nothing;
+    rng::Random.AbstractRNG = Random.default_rng(),
+)
+    p = Lux.setup(copy(rng), NN)[1]
+    p = ComponentArray(p)
+
+    idx = Int32[]
+    pprop = isnothing(property) ? p : getproperty(p, property) # MFN
+    pprop = getproperty(pprop, :filters)
+
+    pNames = propertynames(pprop)
+    pNum   = length(pNames)
+
+    for i in 1:(pNum-1)
+        lName = pNames[i]
+
+        w = getproperty(pprop, lName).weight # reshaped array
+
+        @assert ndims(w) == 2
+
+        i = if w isa Base.ReshapedArray
+            only(w.parent.indices)
+        elseif w isa SubArray
+            w.indices
+        end
+
+        println("[mfn_W_indices]: Grabbing weight indices from [$i / $pNum] $(property) layer $(lName), size $(size(w)).")
+        idx = vcat(idx, Int32.(i))
+    end
+
+    println("[mfn_W_indices]: Passing $(length(idx)) / $(length(p)) $(property) parameters to IdxWeightDecay")
+
+    idx
+end
+
+function dnn_W_indices(
     NN,
     property::Union{Symbol, Nothing} = nothing;
     rng::Random.AbstractRNG = Random.default_rng(),
@@ -254,11 +381,11 @@ function ps_W_indices(
             w.indices
         end
 
-        println("[ps_W_indices]: Grabbing weight indices from [$i / $pNum] $(property) layer $(lName), size $(size(w)).")
+        println("[dnn_W_indices]: Grabbing weight indices from [$i / $pNum] $(property) layer $(lName), size $(size(w)).")
         idx = vcat(idx, Int32.(i))
     end
 
-    println("[ps_W_indices]: Passing $(length(idx)) / $(length(p)) $(property) parameters to IdxWeightDecay")
+    println("[dnn_W_indices]: Passing $(length(idx)) / $(length(p)) $(property) parameters to IdxWeightDecay")
 
     idx
 end

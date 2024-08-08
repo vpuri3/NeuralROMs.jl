@@ -86,8 +86,9 @@ export
 include("layers/basic.jl")
 export
     HyperNet,
-    PeriodicLayer,
     PermutedBatchNorm, PermuteLayer, SplitRows
+
+include("layers/experimental.jl")
 
 include("layers/encoder_decoder.jl")
 export
