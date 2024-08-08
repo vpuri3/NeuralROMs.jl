@@ -18,7 +18,8 @@ function fieldplot(
     grid::Tuple,
     outdir::String,
     prefix::String,
-    case::Integer,
+    case::Integer;
+    fps::Integer = 30,
 )
     in_dim  = size(Xdata, 1)
     out_dim = size(Udata, 1)
@@ -50,9 +51,9 @@ function fieldplot(
             scatter!(plt, xd[Ixplt], ud[Ixplt, Itplt]; w = 1, palette)
             png(plt, joinpath(outdir, "$(prefix)_u$(od)_case$(case)"))
 
-            # anim = animate1D(Ud[:, It_data], Up[:, It_pred], vec(Xdata), Tdata[It_data];
-            #                  w = 2, xlabel, ylabel, title)
-            # gif(anim, joinpath(outdir, "train$(k).gif"); fps)
+            # # make gif
+            # anim = animate1D(ud, up, xd, Tdata; w = 2, xlabel = L"x", ylabel = L"u(x,t)", title = "Case $case ")
+            # gif(anim, joinpath(outdir, "evolve$(case).gif"); fps)
 
         elseif in_dim == 2
             xlabel = L"x"

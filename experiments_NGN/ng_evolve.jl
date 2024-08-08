@@ -32,8 +32,8 @@ function ngProject(
     device = Lux.gpu_device(),
 )
 
-    isdir(modeldir) && rm(modeldir; recursive = true)
-    projectdir = joinpath(modeldir, "projectT0")
+    # isdir(modeldir) && rm(modeldir; recursive = true)
+    projectdir = joinpath(modeldir, "project$(case)")
     mkpath(projectdir)
 
     #--------------------------------------------#
@@ -160,6 +160,7 @@ function ngEvolve(
     T        = haskey(evolve_params, :T       ) ? evolve_params.T        : Float32
     Δt       = haskey(evolve_params, :Δt      ) ? evolve_params.Δt       : -(-(extrema(Tdata)...)) |> T
     timealg  = haskey(evolve_params, :timealg ) ? evolve_params.timealg  : EulerForward()
+    scheme   = haskey(evolve_params, :scheme  ) ? evolve_params.scheme   : :GalerkinProjection
     adaptive = haskey(evolve_params, :adaptive) ? evolve_params.adaptive : true
 
     # autodiff
@@ -174,7 +175,13 @@ function ngEvolve(
     nlsmaxiters = 20
 
     # scheme
-    scheme = GalerkinProjection(linsolve, T(1f-3), T(1f-6)) # abstol_inf, abstol_mse
+    scheme = if scheme === :GalerkinProjection
+        # abstol_inf, abstol_mse
+        GalerkinProjection(linsolve, T(1f-3), T(1f-6))
+    elseif scheme === :LSPG
+        # abstol_nls, abstol_inf, abstol_mse
+        LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, T(1f-6), T(1f-3), T(1f-6))
+    end
 
     #==============#
     # Hyper-reduction
@@ -235,8 +242,7 @@ function ngEvolve(
     end
 
     # field visualizations
-    grid = get_prob_grid(prob)
-    fieldplot(Xdata, Tdata, Ud, Up, ps, grid, modeldir, "evolve", case)
+    fieldplot(Xdata, Tdata, Ud, Up, ps, get_prob_grid(grid), modeldir, "evolve", case)
 
     # save files
     filename = joinpath(modeldir, "evolve$(case).jld2")

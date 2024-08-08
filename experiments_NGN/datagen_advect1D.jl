@@ -15,13 +15,20 @@ using Plots, JLD2
 
 CUDA.allowscalar(false)
 
+# make this multi-batch with varying ν, c
+# x ∈ [-2, 2)
+# ν ∈ [0, 10^-2]
+# c ∈ [0, 1]
+# are there exact solutions?
+
 function uIC(x; μ = -0.5f0, σ = 0.1f0)
     u = @. exp(-1f0/2f0 * ((x-μ)/σ)^2)
     reshape(u, :, 1)
 end
 
-function advect1D(N, ν, c, mu = nothing, p = nothing;
-    tspan=(0.f0, 4.0f0),
+function advectionDiffusion1D(
+    N, ν, c, mu = nothing, p = nothing;
+    tspan=(0.f0, 1.0f0),
     ntsave=500,
     odealg=Tsit5(),
     odekw = (;),
@@ -119,12 +126,12 @@ end
 
 N = 256
 ν = 0f0
-c = 0.25f0
+c = 1f0
 mu = nothing # parameters
 
 device = cpu_device()
 dir = joinpath(@__DIR__, "data_advect1D")
-(sol, V), (x, u, t, mu) = advect1D(N, ν, c, mu; device, dir)
+(sol, V), (x, u, t, mu) = advectionDiffusion1D(N, ν, c, mu; device, dir)
 
 nothing
 #

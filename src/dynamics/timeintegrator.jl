@@ -256,7 +256,7 @@ function perform_timestep!(
 
             integrator.Δt /= T(2f0)
 
-            t1, p1, u1, f1, r1 = solve_timestep(integrator; verbose)
+            t1, p1, u1, f1, f̃1, r1 = solve_timestep(integrator; verbose)
 
             mse_r = sum(abs2, r1) / length(r1)
             inf_r = norm(r1, Inf)

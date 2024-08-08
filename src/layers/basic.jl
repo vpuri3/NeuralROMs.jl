@@ -92,7 +92,9 @@ function GaussianLayer(in_dim::Integer, out_dim::Integer; init = rand32)
 end
 
 function Lux.initialparameters(rng::Random.AbstractRNG, l::GaussianLayer)
+    T = l.init(rng, 1) |> eltype
     (;
+        c  = T[1],
         x̄  = l.init(rng, l.in_dim),
         σi = l.init(rng, l.in_dim),
     )
@@ -101,14 +103,14 @@ end
 function Lux.initialstates(rng::Random.AbstractRNG, l::GaussianLayer)
     T = l.init(rng, 1) |> eltype
     (;
-        c = T[-0.5],
+        oneby2 = T[-0.5],
     )
 end
 
 function (l::GaussianLayer)(x::AbstractArray, ps, st::NamedTuple)
     z = @. (x - ps.x̄) * ps.σi
-    # y = _rbf(z)
-    y = @. exp( st.c * z^2)
+    # y = ps.c * _rbf(z)
+    y = @. ps.c * exp(st.oneby2 * z^2)
     return y, st
 end
 
