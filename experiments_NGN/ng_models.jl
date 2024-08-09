@@ -95,7 +95,7 @@ function makemodelMFN(
         h = haskey(train_params, :h) ? train_params.h : 3
         w = haskey(train_params, :w) ? train_params.w : 8
         E = haskey(train_params, :E) ? train_params.E : 2100
-        γ = haskey(train_params, :γ) ? train_params.γ : 1f-2
+        γ = haskey(train_params, :γ) ? train_params.γ : 0f-4
     elseif MFNfilter === :Gabor
         h = haskey(train_params, :h) ? train_params.h : 5
         w = haskey(train_params, :w) ? train_params.w : 32
@@ -192,7 +192,7 @@ function makemodelDNN(
     h = haskey(train_params, :h) ? train_params.h : 1
     w = haskey(train_params, :w) ? train_params.w : 10
     E = haskey(train_params, :E) ? train_params.E : 2100
-    γ = haskey(train_params, :γ) ? train_params.γ : 1f-2
+    γ = haskey(train_params, :γ) ? train_params.γ : 1f-4
     act = haskey(train_params, :act) ? train_params.act : sin
 
     _batchsize = haskey(train_params, :_batchsize) ? train_params._batchsize : nothing
