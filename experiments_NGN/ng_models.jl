@@ -89,10 +89,19 @@ function makemodelMFN(
     # get train params
     #--------------------------------------------#
 
-    h = haskey(train_params, :h) ? train_params.h : 3
-    w = haskey(train_params, :w) ? train_params.w : 8
-    E = haskey(train_params, :E) ? train_params.E : 2100
-    γ = haskey(train_params, :γ) ? train_params.γ : 1f-2
+    MFNfilter = haskey(train_params, :MFNfilter) ? train_params.MFNfilter : :Fourier
+
+    if MFNfilter === :Fourier
+        h = haskey(train_params, :h) ? train_params.h : 3
+        w = haskey(train_params, :w) ? train_params.w : 8
+        E = haskey(train_params, :E) ? train_params.E : 2100
+        γ = haskey(train_params, :γ) ? train_params.γ : 1f-2
+    elseif MFNfilter === :Gabor
+        h = haskey(train_params, :h) ? train_params.h : 5
+        w = haskey(train_params, :w) ? train_params.w : 32
+        E = haskey(train_params, :E) ? train_params.E : 2100
+        γ = haskey(train_params, :γ) ? train_params.γ : 0f-2
+    end
 
     _batchsize = haskey(train_params, :_batchsize) ? train_params._batchsize : nothing
     batchsize_ = haskey(train_params, :batchsize_) ? train_params.batchsize_ : nothing
@@ -115,9 +124,12 @@ function makemodelMFN(
             in_dim
         end
         o = out_dim
-        
-        # GaborMFN()
-        FourierMFN(i, w, o, h)
+
+        if MFNfilter === :Fourier
+            FourierMFN(i, w, o, h)
+        elseif MFNfilter === :Gabor
+            GaborMFN(i, w, o, h)
+        end
     end
 
     NN = Chain(; periodic, decoder)

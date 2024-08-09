@@ -26,27 +26,37 @@ data_kws = (; Ix = :, It = :)
 # modelfile = joinpath(modeldir, "project$(case)", "model_08.jld2")
 
 #------------------------------------------------------#
-# MFN
+# MFN (Fourier)
 #------------------------------------------------------#
-# train_params = (;)
+# train_params = (; MFNfilter = :Fourier)
 # evolve_params = (; T = Float32,)
 #
 # makemodel = makemodelMFN
-# modeldir  = joinpath(@__DIR__, "dump_mfn")
+# modeldir  = joinpath(@__DIR__, "dump_mfn_fourier")
 # modelfile = joinpath(modeldir, "project$(case)", "model_08.jld2")
+
+#------------------------------------------------------#
+# MFN (Gabor)
+#------------------------------------------------------#
+train_params = (; MFNfilter = :Gabor, γ = 0f0)
+evolve_params = (; T = Float32,)
+
+makemodel = makemodelMFN
+modeldir  = joinpath(@__DIR__, "dump_mfn_gabor")
+modelfile = joinpath(modeldir, "project$(case)", "model_08.jld2")
 
 #------------------------------------------------------#
 # Gaussian
 #------------------------------------------------------#
-data_kws = (; Ix = LinRange(1, 256, 64), It = LinRange(1, 500, 500))
-data_kws = map(x -> round.(Int, x), data_kws)
-
-train_params  = (;)
-evolve_params = (; T = Float64, timealg = RK4(),)
-
-makemodel = makemodelGaussian
-modeldir  = joinpath(@__DIR__, "dump_gaussian")
-modelfile = joinpath(modeldir, "project$(case)", "model.jld2")
+# data_kws = (; Ix = LinRange(1, 256, 64), It = LinRange(1, 500, 500))
+# data_kws = map(x -> round.(Int, x), data_kws)
+#
+# train_params  = (;)
+# evolve_params = (; T = Float64, timealg = RK4(),)
+#
+# makemodel = makemodelGaussian
+# modeldir  = joinpath(@__DIR__, "dump_gaussian")
+# modelfile = joinpath(modeldir, "project$(case)", "model.jld2")
 
 #------------------------------------------------------#
 # Evolve
@@ -58,11 +68,11 @@ cs = evolve_params.T[1, 0, 1]
 
 XD = TD = UD = UP = PS = ()
 
-for case in 1:3
+for case in 1:1# 1:3
     prob = AdvectionDiffusion1D(cs[case], νs[case])
 
     (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
-    (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
+    # (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
 
     # global XD = (XD..., Xd)
     # global TD = (TD..., Td)

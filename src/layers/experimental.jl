@@ -81,7 +81,7 @@ function FourierMFN(
     end
     
     if isnothing(init_weight)
-        init_weight = scale_init(glorot_uniform, Float32(1/sqrt(num_filters)), 0)
+        init_weight = scale_init(glorot_uniform, Float32(1/sqrt(num_filters)), Float32(0))
     end
     
     filters = Tuple(
@@ -98,31 +98,17 @@ function GaborMFN(
     out_dim::Integer,
     num_filters::Integer = 3;
 
-    init_mu = nothing,
-    init_gamma = nothing,
-    init_bias = nothing,
-    init_weight = nothing,
-
+    init_kws = (;),
     linear_kws = (;),
     out_kws = (;),
 )
-    pi32 = Float32(pi)
-    
-    if isnothing(init_bias)
-        init_bias = scale_init(rand32, 2 * pi32, -pi32) # U(-π, π)
-    end
+    init_W = scale_init(glorot_uniform, Float32(1/sqrt(num_filters)), Float32(0))
 
-    # if isnothing(init_weight)
-    #     init_weight = scale_init(glorot_uniform, Float32(1/sqrt(num_filters)), 0)
-    # end
-    #
-    # filters = Tuple(
-    #     Dense(in_dim, hd_dim, sin; init_weight, init_bias,)
-    #     for _ in 1:num_filters
-    # )
+    filters = Tuple(
+        GaborLayer(in_dim, hd_dim; init_W, init_kws...)
+        for _ in 1:num_filters
+    )
 
-    @error()
-    
     MFN(in_dim, hd_dim, out_dim, filters; linear_kws, out_kws)
 end
 
@@ -132,16 +118,43 @@ end
 
 export GaborLayer
 
-@concrete struct GaborLayer{I} <: Lux.AbstractExplicitLayer
 # @concrete struct GaborLayer{I} <: Lux.AbstractExplicitContainerLayer{(:dense,)}
+@concrete struct GaborLayer{I} <: Lux.AbstractExplicitLayer
     in_dim::I
     out_dim::I
 
-    init_b
     init_W
+    init_b
 
     init_μ
     init_γ
+end
+
+function GaborLayer(
+    in_dim::Integer,
+    out_dim::Integer;
+    init_W = nothing, init_b = nothing,
+    init_μ = nothing, init_γ = nothing,
+)
+    pi32 = Float32(pi)
+    
+    if isnothing(init_W)
+        init_W = glorot_uniform
+    end
+
+    if isnothing(init_b)
+        init_b = scale_init(rand32, 2 * pi32, -pi32) # U(-π, π)
+    end
+
+    if isnothing(init_μ)
+        init_μ = rand32
+    end
+
+    if isnothing(init_γ)
+        init_γ = rand32
+    end
+
+    GaborLayer(in_dim, out_dim, init_W, init_b, init_μ, init_γ)
 end
 
 function Lux.initialparameters(rng::Random.AbstractRNG, l::GaborLayer)
@@ -149,13 +162,13 @@ function Lux.initialparameters(rng::Random.AbstractRNG, l::GaborLayer)
         x̄ = l.init_μ(rng, l.in_dim),
         γ = l.init_γ(rng, l.out_dim),
 
-        W = l.init_W(rng, l.out_dim, l.in_dim),
-        b = l.init_b(rng, l.out_dim),
+        bias = l.init_b(rng, l.out_dim),
+        weight = l.init_W(rng, l.out_dim, l.in_dim),
     )
 end
 
 function Lux.initialstates(rng::Random.AbstractRNG, l::GaborLayer)
-    T = l.init(rng, 1) |> eltype
+    T = l.init_W(rng, 1) |> eltype
     (;
         minushalf = T[-0.5],
     )
@@ -165,7 +178,7 @@ function (l::GaborLayer)(x::AbstractArray, ps, st)
 
     # should apply softplus to γ
 
-    y_sin = sin.(ps.W * x + ps.b)
+    y_sin = sin.(ps.weight * x .+ ps.bias)
     dist2 = sum(abs2, (x .- ps.x̄); dims = 1)
     y_exp = exp.(st.minushalf * dist2 .* ps.γ)
 
