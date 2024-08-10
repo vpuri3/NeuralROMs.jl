@@ -19,7 +19,7 @@ function uIC_gaussian(x)
     μ = -0.5
     σ = 0.1
 
-    @. exp(-1/2 * ((x-μ)/σ)^2)
+    @. exp(-0.5 * ((x-μ)/σ)^2)
 end
 
 function scaled_tanh(x, a, b, ω, x̄)
@@ -127,7 +127,7 @@ function advectionDiffusion1D(
 
     if !isnothing(dir)
         mkpath(dir)
-        metadata = (; c, ν, readme = "u [Nx, Nbatch, Nt]")
+        metadata = (; readme = "")
 
         filename = joinpath(dir, "data.jld2")
         jldsave(filename; x, u, t, mu, metadata)

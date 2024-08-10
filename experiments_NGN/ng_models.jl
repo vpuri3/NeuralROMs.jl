@@ -13,6 +13,7 @@ function makemodelGaussian(
     device = Lux.gpu_device()
 )
 
+    T = eltype(data[1])
     in_dim  = size(data[1], 1)
     out_dim = size(data[2], 1)
 
@@ -20,7 +21,13 @@ function makemodelGaussian(
     # get train params
     #--------------------------------------------#
 
-    w = haskey(train_params, :w) ? train_params.w : 10
+    N = haskey(train_params, :N) ? train_params.N : 1
+    E = haskey(train_params, :E) ? train_params.E : 140
+    exactIC = haskey(train_params, :exactIC) ? train_params.exactIC : (;)
+
+    warmup = haskey(train_params, :warmup) ? train_params.warmup : true
+    _batchsize = haskey(train_params, :_batchsize) ? train_params._batchsize : nothing
+    batchsize_ = haskey(train_params, :batchsize_) ? train_params.batchsize_ : nothing
 
     #--------------------------------------------#
     # architecture
@@ -32,40 +39,93 @@ function makemodelGaussian(
     decoder = begin
         i = if periodic isa PeriodicEmbedding
             2 * in_dim
-        elseif periodic isa PeriodicLayer
-            w
         elseif periodic isa NoOpLayer
             in_dim
         end
 
         o = out_dim
 
-        GaussianLayer(i, o)
+        GaussianLayer1D(i, o, N)
     end
 
     NN = Chain(; periodic, decoder)
 
     #-------------------------------------------#
-    p, st = Lux.setup(rng, NN)
-    p = ComponentArray(p)
+    model, ST, metadata = if !isempty(exactIC)
+        p, st = Lux.setup(rng, NN)
+        p = ComponentArray(p)
 
-    ST = nothing
-    metadata = (;
-        metadata..., 
-        x̄ = metadata.x̄ * 0,
-        ū = metadata.ū * 0,
-        σx = metadata.σx * 0 .+ 1,
-        σu = metadata.σu * 0 .+ 1,
-    )
+        metadata = (;
+            metadata..., 
+            x̄ = metadata.x̄ * 0,
+            ū = metadata.ū * 0,
+            σx = metadata.σx * 0 .+ 1,
+            σu = metadata.σu * 0 .+ 1,
+        )
 
-    p.decoder.x̄  .= -0.5f0
-    p.decoder.σi .= 1 / 0.1f0
+        p.decoder.c .= exactIC.c .|> T
+        p.decoder.x̄ .= exactIC.x̄ .|> T
+        p.decoder.σ .= exactIC.σ .|> T
+
+        ST = nothing
+        model = NN, p, st
+        jldsave(joinpath(dir, "model.jld2"); model, ST, metadata)
+
+        model, ST, metadata
+    else
+        #-------------------------------------------#
+        lossfun = mse
+        _batchsize = isnothing(_batchsize) ? numobs(data) ÷ 1 : _batchsize
+        batchsize_ = isnothing(batchsize_) ? numobs(data) ÷ 1 : batchsize_
+        opts, nepochs, schedules, early_stoppings = make_optimizer_gaussian(E, warmup)
+        #-------------------------------------------#
+
+        train_args = (; E, _batchsize, batchsize_)
+        metadata   = (; metadata..., train_args)
+
+        #----------------#
+        # initialization
+        #----------------#
+        # x ∈ [-1, 1]
+        # u ∈ [ 0, 1]
+        # spread evenly in x.
+        # ensure that entire domain in covered
+        # TODO: add xlims as input to GaussianLayer1D
+        # What normalization to assume for u? Would [0, 1] work for Gabor (must have -ve vals )
+        # Would adding a bias help as Gaussians are strictly in [0, c] ??
+
+        p, st = Lux.setup(rng, NN)
+        p = ComponentArray(p) .|> Float64
+
+        p.decoder.c .= 1.0
+        p.decoder.x̄ .= 0.0
+        p.decoder.σ .= 1/3
+
+        # @show mse(NN, p, st, data)[1] # 0.095
+        # @show metadata
+
+        ST = nothing
+        model = NN, p, st
+        # @assert false
+        #----------------#
+
+        display(NN)
+        
+        @time model, ST = train_model(
+            NN, data; rng, p, _batchsize, batchsize_,
+            opts, nepochs, schedules, early_stoppings,
+            device, dir, metadata, lossfun,
+        )
+        
+        plot_training!(ST...) |> display
+        
+        @show p.decoder |> getdata
+        @show model[2].decoder |> getdata
+
+        model, ST, metadata
+    end
 
     #-------------------------------------------#
-    model = NN, p, st
-    jldsave(joinpath(dir, "model.jld2"); model, ST, metadata)
-    #-------------------------------------------#
-
     model, ST, metadata
 end
 
@@ -145,7 +205,7 @@ function makemodelMFN(
 
     idx = mfn_W_indices(NN, :decoder; rng)
     weightdecay = IdxWeightDecay(0f0, idx)
-    opts, nepochs, schedules, early_stoppings = make_optimizer(E, warmup, weightdecay)
+    opts, nepochs, schedules, early_stoppings = make_optimizer_DNN(E, warmup, weightdecay)
 
     #-------------------------------------------#
 
@@ -195,10 +255,9 @@ function makemodelDNN(
     γ = haskey(train_params, :γ) ? train_params.γ : 1f-4
     act = haskey(train_params, :act) ? train_params.act : sin
 
+    warmup = haskey(train_params, :warmup) ? train_params.warmup : true
     _batchsize = haskey(train_params, :_batchsize) ? train_params._batchsize : nothing
     batchsize_ = haskey(train_params, :batchsize_) ? train_params.batchsize_ : nothing
-
-    warmup = haskey(train_params, :warmup) ? train_params.warmup : true
 
     #--------------------------------------------#
     # architecture
@@ -253,7 +312,7 @@ function makemodelDNN(
 
     idx = dnn_W_indices(NN, :decoder; rng)
     weightdecay = IdxWeightDecay(0f0, idx)
-    opts, nepochs, schedules, early_stoppings = make_optimizer(E, warmup, weightdecay)
+    opts, nepochs, schedules, early_stoppings = make_optimizer_DNN(E, warmup, weightdecay)
 
     #-------------------------------------------#
 
@@ -278,7 +337,53 @@ function makemodelDNN(
 end
 #======================================================#
 
-function make_optimizer(
+function make_optimizer_gaussian(
+    E::Integer,
+    warmup::Bool,
+    second_order::Bool = true,
+)
+    # LR ∈ [1e-5, 1e-3] with exponential decay.
+    # Then second-order optimizer
+
+    lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
+    Nlrs = length(lrs)
+
+    opts = Tuple(Optimisers.Adam(lr) for lr in lrs)
+    nepochs = (round.(Int, E / (Nlrs) * ones(Nlrs))...,)
+    schedules = Step.(lrs, 1f0, Inf32)
+    early_stoppings = (fill(true, Nlrs)...,)
+
+    if warmup
+        _opt = Optimisers.Adam(1f-2)
+        _nepochs = 10
+        _schedule = Step(1f-2, 1f0, Inf32)
+        _early_stopping = true
+
+        ######################
+        opts = (_opt, opts...,)
+        nepochs = (_nepochs, nepochs...,)
+        schedules = (_schedule, schedules...,)
+        early_stoppings = (_early_stopping, early_stoppings...,)
+    end
+
+    if second_order
+        opt_ = LBFGS()
+        nepochs_ = E
+        schedule_ = Step(0f-2, 1f0, Inf32)
+        early_stopping_ = true
+
+        ######################
+        opts = (opts..., opt_)
+        nepochs = (nepochs..., nepochs_)
+        schedules = (schedules..., schedule_)
+        early_stoppings = (early_stoppings..., early_stopping_)
+    end
+
+    opts, nepochs, schedules, early_stoppings
+end
+#======================================================#
+
+function make_optimizer_DNN(
     E::Integer,
     warmup::Bool,
     weightdecay = nothing,

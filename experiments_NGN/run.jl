@@ -18,11 +18,38 @@ data_kws = (; Ix = :, It = :)
 #------------------------------------------------------#
 # DNN
 #------------------------------------------------------#
-train_params = (;)
-evolve_params = (; T = Float32,)
+# train_params = (;)
+# evolve_params = (; T = Float32,)
 
-makemodel = makemodelDNN
-modeldir  = joinpath(@__DIR__, "dump_dnn")
+# makemodel = makemodelDNN
+# modelfilename = "model_08.jld2"
+# modeldir  = joinpath(@__DIR__, "dump_dnn")
+
+#------------------------------------------------------#
+# Gaussian
+#------------------------------------------------------#
+data_kws = (; Ix = LinRange(1, 256, 64), It = LinRange(1, 500, 500))
+data_kws = map(x -> round.(Int, x), data_kws)
+
+train_params  = (; normalizex = true, normalizeu = false)
+evolve_params = (; T = Float64, timealg = RK4(),)
+
+makemodel = makemodelGaussian
+modelfilename = "model_08.jld2"
+modeldir  = joinpath(@__DIR__, "dump_gaussian")
+
+#------------------------------------------------------#
+# Gaussian (exact)
+#------------------------------------------------------#
+# data_kws = (; Ix = LinRange(1, 256, 64), It = LinRange(1, 500, 500))
+# data_kws = map(x -> round.(Int, x), data_kws)
+#
+# train_params  = (; N = 1, exactIC = (; c = [1.0], x̄ = [-0.5], σ = [0.1]))
+# evolve_params = (; T = Float64, timealg = RK4(),)
+#
+# makemodel = makemodelGaussian
+# modelfilename = "model.jld2"
+# modeldir  = joinpath(@__DIR__, "dump_gaussian_exact")
 
 #------------------------------------------------------#
 # MFN (Fourier)
@@ -31,6 +58,7 @@ modeldir  = joinpath(@__DIR__, "dump_dnn")
 # evolve_params = (; T = Float32, timealg = RK4())
 #
 # makemodel = makemodelMFN
+# modelfilename = "model_08.jld2"
 # modeldir  = joinpath(@__DIR__, "dump_mfn_fourier")
 
 #------------------------------------------------------#
@@ -40,19 +68,8 @@ modeldir  = joinpath(@__DIR__, "dump_dnn")
 # evolve_params = (; T = Float32,)
 #
 # makemodel = makemodelMFN
+# modelfilename = "model_08.jld2"
 # modeldir  = joinpath(@__DIR__, "dump_mfn_gabor")
-
-#------------------------------------------------------#
-# Gaussian
-#------------------------------------------------------#
-# data_kws = (; Ix = LinRange(1, 256, 64), It = LinRange(1, 500, 500))
-# data_kws = map(x -> round.(Int, x), data_kws)
-#
-# train_params  = (;)
-# evolve_params = (; T = Float64, timealg = RK4(),)
-#
-# makemodel = makemodelGaussian
-# modeldir  = joinpath(@__DIR__, "dump_gaussian")
 
 #------------------------------------------------------#
 # Evolve
@@ -65,24 +82,25 @@ cs = evolve_params.T[1, 0, 1]
 XD = TD = UD = UP = PS = ()
 NN, p, st = repeat([nothing], 3)
 
-# for case in 4:4# 1:6
-for case in 1:6
+for case in 1:1
+# for case in 4:4
+# for case in 1:3
     cc = mod1(case, 3)
 
     prob = AdvectionDiffusion1D(cs[cc], νs[cc])
-    modelfile = joinpath(modeldir, "project$(case)", "model_08.jld2")
+    modelfile = joinpath(modeldir, "project$(case)", modelfilename)
 
     global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
-    (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
-
-    global XD = (XD..., Xd)
-    global TD = (TD..., Td)
-    global UD = (UD..., Ud)
-
-    global UP = (UP..., Up)
-    global PS = (PS..., ps)
-
-    sleep(2)
+    # (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
+    #
+    # global XD = (XD..., Xd)
+    # global TD = (TD..., Td)
+    # global UD = (UD..., Ud)
+    #
+    # global UP = (UP..., Up)
+    # global PS = (PS..., ps)
+    
+    # sleep(2)
 end
 
 #======================================================#

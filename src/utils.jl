@@ -104,24 +104,6 @@ function remake_ca_in_model(
 end
 
 #===========================================================#
-
-function normalizedata(
-    u::AbstractArray,
-    μ::Union{Number, AbstractArray},
-    σ::Union{Number, AbstractArray},
-)
-    (u .- μ) ./ σ
-end
-
-function unnormalizedata(
-    u::AbstractArray,
-    μ::Union{Number, AbstractArray},
-    σ::Union{Number, AbstractArray},
-)
-    (u .* σ) .+ μ
-end
-
-#===========================================================#
 # periodic differentiation matrices
 # 2nd order central finite difference
 # https://www.mech.kth.se/~ardeshir/courses/literature/fd.pdf

@@ -16,7 +16,6 @@ export FourierMFN, GaborMFN
 end
 
 function (l::MFN)(x::AbstractArray, ps, st)
-
     keysf = keys(st.filters)
     keysl = keys(st.linears)
 
@@ -191,39 +190,48 @@ end
 # Gaussian Layer (only 1D for now)
 #======================================================#
 
-export GaussianLayer
+export GaussianLayer1D
 
-struct GaussianLayer{F,I} <: Lux.AbstractExplicitLayer
+struct GaussianLayer1D{F,I} <: Lux.AbstractExplicitLayer
     init::F
     in_dim::I
     out_dim::I
+    num_gaussians::I
 end
 
-function GaussianLayer(in_dim::Integer, out_dim::Integer; init = rand32)
+function GaussianLayer1D(
+    in_dim::Integer,
+    out_dim::Integer,
+    num_gaussians::Integer;
+    init = rand32
+)
     @assert in_dim == out_dim == 1
-    GaussianLayer(init, in_dim, out_dim)
+    GaussianLayer1D(init, in_dim, out_dim, num_gaussians)
 end
 
-function Lux.initialparameters(rng::Random.AbstractRNG, l::GaussianLayer)
-    T = l.init(rng, 1) |> eltype
+function Lux.initialparameters(rng::Random.AbstractRNG, l::GaussianLayer1D)
+    # should initialization of c include negative values?
+    # no if Gabor freqs can take care of that??
     (;
-        c  = T[1],
-        x̄  = l.init(rng, l.in_dim),
-        σi = l.init(rng, l.in_dim),
+        c = l.init(rng, 1, l.num_gaussians),
+        x̄ = l.init(rng, l.in_dim, l.num_gaussians),
+        σ = l.init(rng, l.in_dim, l.num_gaussians),
     )
 end
 
-function Lux.initialstates(rng::Random.AbstractRNG, l::GaussianLayer)
+function Lux.initialstates(rng::Random.AbstractRNG, l::GaussianLayer1D)
     T = l.init(rng, 1) |> eltype
     (;
+        ϵ = T[10 * eps(T)],
         minushalf = T[-0.5],
     )
 end
 
-function (l::GaussianLayer)(x::AbstractArray, ps, st::NamedTuple)
-    z = @. (x - ps.x̄) * ps.σi
-    # y = ps.c * _rbf(z)
-    y = @. ps.c * exp(st.minushalf * z^2)
+function (l::GaussianLayer1D)(x::AbstractMatrix, ps, st::NamedTuple)
+    x = reshape(x, l.in_dim, 1, size(x, 2))  # [D, 1, K]
+    z = @. (x - ps.x̄) / abs(ps.σ)            # [D, N, K] # (abs(ps.σ) + st.ϵ)
+    y = @. ps.c * exp(st.minushalf * z^2)    # [D, N, K]
+    y = dropdims(sum(y; dims = 2); dims = 2) # [D, K]
     return y, st
 end
 

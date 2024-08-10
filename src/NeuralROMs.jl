@@ -68,6 +68,7 @@ export AbstractNeuralModel, AbstractPDEProblem, AbstractTimeAlg,
 
 include("helpers.jl")
 export loaddata, loadmodel, eval_model,
+    normalizedata, unnormalizedata,
     normalize_x, normalize_u, normalize_t
 
 include("utils.jl")
@@ -111,7 +112,6 @@ export DecoderWeightDecay, IdxWeightDecay
 
 include("neuralmodel.jl")
 export
-    normalizedata, unnormalizedata,
     NeuralModel,
     dudx1_1D, dudx2_1D, dudx4_1D,
     dudx1_2D, dudx2_2D # , dudx4_2D,

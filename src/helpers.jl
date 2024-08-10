@@ -1,4 +1,22 @@
 
+#===========================================================#
+
+function normalizedata(
+    u::AbstractArray,
+    μ::Union{Number, AbstractArray},
+    σ::Union{Number, AbstractArray},
+)
+    (u .- μ) ./ σ
+end
+
+function unnormalizedata(
+    u::AbstractArray,
+    μ::Union{Number, AbstractArray},
+    σ::Union{Number, AbstractArray},
+)
+    (u .* σ) .+ μ
+end
+
 #======================================================#
 
 function loaddata(datafile::String; verbose::Bool = true)
@@ -131,7 +149,10 @@ end
 """
 Input size `[out_dim, ...]`
 """
-function normalize_u(u::AbstractArray{T,N}, lims = nothing) where{T,N}
+function normalize_u(
+    u::AbstractArray{T,N},
+    lims = nothing
+) where{T,N}
 
     if isnothing(lims)
         dims = 2:N
@@ -143,11 +164,14 @@ function normalize_u(u::AbstractArray{T,N}, lims = nothing) where{T,N}
         II = collect(Colon() for _ in 2:N)
 
         e  = collect(extrema(u[i, II...]) for i in axes(u, 1))
-        ū  = map(x -> T(sum(x)/2), e)
-        σu = map(x -> -(x...), e) ./ T(-(lims...))
+        mi = first.(e)
+        ma = last.(e)
+
+        σu = (ma - mi) ./ T(lims[2] - lims[1])
+        ū  = T(0.5) * ((mi + ma) - σu * T(lims[1] + lims[2]))
     end
 
-    u = normalizedata(u, ū, σu)
+    u = normalizedata(u, ū, σu) # (u - ū) / σu
 
     u, ū, σu
 end
@@ -155,24 +179,15 @@ end
 const normalize_x = normalize_u
 
 """
-Input size `[Ntime]`
+t ∈ [0, T]
+Input size `[Ntime]`.
 """
-function normalize_t(t::AbstractVector{T}, lims = nothing) where{T}
-
-    N = length(t)
-
-    if isnothing(lims)
-        t̄  = sum(t) / N
-        σt = sum(abs2, t .- t̄) / N .|> sqrt
-    else
-        e  = extrema(t)
-        t̄  = first(e)
-        σt = T(-(e...) / -(lims...))
-    end
-
-    t  = normalizedata(t, t̄, σt)
-
-    t, t̄, σt
+function normalize_t(
+    t::AbstractVector{T},
+    lims = nothing
+) where{T}
+    t, t̄, σt = normalize_u(t', lims)
+    vec(t), t̄, σt
 end
 #======================================================#
 

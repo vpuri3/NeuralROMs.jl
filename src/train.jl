@@ -32,7 +32,7 @@ function train_model(
     schedules::Union{Nothing, NTuple{M, ParameterSchedulers.AbstractSchedule}} = nothing,
 #
     early_stoppings::Union{Bool, NTuple{M, Bool}, Nothing} = nothing,
-    patience_fracs::Union{Real, NTuple{M, Real}, Nothing} = nothing,
+    patience_fracs::Union{Real, NTuple{M, Any}, Nothing} = nothing,
     weight_decays::Union{Real, NTuple{M, Real}} = 0f0,
 #
     dir::String = "dump",
@@ -84,10 +84,6 @@ function train_model(
     p = isreal(_p) ? _p : p
 
     p, st = (p, st) |> device
-
-    @assert eltype(p) ∈ (Float32, ComplexF32) "eltype(p) = $(eltype(p))"
-    # @assert eltype(first(_loader))
-    # @assert eltype(data) ∈ (Bool, Int8, Int16, Int32, Float32, ComplexF32)
 
     println(io, "#======================#")
     println(io, "Starting Trainig Loop")
@@ -695,19 +691,21 @@ function optimize(
         Optim.Newton,
         Optim.BFGS,
         Optim.LBFGS,
-        }
-
-        @warn "Hessian-based optimizers such as Newton / BFGS / L-BFGS do \
-        not work with mini-batching. Set batchsize to equal data-size, \
-        or else the method may be unstable. If you want a stochastic \
-        optimizer, try `Optimisers.jl`."
+    }
 
         dsize = numobs(__loader)
         bsize = numobs(first(__loader))
 
-        @info "Using batchsize $bsize with data set of $dsize samples."
-
         @assert length(__loader) == 1 "__loader must have exactly one minibatch."
+
+        if dsize != bsize
+            @warn " Using batchsize $bsize with data set of $dsize samples. \
+            That is, we have $(length(__loader)) minibatches. \
+            Hessian-based optimizers such as Newton / BFGS / L-BFGS do \
+            not work well with mini-batching. Set batchsize to equal data-size, \
+            or else the method may be unstable. If you want a stochastic \
+            optimizer, try `Optimisers.jl`."
+        end
 
         _loader = __loader
     end

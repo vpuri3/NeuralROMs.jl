@@ -58,11 +58,20 @@ function ngProject(
     Xdata = @view Xdata[:, data_kws.Ix]
     Tdata = @view Tdata[data_kws.It]
 
-    # normalize
-    Xnorm, x̄, σx = normalize_x(Xdata, [-1, 1])
-    # Unorm, ū, σu = normalize_u(Udata)
-    # Unorm, ū, σu = Udata, T(Udata)[0], T(Udata)[1]
-    Unorm, ū, σu = normalize_u(Udata, [-1, 1])
+    normalizex = haskey(train_params, :normalizex) ? train_params.normalizex : true
+    normalizeu = haskey(train_params, :normalizeu) ? train_params.normalizeu : true
+
+    if normalizex
+        Xnorm, x̄, σx = normalize_x(Xdata, [-1, 1])
+    else
+        Xnorm, x̄, σx = Xdata, T[0], T[1]
+    end
+
+    if normalizeu
+        Unorm, ū, σu = normalize_u(Udata, [ 0, 1])
+    else
+        Unorm, ū, σu = Udata, T[0], T[1]
+    end
 
     readme = ""
     data_kws = (; case, data_kws...,)
@@ -70,14 +79,10 @@ function ngProject(
         data_kws, md_data, readme,
     )
 
-    _data = (Xnorm, Unorm[:, :, case, begin]) .|> Array
+    data = (Xnorm, Unorm[:, :, case, begin]) .|> Array
     periods = repeat(T[2], in_dim)
 
-    # @show extrema(Xnorm)
-    # @show σx, periods
-    # @assert false
-
-    model, ST, metadata = makemodelfunc(_data, train_params, periods, metadata, projectdir; rng, verbose, device)
+    model, ST, metadata = makemodelfunc(data, train_params, periods, metadata, projectdir; rng, verbose, device)
 
     #-------------------------------------------#
     # visualize
