@@ -33,6 +33,7 @@ function ngProject(
 )
 
     projectdir = joinpath(modeldir, "project$(case)")
+    isdir(projectdir) && rm(projectdir; recursive = true)
     mkpath(projectdir)
 
     #--------------------------------------------#
@@ -58,20 +59,8 @@ function ngProject(
     Xdata = @view Xdata[:, data_kws.Ix]
     Tdata = @view Tdata[data_kws.It]
 
-    normalizex = haskey(train_params, :normalizex) ? train_params.normalizex : true
-    normalizeu = haskey(train_params, :normalizeu) ? train_params.normalizeu : true
-
-    if normalizex
-        Xnorm, x̄, σx = normalize_x(Xdata, [-1, 1])
-    else
-        Xnorm, x̄, σx = Xdata, T[0], T[1]
-    end
-
-    if normalizeu
-        Unorm, ū, σu = normalize_u(Udata, [ 0, 1])
-    else
-        Unorm, ū, σu = Udata, T[0], T[1]
-    end
+    Xnorm, x̄, σx = normalize_x(Xdata, [-1, 1])
+    U0, ū, σu = normalize_u(Udata[:, :, case, begin], [0, 1])
 
     readme = ""
     data_kws = (; case, data_kws...,)
@@ -79,7 +68,7 @@ function ngProject(
         data_kws, md_data, readme,
     )
 
-    data = (Xnorm, Unorm[:, :, case, begin]) .|> Array
+    data = (Xnorm, U0) .|> Array
     periods = repeat(T[2], in_dim)
 
     model, ST, metadata = makemodelfunc(data, train_params, periods, metadata, projectdir; rng, verbose, device)
@@ -101,7 +90,7 @@ function ngProject(
             er = (up - ud) / nr
             er = sum(abs2, er) / Nx .|> sqrt
 
-            println("[ngProject] out_dim: $out_dim \t Error $(er * 100)%.")
+            println("[ngProject] out_dim: $out_dim \t Error $(er).")
 
             if in_dim == 1
                 plt = plot(; xlabel = "x", ylabel = "y", legend = false)

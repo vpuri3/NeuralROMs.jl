@@ -21,13 +21,22 @@ function makemodelGaussian(
     # get train params
     #--------------------------------------------#
 
-    N = haskey(train_params, :N) ? train_params.N : 1
-    E = haskey(train_params, :E) ? train_params.E : 140
+    # N = haskey(train_params, :N) ? train_params.N : 4 # num_gauss
+    # f = haskey(train_params, :f) ? train_params.f : 4 # num_freqs
+    # σmin = haskey(train_params, :σmin) ? train_params.σmin : 1e-4
+    # train_freq = haskey(train_params, :train_freq) ? train_params.train_freq : true
+
+    E = haskey(train_params, :E) ? train_params.E : 200
     exactIC = haskey(train_params, :exactIC) ? train_params.exactIC : (;)
 
-    warmup = haskey(train_params, :warmup) ? train_params.warmup : true
-    _batchsize = haskey(train_params, :_batchsize) ? train_params._batchsize : nothing
-    batchsize_ = haskey(train_params, :batchsize_) ? train_params.batchsize_ : nothing
+    warmup = haskey(train_params, :warmup) ? train_params.warmup : false
+    hessopt = haskey(train_params, :hessopt) ? train_params.hessopt : true
+
+    _batchsize = haskey(train_params, :_batchsize) ? train_params._batchsize : 1
+    batchsize_ = haskey(train_params, :batchsize_) ? train_params.batchsize_ : numobs(data)
+
+    # TODO: increase batchsize during training
+    # https://arxiv.org/abs/1711.00489
 
     #--------------------------------------------#
     # architecture
@@ -45,7 +54,20 @@ function makemodelGaussian(
 
         o = out_dim
 
-        GaussianLayer1D(i, o, N)
+        # # case 1
+        # Ng = Nf = 1
+        # σmin = 1e-3
+        # σsplit = true # false
+        # train_freq = false
+
+        # case 4
+        Ng = 2
+        Nf = 1
+        σmin = 1e-2
+        σsplit = true
+        train_freq = false
+
+        GaussianLayer1D(i, o, Ng, Nf; σmin, σsplit, train_freq)
     end
 
     NN = Chain(; periodic, decoder)
@@ -75,42 +97,23 @@ function makemodelGaussian(
     else
         #-------------------------------------------#
         lossfun = mse
-        _batchsize = isnothing(_batchsize) ? numobs(data) ÷ 1 : _batchsize
-        batchsize_ = isnothing(batchsize_) ? numobs(data) ÷ 1 : batchsize_
-        opts, nepochs, schedules, early_stoppings = make_optimizer_gaussian(E, warmup)
+        opts, nepochs, schedules, early_stoppings = make_optimizer_gaussian(E, warmup, hessopt)
         #-------------------------------------------#
 
         train_args = (; E, _batchsize, batchsize_)
         metadata   = (; metadata..., train_args)
 
         #----------------#
-        # initialization
+        # mess with initialization
         #----------------#
-        # x ∈ [-1, 1]
-        # u ∈ [ 0, 1]
-        # spread evenly in x.
-        # ensure that entire domain in covered
-        # TODO: add xlims as input to GaussianLayer1D
-        # What normalization to assume for u? Would [0, 1] work for Gabor (must have -ve vals )
-        # Would adding a bias help as Gaussians are strictly in [0, c] ??
-
         p, st = Lux.setup(rng, NN)
         p = ComponentArray(p) .|> Float64
-
-        p.decoder.c .= 1.0
-        p.decoder.x̄ .= 0.0
-        p.decoder.σ .= 1/3
-
-        # @show mse(NN, p, st, data)[1] # 0.095
-        # @show metadata
-
         ST = nothing
         model = NN, p, st
-        # @assert false
         #----------------#
 
         display(NN)
-        
+
         @time model, ST = train_model(
             NN, data; rng, p, _batchsize, batchsize_,
             opts, nepochs, schedules, early_stoppings,
@@ -118,10 +121,28 @@ function makemodelGaussian(
         )
         
         plot_training!(ST...) |> display
-        
-        @show p.decoder |> getdata
-        @show model[2].decoder |> getdata
 
+        @show model[2].decoder.b
+        @show model[2].decoder.c
+        @show model[2].decoder.x̄
+
+        if σsplit
+            @show model[2].decoder.σl
+            @show model[2].decoder.σr
+        else
+            @show model[2].decoder.σ
+        end
+
+        if train_freq
+            @show model[2].decoder.ω
+            @show model[2].decoder.ϕ
+        else
+            # @show model[3].decoder.ω
+            # @show model[3].decoder.ϕ
+        end
+
+        @show length(model[2])
+        
         model, ST, metadata
     end
 
@@ -163,10 +184,9 @@ function makemodelMFN(
         γ = haskey(train_params, :γ) ? train_params.γ : 0f-2
     end
 
-    _batchsize = haskey(train_params, :_batchsize) ? train_params._batchsize : nothing
-    batchsize_ = haskey(train_params, :batchsize_) ? train_params.batchsize_ : nothing
-
     warmup = haskey(train_params, :warmup) ? train_params.warmup : true
+    _batchsize = haskey(train_params, :_batchsize) ? train_params._batchsize : 1
+    batchsize_ = haskey(train_params, :batchsize_) ? train_params.batchsize_ : numobs(data)
 
     #--------------------------------------------#
     # architecture
@@ -198,11 +218,7 @@ function makemodelMFN(
     # training hyper-params
     #-------------------------------------------#
 
-    _batchsize = isnothing(_batchsize) ? numobs(data) ÷ 10 : _batchsize
-    batchsize_ = isnothing(batchsize_) ? numobs(data) ÷ 1  : batchsize_
-
     lossfun = mse
-
     idx = mfn_W_indices(NN, :decoder; rng)
     weightdecay = IdxWeightDecay(0f0, idx)
     opts, nepochs, schedules, early_stoppings = make_optimizer_DNN(E, warmup, weightdecay)
@@ -251,13 +267,13 @@ function makemodelDNN(
 
     h = haskey(train_params, :h) ? train_params.h : 1
     w = haskey(train_params, :w) ? train_params.w : 10
-    E = haskey(train_params, :E) ? train_params.E : 2100
+    E = haskey(train_params, :E) ? train_params.E : 700
     γ = haskey(train_params, :γ) ? train_params.γ : 1f-4
     act = haskey(train_params, :act) ? train_params.act : sin
 
     warmup = haskey(train_params, :warmup) ? train_params.warmup : true
-    _batchsize = haskey(train_params, :_batchsize) ? train_params._batchsize : nothing
-    batchsize_ = haskey(train_params, :batchsize_) ? train_params.batchsize_ : nothing
+    _batchsize = haskey(train_params, :_batchsize) ? train_params._batchsize : 1
+    batchsize_ = haskey(train_params, :batchsize_) ? train_params.batchsize_ : numobs(data)
 
     #--------------------------------------------#
     # architecture
@@ -305,11 +321,7 @@ function makemodelDNN(
     # training hyper-params
     #-------------------------------------------#
 
-    _batchsize = isnothing(_batchsize) ? numobs(data) ÷ 10 : _batchsize
-    batchsize_ = isnothing(batchsize_) ? numobs(data) ÷ 1  : batchsize_
-
     lossfun = mse
-
     idx = dnn_W_indices(NN, :decoder; rng)
     weightdecay = IdxWeightDecay(0f0, idx)
     opts, nepochs, schedules, early_stoppings = make_optimizer_DNN(E, warmup, weightdecay)
@@ -345,7 +357,9 @@ function make_optimizer_gaussian(
     # LR ∈ [1e-5, 1e-3] with exponential decay.
     # Then second-order optimizer
 
-    lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
+    # Gradient descent / Adam aren't converging at all.
+
+    lrs = (1f-3, 1f-4, 1f-5, 1f-6)
     Nlrs = length(lrs)
 
     opts = Tuple(Optimisers.Adam(lr) for lr in lrs)
@@ -359,7 +373,6 @@ function make_optimizer_gaussian(
         _schedule = Step(1f-2, 1f0, Inf32)
         _early_stopping = true
 
-        ######################
         opts = (_opt, opts...,)
         nepochs = (_nepochs, nepochs...,)
         schedules = (_schedule, schedules...,)

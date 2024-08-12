@@ -37,6 +37,7 @@ for j in axes(l1, 2)
         l2[i, j] = loss(f2(x, μ, σi), utrue)
     end
 end
+
 #====================================================#
 p1 = contourf(μs, σs, l1'; xlabel = "μ", ylabel = "σ",)
 p2 = contourf(μs, σis, l2'; xlabel = "μ", ylabel = "1/σ",)

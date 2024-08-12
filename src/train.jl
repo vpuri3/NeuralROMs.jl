@@ -693,16 +693,10 @@ function optimize(
         Optim.LBFGS,
     }
 
-        dsize = numobs(__loader)
-        bsize = numobs(first(__loader))
-
-        @assert length(__loader) == 1 "__loader must have exactly one minibatch."
-
-        if dsize != bsize
-            @warn " Using batchsize $bsize with data set of $dsize samples. \
-            That is, we have $(length(__loader)) minibatches. \
-            Hessian-based optimizers such as Newton / BFGS / L-BFGS do \
-            not work well with mini-batching. Set batchsize to equal data-size, \
+        if length(__loader) != 1
+            @warn " Data loader has $(length(__loader)) minibatches. \
+            Hessian-based optimizers such as Newton / BFGS / L-BFGS may be \
+            unstable with mini-batching. Set batchsize to equal data-size, \
             or else the method may be unstable. If you want a stochastic \
             optimizer, try `Optimisers.jl`."
         end
@@ -840,7 +834,7 @@ function plot_training!(EPOCH, _LOSS, LOSS_, _MSE, MSE_, _MAE, MAE_)
     plt = plot(
         title = "Training Plot", yaxis = :log,
         xlabel = "Epochs", ylabel = "Loss",
-        yticks = (@. 10.0^(-7:1)),
+        yticks = (@. 10.0^(-20:10)),
     )
 
     # (; ribbon = (lower, upper))

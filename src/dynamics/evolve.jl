@@ -229,6 +229,10 @@ function solve_timestep(
         apply_timestep(timealg, Δt, f̃prevs, pprevs, tprevs, f̃1, dpdt_rhs)
     end
 
+    # @show pprevs
+    # @show p1
+    # @assert !any(isnan, p1)
+
     # get new states
     t1 = get_time(integrator) + Δt
     u1 = model(x, p1)
@@ -240,7 +244,7 @@ function solve_timestep(
     steps = 0
     if verbose
         print("Linear Steps: $steps, ")
-        print_resid_stats(r1, scheme.abstolMSE, scheme.abstolInf)
+        print_resid_stats(p1, r1, scheme.abstolMSE, scheme.abstolInf)
         println()
     end
 
@@ -331,7 +335,7 @@ function solve_timestep(
     steps = nlssol.stats.nsteps
     if verbose
         print("Nonlinear Steps: $steps, ")
-        print_resid_stats(r1, scheme.abstolMSE, scheme.abstolInf)
+        print_resid_stats(p1, r1, scheme.abstolMSE, scheme.abstolInf)
         print(" , RetCode: $(nlssol.retcode)\n")
     end
 
@@ -378,7 +382,12 @@ function residual_learn(
     vec(û - u)
 end
 
-function print_resid_stats(r::AbstractArray, abstolMSE, abstolInf)
+function print_resid_stats(
+    p::AbstractVector,
+    r::AbstractArray,
+    abstolMSE,
+    abstolInf,
+)
     mse_r = sum(abs2, r) / length(r)
     inf_r = norm(r, Inf)
 
@@ -389,8 +398,11 @@ function print_resid_stats(r::AbstractArray, abstolMSE, abstolInf)
     printstyled("||∞: $(round(inf_r, sigdigits = 8)) ", color = color_inf)
 
     if isnan(mse_r) | isnan(inf_r)
-        println()
-        throw(ErrorException("Residual has NaN"))
+        if length(p) < 50
+            throw(ErrorException("Residual has NaN. Parameter set is: $(p)"))
+        else
+            throw(ErrorException("Residual has NaN"))
+        end
     end
 
     return

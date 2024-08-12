@@ -47,7 +47,7 @@ function uIC(x; mu = nothing)
     u1 = repeat(u1, 1, N)
     u2 = repeat(u2, 1, N)
 
-    uu = hcat(u1, u2)
+    hcat(u1, u2)
 end
 
 odecb = begin
@@ -155,7 +155,7 @@ function advectionDiffusion1D(
     (sol, V), (x, u, t, mu)
 end
 
-N = 256
+N = 512
 ν = 0f0
 c = 1f0
 T = Float64
