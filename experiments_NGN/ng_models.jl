@@ -21,6 +21,8 @@ function makemodelGaussian(
     # get train params
     #--------------------------------------------#
 
+    periodic = true
+
     # N = haskey(train_params, :N) ? train_params.N : 4 # num_gauss
     # f = haskey(train_params, :f) ? train_params.f : 4 # num_freqs
     # σmin = haskey(train_params, :σmin) ? train_params.σmin : 1e-4
@@ -42,45 +44,34 @@ function makemodelGaussian(
     # architecture
     #--------------------------------------------#
 
-    periodic = PeriodicEmbedding(1:in_dim, periods)
-    periodic = NoOpLayer()
-
     decoder = begin
-        i = if periodic isa PeriodicEmbedding
-            2 * in_dim
-        elseif periodic isa NoOpLayer
-            in_dim
-        end
-
+        i = in_dim
         o = out_dim
 
-        # # case 1-3
-        # Ng = Nf = 1
-        # σmin = 1e-3
-        # σsplit = true # false
-        # train_freq = false
+        # case 1-4
+        Ng = Nf = 1
+        σmin = 1e-2
+        σsplit = false
+        train_freq = false
+        periodic = false # comment out for case 4
 
-        # # case 4-6
+        # # case 5-8
         # Ng = 2
         # Nf = 1
         # σmin = 1e-2
         # σsplit = true
         # train_freq = false
+        # # periodic = false # comment out for case 8
 
-        # case 4
-        Ng = 2
-        Nf = 1
-        σmin = 1e-2
-        σsplit = true
-        train_freq = false
-
-        GaussianLayer1D(i, o, Ng, Nf; σmin, σsplit, train_freq)
+        GaussianLayer1D(i, o, Ng, Nf; periodic, σmin, σsplit, train_freq)
     end
 
-    NN = Chain(; periodic, decoder)
+    NN = Chain(; decoder)
 
     #-------------------------------------------#
     model, ST, metadata = if !isempty(exactIC)
+        @set! NN.decoder.periodic = false
+
         p, st = Lux.setup(rng, NN)
         p = ComponentArray(p)
 
@@ -114,7 +105,7 @@ function makemodelGaussian(
         # mess with initialization
         #----------------#
         p, st = Lux.setup(rng, NN)
-        p = ComponentArray(p) .|> Float64
+        p = ComponentArray(p) .|> Float32
         ST = nothing
         model = NN, p, st
         #----------------#

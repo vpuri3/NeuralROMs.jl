@@ -13,7 +13,7 @@ function fieldplot(
     Xdata::AbstractArray,
     Tdata::AbstractArray,
     Udata::AbstractArray,
-    Upred::AbstractArray, 
+    Upred::AbstractArray,
     ps::AbstractArray,
     grid::Tuple,
     outdir::String,

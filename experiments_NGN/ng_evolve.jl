@@ -116,10 +116,13 @@ function ngEvolve(
     evolve_params = (;),
     learn_ic::Bool = false,
     hyper_indices = nothing,
+
     verbose::Bool = true,
     benchmark::Bool = false,
     device = Lux.gpu_device(),
 )
+    mkpath(modeldir)
+
     #==============#
     # load data/model
     #==============#
@@ -130,25 +133,10 @@ function ngEvolve(
     # load model
     (NN, p0, st), md = loadmodel(modelfile)
 
-    # get sizes
-    in_dim  = size(Xdata, 1)
-    out_dim = size(Udata, 1)
-
     # subsample in space
     Udata = @view Udata[:, data_kws.Ix, :, data_kws.It]
     Xdata = @view Xdata[:, data_kws.Ix]
     Tdata = @view Tdata[data_kws.It]
-
-    #==============#
-    mkpath(modeldir)
-    #==============#
-
-    #==============#
-    # freeze layers (??)
-    #==============#
-    # IDEA: partial freezing? So not exactly ROMs.
-    # How do you guarantee expressivity?
-    # NN, p0, st = freeze_decoder(decoder, length(p0); rng, p0)
 
     #==============#
     # make model
@@ -158,7 +146,6 @@ function ngEvolve(
     #==============#
     # solver setup
     #==============#
-
     T        = haskey(evolve_params, :T       ) ? evolve_params.T        : Float32
     Δt       = haskey(evolve_params, :Δt      ) ? evolve_params.Δt       : -(-(extrema(Tdata)...)) |> T
     timealg  = haskey(evolve_params, :timealg ) ? evolve_params.timealg  : EulerForward()
@@ -212,7 +199,7 @@ function ngEvolve(
 
     if T === Float64
         @info "[NG_EVOLVE] Running calculation on CPU with Float64 precision."
-        xdevice = cpu_device()
+        device = cpu_device()
     end
 
     # convert model eltype

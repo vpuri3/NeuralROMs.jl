@@ -19,6 +19,7 @@ function gabor(x, α, x̄, σ, ω, ϕ,)
 
     α * gaussian .* sinusodal
 end
+
 #------------------------------------#
 
 function plot_multigabor(x, Ng, Nf, σfactor)
@@ -47,11 +48,8 @@ function plot_multigabor(x, Ng, Nf, σfactor)
     plt
 end
 
-x = LinRange(-1, 1, 1024)
-
-p1 = plot_multigabor(x, 1, 2, 4) |> display
-
-# plot(p1, p2, p3, p4, size = (1200, 400)) |> display
+# x = LinRange(-1, 1, 1024)
+# p1 = plot_multigabor(x, 1, 2, 4) |> display
 
 #------------------------------------#
 function plot_multigaussian(x, N, σfactor)
@@ -81,24 +79,4 @@ end
 #
 # plot(p1, p2, p3, p4, size = (1200, 400)) |> display
 #------------------------------------#
-
-#------------------------------------#
-# x = LinRange(-2, 2, 1024)
-#
-# α, x̄, σ, ω, ϕ = 1, 0, 1/2, 0, 0
-# u0 = gabor(x, α, x̄, σ, ω, ϕ)
-#
-# α, x̄, σ, ω, ϕ = 1, 0, 1/2, 0.2, pi/2
-# u1 = gabor(x, α, x̄, σ, ω, ϕ)
-#
-# α, x̄, σ, ω, ϕ = 1, 0, 1/2, 0.5, pi/2
-# u2 = gabor(x, α, x̄, σ, ω, ϕ)
-#
-# plt = plot()
-# plot!(plt, x, u0, w=3, c = :black)
-# plot!(plt, x, u1, w=3, c = :blue)
-# plot!(plt, x, u2, w=3, c = :red)
-# display(plt)
-#------------------------------------#
-
 nothing

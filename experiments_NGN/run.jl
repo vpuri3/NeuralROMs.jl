@@ -77,18 +77,14 @@ modeldir  = joinpath(@__DIR__, "dump_gaussian")
 #------------------------------------------------------#
 
 # parameters
-cs = evolve_params.T[1, 0, 1]
-νs = evolve_params.T[0, 0.01, 0.01]
+cs = evolve_params.T[1,    0,    1, 2.5]
+νs = evolve_params.T[0, 0.01, 0.01, 0]
 
 XD = TD = UD = UP = PS = ()
 NN, p, st = repeat([nothing], 3)
 
-# for case in 1:1
-# for case in 4:4
-# for case in 1:3
-# for case in 4:6
-for case in 6:6
-    cc = mod1(case, 3)
+for case in 1:1
+    cc = mod1(case, 4)
 
     prob = AdvectionDiffusion1D(cs[cc], νs[cc])
     modelfile = joinpath(modeldir, "project$(case)", modelfilename)

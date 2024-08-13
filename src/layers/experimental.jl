@@ -227,6 +227,7 @@ export GaussianLayer1D
 
     T
     domain
+    periodic::Bool
 
     σmin
     σfactor
@@ -241,7 +242,8 @@ function GaussianLayer1D(
     num_gauss::Integer,
     num_freqs::Integer;
     T = Float32,
-    domain = [-1f0, 1f0],
+    domain = [-1, 1],
+    periodic::Bool = false,
     σmin = T(1e-3), # consult find_sigmamin.jl. Could be higher...
     σfactor = T(4),
     σsplit::Bool = false,
@@ -252,7 +254,7 @@ function GaussianLayer1D(
 
     GaussianLayer1D(
         in_dim, out_dim, num_gauss, num_freqs,
-        T, T.(domain), T(σmin), T(σfactor), σsplit, train_freq,
+        T, T.(domain), periodic, T(σmin), T(σfactor), σsplit, train_freq,
     )
 end
 
@@ -322,10 +324,10 @@ function Lux.initialstates(rng::Random.AbstractRNG, l::GaussianLayer1D)
         st = (; st..., ω, ϕ)
     end
 
-    # if l.σsplit
-    #     w = l.T[50]
-    #     st = (;st..., w)
-    # end
+    if l.periodic
+        ω_domain = l.T[1 ./ (l.domain[2] - l.domain[1])]
+        st = (; st..., ω_domain)
+    end
 
     st
 end
@@ -351,8 +353,17 @@ function (l::GaussianLayer1D)(x::AbstractMatrix, ps, st::NamedTuple)
         @. abs(ps.σ) + st.σϵ
     end
 
+    # periodic embedding
+    if l.periodic
+        x = @. sinpi(st.ω_domain * x)
+    end
+
     # rescale with (x̄, σ)
-    z = @. (x_re - ps.x̄) / σ                # [1, 1, Ng, K]
+    xd = @. x_re - ps.x̄ 
+    if l.periodic
+        xd = @. sinpi(xd * st.ω_domain)
+    end
+    z = @. xd / σ                           # [1, 1, Ng, K]
 
     # apply Gaussian, sinusodal
     y_gauss = @. exp(st.minushalf * z^2)    # [1, 1 , Ng, K]
@@ -398,39 +409,25 @@ end
 export PeriodicLayer
 
 """
-Periodic BC layer (For 1D only rn)
-based on
-- https://github.com/julesberman/RSNG/blob/main/rsng/dnn.py
-- https://github.com/Algopaul/ng_embeddings/blob/main/embedded_ng.ipynb
+x -> sin(π⋅x/L)
+
+Works when input is symmetric around 0, i.e., x ∈ [-1, 1).
+If working with something like [0, 1], use cosines instead.
 """
-struct PeriodicLayer{I,L,P} <: Lux.AbstractExplicitLayer
-    init::I # should be U(0, 2)
-    width::L
-    periods::P
+@concrete struct PeriodicLayer <: Lux.AbstractExplicitLayer
+    idxs
+    periods
 end
 
-function PeriodicLayer(width::Integer, periods; init = rand32)
-    PeriodicLayer(init, width, periods)
-end
+Lux.initialstates(::Random.AbstractRNG, l::PeriodicLayer) = (; k = 1 ./ l.periods)
 
-function Lux.initialparameters(rng::Random.AbstractRNG, l::PeriodicLayer)
-    (;
-        ϕ = l.init(rng, l.width, length(l.periods)),
-    )
-end
-
-function Lux.initialstates(::Random.AbstractRNG, l::PeriodicLayer)
-    T = eltype(l.periods)
-    (;
-        ω = @. T(2) / [l.periods...]
-    )
-end
-
-Lux.statelength(l::PeriodicLayer) = length(l.periods)
-Lux.parameterlength(l::PeriodicLayer) = l.width * length(l.periods)
-
-function (l::PeriodicLayer)(x::AbstractArray, ps, st::NamedTuple)
-    y = @. cospi(st.ω * x + ps.ϕ)
+function (l::PeriodicLayer)(x::AbstractMatrix, ps, st::NamedTuple)
+    other_idxs = ChainRulesCore.@ignore_derivatives setdiff(axes(x, 1), l.idxs)
+    y = vcat(x[other_idxs, :], @. sinpi(st.k * x[l.idxs, :]))
     y, st
+end
+
+function Base.show(io::IO, l::PeriodicLayer)
+    println(io, "PeriodicLayer($(l.idxs), $(l.periods))")
 end
 

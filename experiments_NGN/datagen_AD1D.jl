@@ -161,8 +161,8 @@ c = 1f0
 T = Float64
 mu = nothing # parameters
 
-cs = T[1, 0, 1]
-νs = T[0, 0.01, 0.01]
+cs = T[1,    0,    1, 2.5]
+νs = T[0, 0.01, 0.01, 0]
 mu = zip(cs, νs) |> collect
 device = cpu_device()
 
