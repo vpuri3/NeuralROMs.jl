@@ -3,7 +3,9 @@ module NeuralROMs
 using DocStringExtensions
 
 # PDE stack
-using FourierSpaces
+using SciMLBase
+using CalculustCore
+# using OrdinaryDiffEq
 
 # ML Stack
 using Lux
@@ -63,26 +65,29 @@ abstract type AbstractTimeAlg end
 abstract type AbstractTimeIntegrator end
 abstract type AbstractSolveScheme end
 
-export AbstractNeuralModel, AbstractPDEProblem, AbstractTimeAlg,
-    AbstractTimeIntegrator, AbstractSolveScheme
+export AbstractNeuralModel
+export AbstractPDEProblem
+export AbstractTimeAlg
+export AbstractTimeIntegrator
+export AbstractSolveScheme
+
+###
+# utilities
+###
 
 include("helpers.jl")
-export loaddata, loadmodel, eval_model,
+export
+    loaddata, loadmodel, eval_model,
     normalizedata, unnormalizedata,
     normalize_x, normalize_u, normalize_t
 
 include("utils.jl")
-export init_siren, scale_init, scaled_siren_init
-
-include("metrics.jl")
-export mae, mae_clamped, mse, PSNR, rsquare, pnorm,
-    elasticreg, codereg_autodecoder, regularize_decoder,
-    regularize_autodecoder, regularize_flatdecoder
-
-include("autodiff.jl")
 export
-    forwarddiff_deriv1, forwarddiff_deriv2, forwarddiff_deriv4, forwarddiff_jacobian,
-    finitediff_deriv1, finitediff_deriv2, finitediff_deriv4, finitediff_jacobian
+    init_siren, scale_init, scaled_siren_init
+
+###
+# layers
+###
 
 include("layers/basic.jl")
 export
@@ -107,8 +112,14 @@ export OpKernel, OpConv, OpKernelBilinear, OpConvBilinear, linear_nonlinear
 include("operator/transform.jl")
 export FourierTransform, CosineTransform
 
-include("optimisers.jl")
-export DecoderWeightDecay, IdxWeightDecay
+###
+# neural model
+###
+
+include("autodiff.jl")
+export
+    forwarddiff_deriv1, forwarddiff_deriv2, forwarddiff_deriv4, forwarddiff_jacobian,
+    finitediff_deriv1, finitediff_deriv2, finitediff_deriv4, finitediff_jacobian
 
 include("neuralmodel.jl")
 export
@@ -128,8 +139,11 @@ export
     BurgersViscous1D, BurgersViscous2D,
     KuramotoSivashinsky1D
 
-include("nonlinleastsq.jl")
-export nonlinleastsq
+###
+# dynamics
+###
+
+include("dynamics/ordinarydiffeq.jl")
 
 include("dynamics/timeintegrator.jl")
 export TimeIntegrator, perform_timestep!, evolve_integrator!, evolve_model
@@ -137,7 +151,7 @@ export TimeIntegrator, perform_timestep!, evolve_integrator!, evolve_model
 include("dynamics/evolve.jl")
 export
     # timestepper types
-    EulerForward, EulerBackward, RK2, RK4,
+    EulerForward, EulerBackward, RungeKutta2, RungeKutta4,
     # timestepper interface
     compute_residual, apply_timestep,
     # solve scheme types
@@ -145,8 +159,27 @@ export
     # residual functions
     make_residual, residual_learn
 
+###
+# optimization
+###
+
+include("metrics.jl")
+export mae, mae_clamped, mse, PSNR, rsquare, pnorm,
+    elasticreg, codereg_autodecoder, regularize_decoder,
+    regularize_autodecoder, regularize_flatdecoder
+
+include("optimisers.jl")
+export DecoderWeightDecay, IdxWeightDecay
+
+include("nonlinleastsq.jl")
+export nonlinleastsq
+
 include("train.jl")
 export train_model, callback, optimize, plot_training!
+
+###
+# visualization
+###
 
 include("vis.jl")
 export
@@ -154,4 +187,5 @@ export
     plot_derivatives1D, plot_derivatives1D_autodecoder,
     plot_1D_surrogate_steady
 
+#======================#
 end # module

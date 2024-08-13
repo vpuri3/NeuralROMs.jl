@@ -324,6 +324,8 @@ function Lux.initialstates(rng::Random.AbstractRNG, l::GaussianLayer1D)
         st = (; st..., ω, ϕ)
     end
 
+    # periodic kernel in
+    # https://www.cs.toronto.edu/~duvenaud/cookbook/index.html
     if l.periodic
         ω_domain = l.T[1 ./ (l.domain[2] - l.domain[1])]
         st = (; st..., ω_domain)

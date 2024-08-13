@@ -113,8 +113,8 @@ end
 # RK
 #===========================================================#
 abstract type AbstractRKMethod <: AbstractTimeAlg end
-struct RK2 <: AbstractRKMethod end # midpoint
-struct RK4 <: AbstractRKMethod end
+struct RungeKutta2 <: AbstractRKMethod end # midpoint
+struct RungeKutta4 <: AbstractRKMethod end
 
 nsavedstates(::AbstractRKMethod) = 0
 isimplicit(::AbstractRKMethod) = false
@@ -124,7 +124,7 @@ isimplicit(::AbstractRKMethod) = false
 ###
 
 function apply_timestep(
-    ::RK2,
+    ::RungeKutta2,
     Δt::T,
     fprevs::NTuple{N, AbstractArray{T}},
     uprevs::NTuple{N, AbstractArray{T}},
@@ -139,7 +139,7 @@ function apply_timestep(
 end
 
 function apply_timestep(
-    ::RK4,
+    ::RungeKutta4,
     Δt::T,
     fprevs::NTuple{N, AbstractArray{T}},
     uprevs::NTuple{N, AbstractArray{T}},
@@ -160,7 +160,7 @@ end
 ###
 
 function compute_residual(
-    ::Union{RK2, RK4},
+    ::Union{RungeKutta2, RungeKutta4},
     Δt::T,
     fprevs::NTuple{N, AbstractArray{T}},
     uprevs::NTuple{N, AbstractArray{T}},
@@ -176,9 +176,9 @@ end
 # AB
 #===========================================================#
 abstract type AbstractABMethod <: AbstractTimeAlg end
-struct AB2 <: AbstractTimeAlg end
+struct AdamBashford2 <: AbstractTimeAlg end
 
-adaptiveΔt(::AB2) = false
+adaptiveΔt(::AdamBashford2) = false
 nsavedstates(::AbstractABMethod) = 1
 isimplicit(::AbstractABMethod) = false
 
@@ -229,16 +229,12 @@ function solve_timestep(
         apply_timestep(timealg, Δt, f̃prevs, pprevs, tprevs, f̃1, dpdt_rhs)
     end
 
-    # @show pprevs
-    # @show p1
-    # @assert !any(isnan, p1)
-
     # get new states
     t1 = get_time(integrator) + Δt
     u1 = model(x, p1)
     f1 = dudtRHS(prob, model, x, p1, t1; autodiff = autodiff_xyz, ϵ = ϵ_xyz)
     f̃1 = compute_f̃(f1, p1, x, model, lincache; autodiff_jac, ϵ_jac)
-    r1 = compute_residual(timealg, Δt, fprevs, uprevs, tprevs, f1, u1, nothing) #TODO
+    r1 = compute_residual(timealg, Δt, fprevs, uprevs, tprevs, f1, u1, nothing)
 
     # print message
     steps = 0
