@@ -33,6 +33,7 @@ data_kws = (; Ix = :, It = :)
 
 train_params  = (;)
 evolve_params = (; T = Float64, timealg = RK4())#, Δt = 1e-3, adaptive = false)
+# evolve_params = (; T = Float64, timealg = EulerForward())
 
 makemodel = makemodelGaussian
 modelfilename = "model_05.jld2"
@@ -86,7 +87,7 @@ NN, p, st = repeat([nothing], 3)
 # for case in 4:4
 # for case in 1:3
 # for case in 4:6
-for case in 4:4
+for case in 6:6
     cc = mod1(case, 3)
 
     prob = AdvectionDiffusion1D(cs[cc], νs[cc])
@@ -94,7 +95,7 @@ for case in 4:4
 
     global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
     # (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
-    #
+
     # global XD = (XD..., Xd)
     # global TD = (TD..., Td)
     # global UD = (UD..., Ud)

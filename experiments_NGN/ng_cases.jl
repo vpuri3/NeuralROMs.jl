@@ -25,7 +25,6 @@ function fieldplot(
     out_dim = size(Udata, 1)
 
     linewidth = 2.0
-    palette = :tab10
 
     for od in 1:out_dim
         up = Upred[od, :, :]
@@ -47,8 +46,15 @@ function fieldplot(
                 # title = "Ambient space evolution, case = $(case)",
                 xlabel = L"x", ylabel = L"u(x,t)", legend = false,
             )
-            plot!(plt, xd, up[:, Itplt]; linewidth, palette)
-            scatter!(plt, xd[Ixplt], ud[Ixplt, Itplt]; w = 1, palette)
+
+            colors = [:black, :blue, :magenta, :red]
+
+            for (i,it) in enumerate(Itplt)
+                c = colors[i]
+                plot!(plt, xd, up[:, it]; linewidth, c)
+                scatter!(plt, xd[Ixplt], ud[Ixplt, it]; w = 1, c)
+            end
+
             png(plt, joinpath(outdir, "$(prefix)_u$(od)_case$(case)"))
 
             # # make gif
@@ -106,7 +112,7 @@ function fieldplot(
             ylims = (10^-8, 1.0),
         )
 
-        plot!(plt, Tdata, er; linewidth, palette, ylabel = "ε(t)")
+        plot!(plt, Tdata, er; linewidth, ylabel = "ε(t)")
         png(plt, joinpath(outdir, "$(prefix)_e$(od)_case$(case)"))
     end
 

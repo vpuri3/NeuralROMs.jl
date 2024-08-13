@@ -54,10 +54,17 @@ function makemodelGaussian(
 
         o = out_dim
 
-        # # case 1
+        # # case 1-3
         # Ng = Nf = 1
         # σmin = 1e-3
         # σsplit = true # false
+        # train_freq = false
+
+        # # case 4-6
+        # Ng = 2
+        # Nf = 1
+        # σmin = 1e-2
+        # σsplit = true
         # train_freq = false
 
         # case 4
@@ -127,6 +134,7 @@ function makemodelGaussian(
         @show model[2].decoder.x̄
 
         if σsplit
+            @show model[2].decoder.w
             @show model[2].decoder.σl
             @show model[2].decoder.σr
         else

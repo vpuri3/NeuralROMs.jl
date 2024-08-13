@@ -282,7 +282,6 @@ function Lux.initialparameters(rng::Random.AbstractRNG, l::GaussianLayer1D)
 
     # scaling
     c0 = l.T(1 / l.num_freqs)
-    # c = fill(c0, 1, l.num_freqs, l.num_gauss)
     c = rand(rng, 1, l.num_freqs, l.num_gauss) .* 2 .- 1 .|> l.T
 
     # mean
