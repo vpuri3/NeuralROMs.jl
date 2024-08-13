@@ -1,13 +1,5 @@
 #
-using FourierSpaces
-using NeuralROMs
-
-let
-    # add test dependencies to env stack
-    pkgpath = dirname(dirname(pathof(NeuralROMs)))
-    tstpath = joinpath(pkgpath, "test")
-    !(tstpath in LOAD_PATH) && push!(LOAD_PATH, tstpath)
-end
+using FourierSpaces, OrdinaryDiffEq
 
 using CUDA, LuxCUDA, LuxDeviceUtils
 using OrdinaryDiffEq, LinearSolve, LinearAlgebra
@@ -158,7 +150,7 @@ end
 N = 512
 ν = 0f0
 c = 1f0
-T = Float64
+T = Float32
 mu = nothing # parameters
 
 cs = T[1,    0,    1, 2.5]

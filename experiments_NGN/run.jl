@@ -19,7 +19,7 @@ data_kws = (; Ix = :, It = :)
 # DNN
 #------------------------------------------------------#
 # train_params = (;)
-# evolve_params = (; T = Float32,)
+# evolve_params = (;)
 #
 # makemodel = makemodelDNN
 # modelfilename = "model_08.jld2"
@@ -32,8 +32,8 @@ data_kws = (; Ix = :, It = :)
 # data_kws = map(x -> round.(Int, x), data_kws)
 
 train_params  = (;)
-evolve_params = (; T = Float64, timealg = RK4())#, Δt = 1e-3, adaptive = false)
-# evolve_params = (; T = Float64, timealg = EulerForward())
+evolve_params = (; timealg = RungeKutta4())#, Δt = 1e-3, adaptive = false)
+# evolve_params = (; timealg = EulerForward())
 
 makemodel = makemodelGaussian
 modelfilename = "model_05.jld2"
@@ -46,7 +46,7 @@ modeldir  = joinpath(@__DIR__, "dump_gaussian")
 # data_kws = map(x -> round.(Int, x), data_kws)
 
 # train_params  = (; N = 1, exactIC = (; c = [1.0], x̄ = [-0.5], σ = [0.1]))
-# evolve_params = (; T = Float64, timealg = RK4(),)
+# evolve_params = (; timealg = RungeKutta4(),)
 
 # makemodel = makemodelGaussian
 # modelfilename = "model.jld2"
@@ -56,7 +56,7 @@ modeldir  = joinpath(@__DIR__, "dump_gaussian")
 # MFN (Fourier)
 #------------------------------------------------------#
 # train_params = (; MFNfilter = :Fourier)
-# evolve_params = (; T = Float32, timealg = RK4())
+# evolve_params = (; timealg = RungeKutta4())
 #
 # makemodel = makemodelMFN
 # modelfilename = "model_08.jld2"
@@ -66,7 +66,7 @@ modeldir  = joinpath(@__DIR__, "dump_gaussian")
 # MFN (Gabor)
 #------------------------------------------------------#
 # train_params = (; MFNfilter = :Gabor, γ = 0f0)
-# evolve_params = (; T = Float32,)
+# evolve_params = (;)
 #
 # makemodel = makemodelMFN
 # modelfilename = "model_08.jld2"
@@ -77,8 +77,8 @@ modeldir  = joinpath(@__DIR__, "dump_gaussian")
 #------------------------------------------------------#
 
 # parameters
-cs = evolve_params.T[1,    0,    1, 2.5]
-νs = evolve_params.T[0, 0.01, 0.01, 0]
+cs = Float32[1,    0,    1, 2.5]
+νs = Float32[0, 0.01, 0.01, 0]
 
 XD = TD = UD = UP = PS = ()
 NN, p, st = repeat([nothing], 3)
@@ -89,8 +89,8 @@ for case in 1:1
     prob = AdvectionDiffusion1D(cs[cc], νs[cc])
     modelfile = joinpath(modeldir, "project$(case)", modelfilename)
 
-    global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
-    # (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
+    # global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
+    (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
 
     # global XD = (XD..., Xd)
     # global TD = (TD..., Td)

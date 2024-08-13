@@ -2,12 +2,16 @@
 #===========================================================#
 export GalerkinCollocation
 
-mutable struct GalerkinCollocation{Tprob,Tmodel,Ttimealg,Txyz,Tlincache} <: AbstractSolveScheme
+mutable struct GalerkinCollocation{
+    Tprob,Tmodel,Ttimealg,Txyz,Taxes,Tlincache
+} <: AbstractSolveScheme
+
     prob::Tprob
     model::Tmodel
     timealg::Ttimealg
 
     xyz::Txyz
+    ca_axes::Taxes
     lincache::Tlincache
 
     function GalerkinCollocation(
@@ -22,14 +26,16 @@ mutable struct GalerkinCollocation{Tprob,Tmodel,Ttimealg,Txyz,Tlincache} <: Abst
         f = model(xyz, p0)
         J = dudp(model, xyz, p0)
 
+        ca_axes = getaxes(p0)
+
         linprob = LinearProblem(J, vec(f))
         lincache = SciMLBase.init(linprob, linalg)
 
         new{
             typeof(prob), typeof(model), typeof(timealg), typeof(xyz),
-            typeof(lincache),
+            typeof(ca_axes), typeof(lincache),
         }(
-            prob, model, timealg, xyz, lincache,
+            prob, model, timealg, xyz, ca_axes, lincache,
         )
     end
 end
@@ -42,17 +48,18 @@ function (l::GalerkinCollocation)(
     params,
     t::Number,
 )
-    f = dudtRHS(l.prob, l.model, l.xyz, p, t)
-    J = dudp(l.model, l.xyz, p)
+    ps = ComponentArray(p, l.ca_axes)
+
+    f = dudtRHS(l.prob, l.model, l.xyz, ps, t)
+    J = dudp(l.model, l.xyz, ps)
 
     l.lincache.A = J
     l.lincache.b = vec(f)
-    l.lincache.u = similar(l.lincache.u)
 
     # print linsolve stats
 
-    solve!(l.lincache)
-    l.lincache.u
+    dp = solve(l.lincache).u
+    getdata(dp)
 end
 
 # function (l::GalerkinCollocation)(

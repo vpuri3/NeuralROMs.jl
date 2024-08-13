@@ -169,13 +169,6 @@ function ngEvolve(
         T(1e-5), T(1e-10)
     end
 
-    # scheme
-    scheme = if scheme === :GalerkinProjection
-        GalerkinProjection(linsolve, abstol_inf, abstol_mse)
-    elseif scheme === :LSPG
-        LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, T(1f-6), abstol_inf, abstol_mse)
-    end
-
     #==============#
     # Hyper-reduction
     #==============#
@@ -205,30 +198,61 @@ function ngEvolve(
     # convert model eltype
     Tconv = T === Float32 ? f32 : f64
     model = Tconv(model)
+    p0 = Tconv(p0)
+
+    # #==============#
+    # # scheme
+    # #==============#
+    # scheme = if scheme === :GalerkinProjection
+    #     GalerkinProjection(linsolve, abstol_inf, abstol_mse)
+    # elseif scheme === :LSPG
+    #     LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, T(1f-6), abstol_inf, abstol_mse)
+    # elseif scheme === :GalerkinCollocation
+    #     GalerkinCollocation(prob, model, linsolve, timealg, p0, Xd)
+    # end
 
     #==============#
     # evolve
     #==============#
 
-    args = (prob, device(model), timealg, scheme, (device(data[1:2])..., data[3]), device(p0 .|> T), Δt)
-    kwargs = (; adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,)
+    # if !isa(scheme, GalerkinCollocation)
+    #     args = (prob, device(model), timealg, scheme, (device(data[1:2])..., data[3]), device(p0 .|> T), Δt)
+    #     kwargs = (; adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,)
+    #
+    #     if benchmark # assume CUDA
+    #         Logging.disable_logging(Logging.Warn)
+    #         timeROM = @belapsed CUDA.@sync $evolve_model($args...; $kwargs...)
+    #     end
+    #
+    #     statsROM = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
+    #         CUDA.@timed _, ps, _ = evolve_model(args...; kwargs...)
+    #     else
+    #         @timed _, ps, _ = evolve_model(args...; kwargs...)
+    #     end
+    #
+    #     @set! statsROM.value = nothing
+    #     if benchmark
+    #         @set! statsROM.time  = timeROM
+    #     end
+    #     @show statsROM.time
+    # else
+    # end
 
-    if benchmark # assume CUDA
-        Logging.disable_logging(Logging.Warn)
-        timeROM = @belapsed CUDA.@sync $evolve_model($args...; $kwargs...)
-    end
-
-    statsROM = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
-        CUDA.@timed _, ps, _ = evolve_model(args...; kwargs...)
-    else
-        @timed _, ps, _ = evolve_model(args...; kwargs...)
-    end
-
-    @set! statsROM.value = nothing
-    if benchmark
-        @set! statsROM.time  = timeROM
-    end
-    @show statsROM.time
+    timealg = RK4()
+    scheme = GalerkinCollocation(
+        prob, model, timealg, p0, data[1],
+    )
+    
+    tspan = extrema(data[3])
+    saveat = data[3]
+    odeprob = ODEProblem(scheme, getdata(p0), tspan; saveat)
+    integrator = SciMLBase.init(odeprob, scheme.timealg)
+    
+    sol = solve!(integrator)
+    @show sol.retcode
+    
+    ps = Array(sol)
+    statsROM = nothing
 
     #==============#
     # analysis
@@ -236,27 +260,27 @@ function ngEvolve(
 
     Ud = @view Udata[:, :, case, :]                        # get data
     Up = eval_model(model, Xdata, ps, getaxes(p0); device) # query decoder
-
+    
     # print error metrics
     if verbose
         N = length(Up)
         Nr = sum(abs2, Up) / N |> sqrt # normalizer
         Ep = (Up - Ud) ./ Nr
-
+    
         Er = sum(abs2, Ep) / N |> sqrt # rel-error
         Em = norm(Ep, Inf)             # ||∞-error
-
+    
         println("Rel-Error: $(100 * Er) %")
         println("Max-Error: $(100 * Em) %")
     end
-
+    
     # field visualizations
     fieldplot(Xdata, Tdata, Ud, Up, ps, get_prob_grid(prob), modeldir, "evolve", case)
-
+    
     # save files
     filename = joinpath(modeldir, "evolve$(case).jld2")
     jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps)
-
+    
     # return
     (Xdata, Tdata, Ud, Up, ps), statsROM
 end

@@ -13,7 +13,6 @@ function makemodelGaussian(
     device = Lux.gpu_device()
 )
 
-    T = eltype(data[1])
     in_dim  = size(data[1], 1)
     out_dim = size(data[2], 1)
 
@@ -28,6 +27,7 @@ function makemodelGaussian(
     # σmin = haskey(train_params, :σmin) ? train_params.σmin : 1e-4
     # train_freq = haskey(train_params, :train_freq) ? train_params.train_freq : true
 
+    T = haskey(train_params, :T) ? train_params.T : Float32
     E = haskey(train_params, :E) ? train_params.E : 200
     exactIC = haskey(train_params, :exactIC) ? train_params.exactIC : (;)
 
@@ -105,7 +105,7 @@ function makemodelGaussian(
         # mess with initialization
         #----------------#
         p, st = Lux.setup(rng, NN)
-        p = ComponentArray(p) .|> Float32
+        p = ComponentArray(p) .|> T
         ST = nothing
         model = NN, p, st
         #----------------#
@@ -169,6 +169,7 @@ function makemodelMFN(
     # get train params
     #--------------------------------------------#
 
+    T = haskey(train_params, :T) ? train_params.T : Float32
     MFNfilter = haskey(train_params, :MFNfilter) ? train_params.MFNfilter : :Fourier
 
     if MFNfilter === :Fourier
@@ -264,6 +265,7 @@ function makemodelDNN(
     # get train params
     #--------------------------------------------#
 
+    T = haskey(train_params, :T) ? train_params.T : Float32
     h = haskey(train_params, :h) ? train_params.h : 1
     w = haskey(train_params, :w) ? train_params.w : 10
     E = haskey(train_params, :E) ? train_params.E : 700
