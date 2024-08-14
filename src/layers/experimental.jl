@@ -334,7 +334,7 @@ function Lux.initialstates(rng::Random.AbstractRNG, l::GaussianLayer1D)
     st
 end
 
-function (l::GaussianLayer1D)(x::AbstractMatrix, ps, st::NamedTuple)
+function (l::GaussianLayer1D)(x::AbstractMatrix{T}, ps, st::NamedTuple) where{T}
 
     # reshape for broadcasting
     x_re = reshape(x, l.in_dim, 1, 1, size(x, 2))   # [D, 1, 1, K]
@@ -346,25 +346,23 @@ function (l::GaussianLayer1D)(x::AbstractMatrix, ps, st::NamedTuple)
         st.ω, st.ϕ
     end
 
+    # rescale with (x̄, σ)
+    xd = @. x_re - ps.x̄ 
+
+    if l.periodic
+        xd = @. sinpi(xd * st.ω_domain)
+    end
+
     # get σ
     σ = if l.σsplit
         σl = @. abs(ps.σl) + st.σϵ
         σr = @. abs(ps.σr) + st.σϵ
-        σ = scaled_tanh(x_re, σl, σr, ps.w, ps.x̄)
+        σ = scaled_tanh(xd, σl, σr, ps.w, zero(T))
+        # σ = scaled_tanh(x_re, σl, σr, ps.w, ps.x̄)
     else
         @. abs(ps.σ) + st.σϵ
     end
 
-    # periodic embedding
-    if l.periodic
-        x = @. sinpi(st.ω_domain * x)
-    end
-
-    # rescale with (x̄, σ)
-    xd = @. x_re - ps.x̄ 
-    if l.periodic
-        xd = @. sinpi(xd * st.ω_domain)
-    end
     z = @. xd / σ                           # [1, 1, Ng, K]
 
     # apply Gaussian, sinusodal

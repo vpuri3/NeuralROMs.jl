@@ -1,5 +1,6 @@
 #
 using NeuralROMs
+using OrdinaryDiffEq
 using LinearAlgebra, ComponentArrays              # arrays
 using Random, Lux, MLUtils, ParameterSchedulers   # ML
 using OptimizationOptimJL, OptimizationOptimisers # opt
@@ -200,15 +201,15 @@ function ngEvolve(
     model = Tconv(model)
     p0 = Tconv(p0)
 
-    # #==============#
-    # # scheme
-    # #==============#
+    #==============#
+    # scheme
+    #==============#
     # scheme = if scheme === :GalerkinProjection
     #     GalerkinProjection(linsolve, abstol_inf, abstol_mse)
     # elseif scheme === :LSPG
     #     LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, T(1f-6), abstol_inf, abstol_mse)
     # elseif scheme === :GalerkinCollocation
-    #     GalerkinCollocation(prob, model, linsolve, timealg, p0, Xd)
+    #     GalerkinCollocation(prob, model, linsolve, timealg, p0, data[1])
     # end
 
     #==============#
@@ -238,21 +239,43 @@ function ngEvolve(
     # else
     # end
 
-    timealg = RK4()
-    scheme = GalerkinCollocation(
-        prob, model, timealg, p0, data[1],
-    )
-    
+    # # explicit
+    # timealg = Euler()
+    # timealg = RK4()
+    # timealg = SSPRK43()
+    # timealg = Tsit5()
+
+    # implicit
+    timealg = Rosenbrock32(autodiff = false)
+
+    dt = 1f-4
+    iip = true
     tspan = extrema(data[3])
     saveat = data[3]
-    odeprob = ODEProblem(scheme, getdata(p0), tspan; saveat)
-    integrator = SciMLBase.init(odeprob, scheme.timealg)
-    
-    sol = solve!(integrator)
+
+    scheme = GalerkinCollocation(prob, model, timealg, p0, data[1])
+    odeprob = ODEProblem{iip}(scheme, getdata(p0), tspan; saveat)
+    integrator = SciMLBase.init(odeprob, scheme.timealg; dt)
+
+    if benchmark
+        if device isa LuxDeviceUtils.AbstractLuxGPUDevice
+            timeROM  = @belapsed CUDA.@sync $solve($integrator)
+            statsROM = CUDA.@timed solve!(integrator)
+        else
+            timeROM  = @belapsed $solve($integrator)
+            statsROM = @timed solve!(integrator)
+        end
+
+        @set! statsROM.value = nothing
+        @set! statsROM.time  = timeROM
+        @show statsROM.time
+    else
+        @time sol = solve!(integrator)
+        statsROM = nothing
+    end
+
     @show sol.retcode
-    
     ps = Array(sol)
-    statsROM = nothing
 
     #==============#
     # analysis

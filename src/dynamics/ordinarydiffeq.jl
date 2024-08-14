@@ -53,22 +53,33 @@ function (l::GalerkinCollocation)(
     f = dudtRHS(l.prob, l.model, l.xyz, ps, t)
     J = dudp(l.model, l.xyz, ps)
 
-    l.lincache.A = J
-    l.lincache.b = vec(f)
+    # # reuse cache
+    # l.lincache.A = J
+    # l.lincache.b = vec(f)
+    # dp = solve(l.lincache).u
 
-    # print linsolve stats
+    # dont reuse cache
+    linprob = LinearProblem(J, vec(f))
+    linsol  = solve(linprob, l.lincache.alg)
+    dp = linsol.u
 
-    dp = solve(l.lincache).u
     getdata(dp)
 end
 
-# function (l::GalerkinCollocation)(
-#     dp::AbstractVector,
-#     p::AbstractVector,
-#     params,
-#     t::Number,
-# )
-# end
+function (l::GalerkinCollocation)(
+    dp::AbstractVector,
+    p::AbstractVector,
+    params,
+    t::Number,
+)
+    ps = ComponentArray(p, l.ca_axes)
+
+    f = dudtRHS(l.prob, l.model, l.xyz, ps, t)
+    J = dudp(l.model, l.xyz, ps)
+
+    linprob = LinearProblem(J, vec(f); u0 = dp)
+    solve(linprob, l.lincache.alg)
+end
 
 #===========================================================#
 # function evolve_model(

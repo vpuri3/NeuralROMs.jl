@@ -55,8 +55,16 @@ function makemodelGaussian(
         train_freq = false
         periodic = false # comment out for case 4
 
-        # # case 5-8
+        # # case 5-7
         # Ng = 2
+        # Nf = 1
+        # σmin = 1e-2
+        # σsplit = true
+        # train_freq = false
+        # # periodic = false # comment out for case 8
+
+        # # case 8
+        # Ng = 4
         # Nf = 1
         # σmin = 1e-2
         # σsplit = true
