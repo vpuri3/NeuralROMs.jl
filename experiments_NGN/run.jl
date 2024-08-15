@@ -15,9 +15,9 @@ device = Lux.gpu_device()
 case = 1
 data_kws = (; Ix = :, It = :)
 
-#------------------------------------------------------#
-# DNN
-#------------------------------------------------------#
+# #------------------------------------------------------#
+# # DNN
+# #------------------------------------------------------#
 # train_params = (;)
 # evolve_params = (;)
 #
@@ -28,12 +28,12 @@ data_kws = (; Ix = :, It = :)
 #------------------------------------------------------#
 # Gaussian
 #------------------------------------------------------#
-# data_kws = (; Ix = LinRange(1, 256, 64), It = LinRange(1, 500, 500))
+# data_kws = (; Ix = LinRange(1, 512, 64), It = LinRange(1, 500, 500))
 # data_kws = map(x -> round.(Int, x), data_kws)
 
 train_params  = (;)
-evolve_params = (; timealg = RungeKutta4())#, Δt = 1e-3, adaptive = false)
-# evolve_params = (; timealg = EulerForward())
+evolve_params  = (; scheme = :GalerkinCollocation)
+# evolve_params = (; timealg = RungeKutta4())#, Δt = 1e-3, adaptive = false)
 
 makemodel = makemodelGaussian
 modelfilename = "model_05.jld2"
@@ -83,7 +83,7 @@ cs = Float32[1,    0,    1, 2.5]
 XD = TD = UD = UP = PS = ()
 NN, p, st = repeat([nothing], 3)
 
-for case in 1:1
+for case in 7:7
     cc = mod1(case, 4)
 
     prob = AdvectionDiffusion1D(cs[cc], νs[cc])

@@ -204,78 +204,100 @@ function ngEvolve(
     #==============#
     # scheme
     #==============#
-    # scheme = if scheme === :GalerkinProjection
-    #     GalerkinProjection(linsolve, abstol_inf, abstol_mse)
-    # elseif scheme === :LSPG
-    #     LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, T(1f-6), abstol_inf, abstol_mse)
-    # elseif scheme === :GalerkinCollocation
-    #     GalerkinCollocation(prob, model, linsolve, timealg, p0, data[1])
-    # end
+    scheme = if scheme === :GalerkinProjection
+        GalerkinProjection(linsolve, abstol_inf, abstol_mse)
+    elseif scheme === :LSPG
+        LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, T(1f-6), abstol_inf, abstol_mse)
+    elseif scheme === :GalerkinCollocation
+        GalerkinCollocation(prob, model, p0, data[1])
+    end
 
     #==============#
     # evolve
     #==============#
-
-    # if !isa(scheme, GalerkinCollocation)
-    #     args = (prob, device(model), timealg, scheme, (device(data[1:2])..., data[3]), device(p0 .|> T), Δt)
-    #     kwargs = (; adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,)
-    #
-    #     if benchmark # assume CUDA
-    #         Logging.disable_logging(Logging.Warn)
-    #         timeROM = @belapsed CUDA.@sync $evolve_model($args...; $kwargs...)
-    #     end
-    #
-    #     statsROM = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
-    #         CUDA.@timed _, ps, _ = evolve_model(args...; kwargs...)
-    #     else
-    #         @timed _, ps, _ = evolve_model(args...; kwargs...)
-    #     end
-    #
-    #     @set! statsROM.value = nothing
-    #     if benchmark
-    #         @set! statsROM.time  = timeROM
-    #     end
-    #     @show statsROM.time
-    # else
-    # end
-
-    # # explicit
-    # timealg = Euler()
-    # timealg = RK4()
-    # timealg = SSPRK43()
-    # timealg = Tsit5()
-
-    # implicit
-    timealg = Rosenbrock32(autodiff = false)
-
-    dt = 1f-4
-    iip = true
-    tspan = extrema(data[3])
-    saveat = data[3]
-
-    scheme = GalerkinCollocation(prob, model, timealg, p0, data[1])
-    odeprob = ODEProblem{iip}(scheme, getdata(p0), tspan; saveat)
-    integrator = SciMLBase.init(odeprob, scheme.timealg; dt)
-
-    if benchmark
-        if device isa LuxDeviceUtils.AbstractLuxGPUDevice
-            timeROM  = @belapsed CUDA.@sync $solve($integrator)
-            statsROM = CUDA.@timed solve!(integrator)
-        else
-            timeROM  = @belapsed $solve($integrator)
-            statsROM = @timed solve!(integrator)
+    
+    if !isa(scheme, GalerkinCollocation)
+        args = (prob, device(model), timealg, scheme, (device(data[1:2])..., data[3]), device(p0 .|> T), Δt)
+        kwargs = (; adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,)
+    
+        if benchmark # assume CUDA
+            Logging.disable_logging(Logging.Warn)
+            timeROM = @belapsed CUDA.@sync $evolve_model($args...; $kwargs...)
         end
-
+    
+        statsROM = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
+            CUDA.@timed _, ps, _ = evolve_model(args...; kwargs...)
+        else
+            @timed _, ps, _ = evolve_model(args...; kwargs...)
+        end
+    
         @set! statsROM.value = nothing
-        @set! statsROM.time  = timeROM
+        if benchmark
+            @set! statsROM.time  = timeROM
+        end
         @show statsROM.time
     else
-        @time sol = solve!(integrator)
-        statsROM = nothing
+        # # explicit
+        # timealg = Euler()
+        # timealg = RK4()
+        # timealg = SSPRK43()
+        # timealg = Tsit5()
+
+        # # implicit
+        # timealg = ImplicitEuler(autodiff = false)
+        # timealg = Rosenbrock32(autodiff = false)
+        timealg = Rodas5(autodiff = false)
+
+        # ODE Problem
+        dt = 1f-4
+        iip = false
+        tspan = extrema(data[3])
+        saveat = data[3]
+
+        scheme = GalerkinCollocation(prob, model, p0, data[1])
+        odefunc = ODEFunction{iip}(scheme)# ; jac)
+        odeprob = ODEProblem(odefunc, getdata(p0), tspan; saveat)
+        integrator = SciMLBase.init(odeprob, timealg; dt)
+
+        if benchmark
+            if device isa LuxDeviceUtils.AbstractLuxGPUDevice
+                timeROM  = @belapsed CUDA.@sync $solve!($integrator)
+                statsROM = CUDA.@timed solve!(integrator)
+            else
+                timeROM  = @belapsed $solve!($integrator)
+                statsROM = @timed solve!(integrator)
+            end
+
+            sol = statsROM.value
+            @set! statsROM.value = nothing
+            @set! statsROM.time  = timeROM
+            @show statsROM.time
+        else
+            @time sol = solve!(integrator)
+            statsROM = nothing
+        end
+
+        #==============#
+        # # DAE problem
+        # mass_matrix = true
+        # scheme = GalerkinCollocation(prob, model, p0, data[1]; mass_matrix)
+        #
+        # daealg = DImplicitEuler()
+        #
+        # daefunc = DAEFunction{false}(scheme)#; jac)
+        # daeprob = DAEProblem(daefunc, getdata(p0), getdata(p0), tspan; saveat)
+        # integrator = SciMLBase.init(daeprob, daealg; dt)
+        # solve!(integrator)
+        #==============#
+
+        @show sol.stats
+        @show sol.retcode
+        @show sol.stats.nf, sol.stats.nw, sol.stats.nsolve, sol.stats.njacs
+        @assert sol.retcode === SciMLBase.ReturnCode.Success
+
+        ps = Array(sol)
     end
 
-    @show sol.retcode
-    ps = Array(sol)
 
     #==============#
     # analysis
@@ -283,7 +305,7 @@ function ngEvolve(
 
     Ud = @view Udata[:, :, case, :]                        # get data
     Up = eval_model(model, Xdata, ps, getaxes(p0); device) # query decoder
-    
+
     # print error metrics
     if verbose
         N = length(Up)
