@@ -1,196 +1,37 @@
 #======================================================#
-# Multiplicative Filter Networks
-# https://openreview.net/pdf?id=OmtmcPkkhT
-# https://github.com/boschresearch/multiplicative-filter-networks/tree/main
+# Periodic BC layer
 #======================================================#
 
-export FourierMFN, GaborMFN
+export PeriodicLayer
 
-@concrete struct MFN{I} <: Lux.AbstractExplicitContainerLayer{(:filters, :linears)}
-    in_dim::I
-    hd_dim::I
-    out_dim::I
+"""
+x -> sin(π⋅x/L)
 
-    filters <: NamedTuple
-    linears <: NamedTuple
+Works when input is symmetric around 0, i.e., x ∈ [-1, 1).
+If working with something like [0, 1], use cosines instead.
+"""
+@concrete struct PeriodicLayer <: Lux.AbstractExplicitLayer
+    idxs
+    periods
 end
 
-function (l::MFN)(x::AbstractArray, ps, st)
-    keysf = keys(st.filters)
-    keysl = keys(st.linears)
+Lux.initialstates(::Random.AbstractRNG, l::PeriodicLayer) = (; k = 1 ./ l.periods)
 
-    kf = keysf[1]
-    y, st_f = l.filters[kf](x, ps.filters[kf], st.filters[kf])
-    @set! st.filters[kf] = st_f
-
-    for i in 2:length(l.filters)
-        kf = keysf[i]
-        kl = keysl[i-1]
-
-        y_f, st_f = l.filters[kf](x, ps.filters[kf], st.filters[kf])
-        y_d, st_l = l.linears[kl](y, ps.linears[kl], st.linears[kl])
-
-        y = y_f .* y_d
-
-        @set! st.filters[kf] = st_f
-        @set! st.linears[kl] = st_l
-    end
-
-    kl = keysl[end]
-    y, st_l = l.linears[kl](y, ps.linears[kl], st.linears[kl])
-    @set! st.linears[kl] = st_l
-
-    return y, st
+function (l::PeriodicLayer)(x::AbstractMatrix, ps, st::NamedTuple)
+    other_idxs = ChainRulesCore.@ignore_derivatives setdiff(axes(x, 1), l.idxs)
+    y = vcat(x[other_idxs, :], @. sinpi(st.k * x[l.idxs, :]))
+    y, st
 end
 
-function MFN(
-    in_dim::Integer,
-    hd_dim::Integer,
-    out_dim::Integer,
-    filters;
-    linear_kws = (;),
-    out_kws = (;),
-)
-    Nf = length(filters)
-    linears = Tuple( Dense(hd_dim, hd_dim; linear_kws...) for _ in 1:Nf-1)
-    linears = (linears..., Dense(hd_dim, out_dim; out_kws...))
-
-    filters = Lux.__named_tuple_layers(filters...)
-    linears = Lux.__named_tuple_layers(linears...)
-
-    MFN(in_dim, hd_dim, out_dim, filters, linears)
-end
-
-function FourierMFN(
-    in_dim::Integer,
-    hd_dim::Integer,
-    out_dim::Integer,
-    num_filters::Integer = 3;
-
-    init_bias = nothing,
-    init_weight = scaled_siren_init(1f1),
-
-    linear_kws = (;),
-    out_kws = (;),
-)
-    pi32 = Float32(pi)
-
-    if isnothing(init_bias)
-        init_bias = scale_init(rand32, 2 * pi32, -pi32) # U(-π, π)
-    end
-    
-    if isnothing(init_weight)
-        init_weight = scale_init(glorot_uniform, Float32(1/sqrt(num_filters)), Float32(0))
-    end
-    
-    filters = Tuple(
-        Dense(in_dim, hd_dim, sin; init_weight, init_bias,)
-        for _ in 1:num_filters
-    )
-    
-    MFN(in_dim, hd_dim, out_dim, filters; linear_kws, out_kws)
-end
-
-function GaborMFN(
-    in_dim::Integer,
-    hd_dim::Integer,
-    out_dim::Integer,
-    num_filters::Integer = 3;
-
-    init_kws = (;),
-    linear_kws = (;),
-    out_kws = (;),
-)
-    init_W = scale_init(glorot_uniform, Float32(1/sqrt(num_filters)), Float32(0))
-
-    filters = Tuple(
-        GaborLayer(in_dim, hd_dim; init_W, init_kws...)
-        for _ in 1:num_filters
-    )
-
-    MFN(in_dim, hd_dim, out_dim, filters; linear_kws, out_kws)
+function Base.show(io::IO, l::PeriodicLayer)
+    println(io, "PeriodicLayer($(l.idxs), $(l.periods))")
 end
 
 #======================================================#
-# GaborLayer
+# 1D Gaussian Layer
 #======================================================#
 
-export GaborLayer
-
-# @concrete struct GaborLayer{I} <: Lux.AbstractExplicitContainerLayer{(:dense,)}
-@concrete struct GaborLayer{I} <: Lux.AbstractExplicitLayer
-    in_dim::I
-    out_dim::I
-
-    init_W
-    init_b
-
-    init_μ
-    init_γ
-end
-
-function GaborLayer(
-    in_dim::Integer,
-    out_dim::Integer;
-    init_W = nothing, init_b = nothing,
-    init_μ = nothing, init_γ = nothing,
-)
-    pi32 = Float32(pi)
-    
-    if isnothing(init_W)
-        init_W = glorot_uniform
-    end
-
-    if isnothing(init_b)
-        init_b = scale_init(rand32, 2 * pi32, -pi32) # U(-π, π)
-    end
-
-    if isnothing(init_μ)
-        init_μ = rand32
-    end
-
-    if isnothing(init_γ)
-        init_γ = rand32
-    end
-
-    GaborLayer(in_dim, out_dim, init_W, init_b, init_μ, init_γ)
-end
-
-function Lux.initialparameters(rng::Random.AbstractRNG, l::GaborLayer)
-    (;
-        x̄ = l.init_μ(rng, l.in_dim),
-        γ = l.init_γ(rng, l.out_dim),
-
-        bias = l.init_b(rng, l.out_dim),
-        weight = l.init_W(rng, l.out_dim, l.in_dim),
-    )
-end
-
-function Lux.initialstates(rng::Random.AbstractRNG, l::GaborLayer)
-    T = l.init_W(rng, 1) |> eltype
-    (;
-        minushalf = T[-0.5],
-    )
-end
-
-function (l::GaborLayer)(x::AbstractArray, ps, st)
-
-    # should apply softplus to γ
-
-    y_sin = sin.(ps.weight * x .+ ps.bias)
-    dist2 = sum(abs2, (x .- ps.x̄); dims = 1)
-    y_exp = exp.(st.minushalf * dist2 .* ps.γ)
-
-    y = y_sin .* y_exp
-
-    return y, st
-end
-
-#======================================================#
-# Gaussian Layer (only 1D for now)
-#======================================================#
-
-export GaussianLayer1D
+export Gaussian1D
 
 # Assumes x ∈ [-1, 1], u ∈ [ 0, 1]
 # What normalization to assume for u?
@@ -198,18 +39,19 @@ export GaussianLayer1D
 # should initialization of c include negative values?
 # no if Gabor freqs can take care of that??
 ###
-# Questions
+# QUESTIONS
 ###
 # - is it better to optimize 1/σ ? No based on loss_landscape.jl
 ####
-# Pruning/ Culling criteria:
+# PRUNING/ CULLING CRITERIA:
 ####
 # - if σ too small, set c = 0 σ = 1.
 # - if c too small, set c = 0, σ = 1.
 # - merge Gaussians if x̄ close?? Check Gaussian splatting paper.
 # - refinement: add Gaussians if error/residual too large somewhere.
 ####
-# Q: How to capture shocks?
+# Q: HOW TO CAPTURE SHOCKS?
+####
 # A: Have a σleft and σr trainable and cacluate sigma as
 #      σ = scaled_tanh(x, σleft, σright, ω, x̄)
 #
@@ -218,8 +60,15 @@ export GaussianLayer1D
 #            /  |
 #           /   |
 # _________/    |_______
+#
+####
+# EXTENSION TO 2D:
+####
+# For 2D Gaussian/Gabor, let the sinusodal be in the periodic (angular) direction
+# of the Gaussian. E.g. https://en.wikipedia.org/wiki/Gabor_filter
+# [Gabor Splatting for High-Quality Gigapixel Image Representations]
 
-@concrete struct GaussianLayer1D{I<:Integer} <: Lux.AbstractExplicitLayer
+@concrete struct Gaussian1D{I<:Integer} <: Lux.AbstractExplicitLayer
     in_dim::I
     out_dim::I
     num_gauss::I
@@ -236,7 +85,7 @@ export GaussianLayer1D
     train_freq::Bool
 end
 
-function GaussianLayer1D(
+function Gaussian1D(
     in_dim::Integer,
     out_dim::Integer,
     num_gauss::Integer,
@@ -252,13 +101,13 @@ function GaussianLayer1D(
     @assert in_dim == 1
     @assert T ∈ (Float32, Float64)
 
-    GaussianLayer1D(
+    Gaussian1D(
         in_dim, out_dim, num_gauss, num_freqs,
         T, T.(domain), periodic, T(σmin), T(σfactor), σsplit, train_freq,
     )
 end
 
-function init_ω_ϕ(l::GaussianLayer1D)
+function init_ω_ϕ(l::Gaussian1D)
 
     # frequencies
     ω = range(0, l.num_freqs-1)
@@ -274,7 +123,7 @@ function init_ω_ϕ(l::GaussianLayer1D)
     ω, ϕ
 end
 
-function Lux.initialparameters(rng::Random.AbstractRNG, l::GaussianLayer1D)
+function Lux.initialparameters(rng::Random.AbstractRNG, l::Gaussian1D)
 
     x0, x1 = l.domain
     span = (x1 - x0) / l.num_gauss
@@ -312,7 +161,7 @@ function Lux.initialparameters(rng::Random.AbstractRNG, l::GaussianLayer1D)
     ps
 end
 
-function Lux.initialstates(rng::Random.AbstractRNG, l::GaussianLayer1D)
+function Lux.initialstates(rng::Random.AbstractRNG, l::Gaussian1D)
     σϵ = l.T[l.σmin]
     two = l.T[2]
     minushalf = l.T[-0.5]
@@ -334,7 +183,7 @@ function Lux.initialstates(rng::Random.AbstractRNG, l::GaussianLayer1D)
     st
 end
 
-function (l::GaussianLayer1D)(x::AbstractMatrix{T}, ps, st::NamedTuple) where{T}
+function (l::Gaussian1D)(x::AbstractMatrix{T}, ps, st::NamedTuple) where{T}
 
     # reshape for broadcasting
     x_re = reshape(x, l.in_dim, 1, 1, size(x, 2))   # [D, 1, 1, K]
@@ -395,39 +244,60 @@ end
 #
 #     y, ∇_rbf
 # end
-
-# NOTES:
-# For 2D Gabor, let the sinusodal be in the periodic (angular) direction
-# of the Gaussian. E.g.
-# https://en.wikipedia.org/wiki/Gabor_filter
-# Gabor Splatting for High-Quality Gigapixel Image Representations
-
+#
 #======================================================#
-# Periodic BC layer
+# 1D RSWAF Layer
 #======================================================#
 
-export PeriodicLayer
+export RSWAF1D
 
-"""
-x -> sin(π⋅x/L)
-
-Works when input is symmetric around 0, i.e., x ∈ [-1, 1).
-If working with something like [0, 1], use cosines instead.
-"""
-@concrete struct PeriodicLayer <: Lux.AbstractExplicitLayer
-    idxs
-    periods
+@concrete struct RSWAF1D{I<:Integer} <: Lux.AbstractExplicitLayer
+    in_dim::I
+    out_dim::I
+    # domain
 end
 
-Lux.initialstates(::Random.AbstractRNG, l::PeriodicLayer) = (; k = 1 ./ l.periods)
+# function RSWAF1D(
+#     in_dim::Integer,
+#     out_dim::Integer,
+#     N::Integer; # number of plateaus
+#     T = Float32,
+#     domain = [-1, 1],
+#     periodic::Bool = false,
+# )
+#     RSWAF1D(in_dim, out_dim, domain)
+# end
 
-function (l::PeriodicLayer)(x::AbstractMatrix, ps, st::NamedTuple)
-    other_idxs = ChainRulesCore.@ignore_derivatives setdiff(axes(x, 1), l.idxs)
-    y = vcat(x[other_idxs, :], @. sinpi(st.k * x[l.idxs, :]))
+function Lux.initialstates(rng::Random.AbstractRNG, l::RSWAF1D)
+    (;
+        half = Float32[0.5],
+    )
+end
+
+function Lux.initialparameters(rng::Random.AbstractRNG, l::RSWAF1D)
+    (;
+        x̄ = Float32[0],
+        w = Float32[1],
+
+        ω0 = Float32[10],
+        ω1 = Float32[10],
+
+        b = Float32[0.0],
+        c = Float32[1.0],
+    )
+end
+
+function (l::RSWAF1D)(x::AbstractMatrix{T}, ps, st::NamedTuple) where{T}
+    x0 = @. ps.x̄ - ps.w
+    x1 = @. ps.x̄ + ps.w
+
+    y0 = @. tanh(ps.ω0 * (x - x0))
+    y1 = @. tanh(ps.ω1 * (x - x1))
+
+    y = @. st.half * (y0 - y1) * ps.c + ps.b
+
     y, st
 end
 
-function Base.show(io::IO, l::PeriodicLayer)
-    println(io, "PeriodicLayer($(l.idxs), $(l.periods))")
-end
-
+#======================================================#
+#

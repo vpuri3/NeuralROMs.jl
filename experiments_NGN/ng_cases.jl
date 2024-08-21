@@ -8,6 +8,9 @@ using Plots, ColorSchemes, LaTeXStrings
 get_prob_grid(::AdvectionDiffusion1D) = (256,)
 get_prob_domain(::AdvectionDiffusion1D) = (-1f0, 1f0)
 
+get_prob_grid(::BurgersViscous1D) = (8192,)
+get_prob_domain(::BurgersViscous1D) = (0f0, 2f0)
+
 #===================================================#
 function fieldplot(
     Xdata::AbstractArray,

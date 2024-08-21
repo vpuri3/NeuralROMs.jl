@@ -23,7 +23,7 @@ function train_model(
 #
     rng::Random.AbstractRNG = Random.default_rng(),
 #
-    _batchsize::Int = 32,
+    _batchsize::Union{Int, NTuple{M, Int}} = 32,
     batchsize_::Int = numobs(_data),
     __batchsize::Int = batchsize_, # > batchsize for BFGS, callback
 #
@@ -43,7 +43,7 @@ function train_model(
     p = nothing,
     st = nothing,
     lossfun = mse,
-    device = Lux.cpu_device(),
+    device = Lux.gpu_device(),
 #
     cb_epoch = nothing, # (NN, p, st) -> nothing
 ) where{M}
@@ -55,10 +55,17 @@ function train_model(
         println("[train_model] No test dataset provided.")
     end
 
-    # create data loaders
-    _loader  = DataLoader(_data; batchsize = _batchsize , rng, shuffle = true)
+    # create loader, batchsize schedule
+
+    if isa(_batchsize, Integer)
+        _batchsize0 = _batchsize
+    else
+        _batchsize0 = first(_batchsize)
+    end
+
+    _loader  = DataLoader(_data; batchsize = _batchsize0, rng, shuffle = true)
     loader_  = DataLoader(data_; batchsize = batchsize_ , rng, shuffle = true)
-    __loader = DataLoader(_data; batchsize = __batchsize, rng)
+    __loader = DataLoader(_data; batchsize = __batchsize, rng, shuffle = true)
 
     if device isa Lux.LuxCUDADevice
         _loader  = _loader  |> CuIterator
@@ -96,8 +103,6 @@ function train_model(
     st = Lux.trainmode(st)
     opt_st = nothing
 
-    time0 = time()
-
     if early_stoppings isa Union{Bool, Nothing}
         early_stoppings = fill(early_stoppings, M)
     end
@@ -110,6 +115,13 @@ function train_model(
         weight_decays = fill(weight_decays, M)
     end
 
+    if _batchsize isa Integer
+        _batchsize = fill(_batchsize, M)
+    end
+    @assert all(x -> x ≤ batchsize_,_batchsize)
+
+    time0 = time()
+
     for iopt in 1:M
         time1 = time()
 
@@ -120,6 +132,12 @@ function train_model(
         early_stopping = early_stoppings[iopt]
         patience_frac = patience_fracs[iopt]
         patience = isnothing(patience_frac) ? nothing : round(Int, patience_frac * nepoch)
+
+        if _loader isa CuIterator
+            @set! _loader.batches.batchsize = _batchsize[iopt]
+        else
+            @set! _loader.batchsize = _batchsize[iopt]
+        end
 
         if !isnothing(opt_st) & isa(opt, Optimisers.AbstractRule)
             @set! opt_st.rule = opt
@@ -144,7 +162,15 @@ function train_model(
 
         println(io, "#======================#")
         println(io, "Optimization Round $iopt, EPOCHS: $nepoch")
-        println(io, "Optimizer $opt")
+        println(io, "Optimizer: $opt")
+        println(io, "Nepochs: $nepoch")
+        println(io, "Schedule: $schedule")
+
+        println(io, "Early-stopping: $early_stopping")
+        println(io, "Patience frac: $patience_frac")
+        println(io, "Patience: $patience")
+        println(io, "Batch-size: $(_batchsize[iopt])")
+
         println(io, "#======================#")
 
         args = (opt, NN, p, st, nepoch, _loader, loader_, __loader)
@@ -170,6 +196,7 @@ function train_model(
 
     end
 
+    # TODO - schedule batchsize
     # TODO - output a train.log file with timings.
 
     println(io, "#======================#")
@@ -193,13 +220,17 @@ function savemodel!( # modifies STATS
     name::String,
     count::Integer,
 )
-    mkpath(dir)
-    count = lpad(count, 2, "0")
-
     # save statistics
-    statsfile = open(joinpath(dir, "statistics_$(count).txt"), "w")
-    cb(p, st; io = statsfile)
-    close(statsfile)
+    statsfile = joinpath(dir, "statistics.txt")
+
+    mkpath(dir)
+    touch(statsfile)
+
+    count = lpad(count, 2, "0")
+    statsio = open(joinpath(dir, "statistics.txt"), "a")
+    println(statsio, "CHECKPOINT $count")
+    cb(p, st; io = statsio)
+    close(statsio)
 
     # transfer model to host device
     p, st = (p, st) |> Lux.cpu

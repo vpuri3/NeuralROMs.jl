@@ -51,8 +51,8 @@ function ngProject(
     out_dim = size(Udata, 1)
 
     if verbose
-        println("PROJECT_NGN: input size: $in_dim")
-        println("PROJECT_NGN: output size: $out_dim")
+        println("PROJECT_NGN: input dimension: $in_dim")
+        println("PROJECT_NGN: output dimension: $out_dim")
     end
 
     # subsample in space
@@ -237,7 +237,16 @@ function ngEvolve(
         end
         @show statsROM.time
     else
-        # # explicit
+
+        if !isa(timealg, SciMLBase.AbstractODEAlgorithm)
+            timealg = Tsit5()
+            # timealg = Rodas5(autodiff = false)
+        end
+
+        # # AD 1D
+        # timealg = Rodas5(autodiff = false)
+
+        # explicit
         # timealg = Euler()
         # timealg = RK4()
         # timealg = SSPRK43()
@@ -246,7 +255,9 @@ function ngEvolve(
         # # implicit
         # timealg = ImplicitEuler(autodiff = false)
         # timealg = Rosenbrock32(autodiff = false)
-        timealg = Rodas5(autodiff = false)
+        # timealg = Rodas5(autodiff = false)
+
+        # for autodiff = true, use PreallocationTools.dual_cache ?
 
         # ODE Problem
         dt = 1f-4

@@ -68,7 +68,7 @@ function init_siren(
     scale::Real = 1
 ) where{T <: Real}
 
-    scale = T(scale) * sqrt(T(24) / T(_nfan(dims...)[1]))
+    scale = T(scale) * sqrt(T(24) / T(nfan(dims...)[1]))
     return (rand(rng, T, dims...) .- T(1//2)) * scale
 end
 

@@ -14,7 +14,7 @@ using Optimisers
 using Optimization
 using OptimizationOptimJL
 using ParameterSchedulers
-import WeightInitializers: _nfan
+import WeightInitializers.Utils.nfan
 
 # autodiff
 using Zygote
@@ -94,6 +94,7 @@ export
     HyperNet,
     PermutedBatchNorm, PermuteLayer, SplitRows
 
+include("layers/mfn.jl")
 include("layers/experimental.jl")
 
 include("layers/encoder_decoder.jl")

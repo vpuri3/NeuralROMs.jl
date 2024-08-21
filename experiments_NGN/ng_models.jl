@@ -22,10 +22,18 @@ function makemodelGaussian(
 
     periodic = true
 
-    # N = haskey(train_params, :N) ? train_params.N : 4 # num_gauss
-    # f = haskey(train_params, :f) ? train_params.f : 4 # num_freqs
-    # σmin = haskey(train_params, :σmin) ? train_params.σmin : 1e-4
-    # train_freq = haskey(train_params, :train_freq) ? train_params.train_freq : true
+    type = haskey(train_params, :type) ? train_params.type : :Gaussian
+
+    # Gaussian
+    Ng = haskey(train_params, :Ng) ? train_params.N : 4 # num_gauss
+    Nf = haskey(train_params, :Nf) ? train_params.f : 4 # num_freqs
+    σmin = haskey(train_params, :σmin) ? train_params.σmin : 1e-4
+    σsplit = haskey(train_params, :σsplit) ? train_params.σsplit : true
+    train_freq = haskey(train_params, :train_freq) ? train_params.train_freq : true
+
+    # # RSWAF
+    # Ng = haskey(train_params, :Ng) ? train_params.N : 4 # num_gauss
+
 
     T = haskey(train_params, :T) ? train_params.T : Float32
     E = haskey(train_params, :E) ? train_params.E : 200
@@ -34,28 +42,24 @@ function makemodelGaussian(
     warmup = haskey(train_params, :warmup) ? train_params.warmup : false
     hessopt = haskey(train_params, :hessopt) ? train_params.hessopt : true
 
-    _batchsize = haskey(train_params, :_batchsize) ? train_params._batchsize : 1
-    batchsize_ = haskey(train_params, :batchsize_) ? train_params.batchsize_ : numobs(data)
-
-    # TODO: increase batchsize during training
-    # https://arxiv.org/abs/1711.00489
-
     #--------------------------------------------#
     # architecture
     #--------------------------------------------#
 
-    decoder = begin
-        i = in_dim
-        o = out_dim
+    i = in_dim
+    o = out_dim
 
-        # case 1-4
-        Ng = Nf = 1
-        σmin = 1e-2
-        σsplit = false
-        train_freq = false
-        periodic = false # comment out for case 4
+    decoder = if type === :RSWAF
+        RSWAF1D(i, o)
+    elseif type === :Gaussian
+        # # AD1D case 1-4
+        # Ng = Nf = 1
+        # σmin = 1e-2
+        # σsplit = false
+        # train_freq = false
+        # periodic = false # comment out for case 4
 
-        # # case 5-7
+        # # AD1D case 5-7
         # Ng = 2
         # Nf = 1
         # σmin = 1e-2
@@ -63,7 +67,7 @@ function makemodelGaussian(
         # train_freq = false
         # # periodic = false # comment out for case 8
 
-        # # case 8
+        # # AD1D case 8
         # Ng = 4
         # Nf = 1
         # σmin = 1e-2
@@ -71,7 +75,16 @@ function makemodelGaussian(
         # train_freq = false
         # # periodic = false # comment out for case 8
 
-        GaussianLayer1D(i, o, Ng, Nf; periodic, σmin, σsplit, train_freq)
+        # # Burg 1D
+        # Ng = Nf = 1
+        # σmin = 1f-2
+        # σsplit = true
+        # train_freq = false
+        # periodic = false
+
+        Gaussian1D(i, o, Ng, Nf; periodic, σmin, σsplit, train_freq)
+    else
+        @error "Unsupported type. Choose `:type = :Gaussian`, or `:RSWAF`"
     end
 
     NN = Chain(; decoder)
@@ -103,9 +116,10 @@ function makemodelGaussian(
     else
         #-------------------------------------------#
         lossfun = mse
-        opts, nepochs, schedules, early_stoppings = make_optimizer_gaussian(E, warmup, hessopt)
-        #-------------------------------------------#
+        batchsize_ = numobs(data)
+        opts, nepochs, schedules, early_stoppings, _batchsize = make_optimizer_gaussian(E, numobs(data), warmup, hessopt)
 
+        #-------------------------------------------#
         train_args = (; E, _batchsize, batchsize_)
         metadata   = (; metadata..., train_args)
 
@@ -125,27 +139,36 @@ function makemodelGaussian(
             opts, nepochs, schedules, early_stoppings,
             device, dir, metadata, lossfun,
         )
-        
         plot_training!(ST...) |> display
 
-        @show model[2].decoder.b
-        @show model[2].decoder.c
-        @show model[2].decoder.x̄
-
-        if σsplit
+        if type === :RSWAF
+            @show model[2].decoder.x̄
             @show model[2].decoder.w
-            @show model[2].decoder.σl
-            @show model[2].decoder.σr
-        else
-            @show model[2].decoder.σ
-        end
+            @show model[2].decoder.b
+            @show model[2].decoder.c
+            @show model[2].decoder.ω0
+            @show model[2].decoder.ω1
+        elseif type === :Gaussian
+            
+            @show model[2].decoder.b
+            @show model[2].decoder.c
+            @show model[2].decoder.x̄
 
-        if train_freq
-            @show model[2].decoder.ω
-            @show model[2].decoder.ϕ
-        else
-            # @show model[3].decoder.ω
-            # @show model[3].decoder.ϕ
+            if σsplit
+                @show model[2].decoder.w
+                @show model[2].decoder.σl
+                @show model[2].decoder.σr
+            else
+                @show model[2].decoder.σ
+            end
+
+            if train_freq
+                @show model[2].decoder.ω
+                @show model[2].decoder.ϕ
+            else
+                # @show model[3].decoder.ω
+                # @show model[3].decoder.ϕ
+            end
         end
 
         @show length(model[2])
@@ -360,21 +383,26 @@ end
 
 function make_optimizer_gaussian(
     E::Integer,
+    K::Integer, # numobs(data)
     warmup::Bool,
     second_order::Bool = true,
 )
-    # LR ∈ [1e-5, 1e-3] with exponential decay.
-    # Then second-order optimizer
+    # DON’T DECAY THE LEARNING RATE, INCREASE THE BATCH SIZE
+    # https://arxiv.org/pdf/1711.00489
 
-    # Gradient descent / Adam aren't converging at all.
+    # # OLD
+    # lrs = (1f-3, 1f-4, 1f-5, 1f-6)
+    # _batchsize = (1, 1, 1, 1)
 
-    lrs = (1f-3, 1f-4, 1f-5, 1f-6)
-    Nlrs = length(lrs)
+    lrs = (1f-3, 1f-3, 1f-3, 1f-3)
+    # lrs = (1f-2, 1f-2, 1f-2, 1f-2)
+    _batchsize = (1, 8, 64, 512)
 
+    N = length(lrs)
     opts = Tuple(Optimisers.Adam(lr) for lr in lrs)
-    nepochs = (round.(Int, E / (Nlrs) * ones(Nlrs))...,)
+    nepochs = (round.(Int, E / (N) * ones(N))...,)
     schedules = Step.(lrs, 1f0, Inf32)
-    early_stoppings = (fill(true, Nlrs)...,)
+    early_stoppings = (fill(true, N)...,)
 
     if warmup
         _opt = Optimisers.Adam(1f-2)
@@ -386,6 +414,7 @@ function make_optimizer_gaussian(
         nepochs = (_nepochs, nepochs...,)
         schedules = (_schedule, schedules...,)
         early_stoppings = (_early_stopping, early_stoppings...,)
+        _batchsize = (1, _batchsize...)
     end
 
     if second_order
@@ -399,9 +428,10 @@ function make_optimizer_gaussian(
         nepochs = (nepochs..., nepochs_)
         schedules = (schedules..., schedule_)
         early_stoppings = (early_stoppings..., early_stopping_)
+        _batchsize = (_batchsize..., K)
     end
 
-    opts, nepochs, schedules, early_stoppings
+    opts, nepochs, schedules, early_stoppings, _batchsize
 end
 #======================================================#
 
@@ -411,7 +441,7 @@ function make_optimizer_DNN(
     weightdecay = nothing,
 )
     lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
-    Nlrs = length(lrs)
+    N = length(lrs)
 
     # Grokking (https://arxiv.org/abs/2201.02177)
     # Optimisers.Adam(lr, (0.9f0, 0.95f0)), # 0.999 (default), 0.98, 0.95
@@ -430,9 +460,9 @@ function make_optimizer_DNN(
         )
     end
 
-    nepochs = (round.(Int, E / (Nlrs) * ones(Nlrs))...,)
+    nepochs = (round.(Int, E / (N) * ones(N))...,)
     schedules = Step.(lrs, 1f0, Inf32)
-    early_stoppings = (fill(true, Nlrs)...,)
+    early_stoppings = (fill(true, N)...,)
 
     if warmup
         opt_warmup = if isnothing(weightdecay)
