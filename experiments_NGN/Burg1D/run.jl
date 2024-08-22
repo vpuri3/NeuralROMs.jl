@@ -31,7 +31,7 @@ data_kws = (; Ix = :, It = :)
 # data_kws = map(x -> round.(Int, x), data_kws)
 
 # train_params  = (; E = 100,)
-# # evolve_params  = (; scheme = :GalerkinCollocation)
+# evolve_params  = (; scheme = :GalerkinCollocation)
 # # evolve_params = (; timealg = RungeKutta4(), Δt = 1e-4, adaptive = false)
 # # evolve_params = (; timealg = EulerForward(), Δt = 1e-4, adaptive = false)
 #
@@ -47,6 +47,8 @@ data_kws = (; Ix = :, It = :)
 
 train_params  = (; type = :RSWAF)
 evolve_params  = (; scheme = :GalerkinCollocation)
+# evolve_params  = (; scheme = :GalerkinCollocation, timealg = Tsit5())
+# evolve_params = (; timealg = EulerForward())#, Δt = 1e-3, adaptive = false)
 # evolve_params = (; timealg = RungeKutta4())#, Δt = 1e-3, adaptive = false)
 
 makemodel = makemodelGaussian
@@ -61,12 +63,11 @@ modeldir  = joinpath(@__DIR__, "dump_rswaf")
 XD = TD = UD = UP = PS = ()
 NN, p, st = repeat([nothing], 3)
 
-# for case in 1:1
-for case in 1:6
+for case in 1:1
+# for case in 1:6
     cc = mod1(case, 4)
 
     prob = BurgersViscous1D(1f-4)
-    # prob = AdvectionDiffusion1D(1f0, 0f-1)
     modelfile = joinpath(modeldir, "project$(case)", modelfilename)
 
     global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)

@@ -15,9 +15,13 @@ function GalerkinCollocation(
     model::AbstractNeuralModel,
     p0::AbstractVector{T},
     xyz::AbstractMatrix{T};
-    linalg::SciMLBase.AbstractLinearAlgorithm = QRFactorization(),
+    linalg::SciMLBase.AbstractLinearAlgorithm = KrylovJL_GMRES(),
     mass_matrix::Bool = false,
 ) where{T<:Number}
+
+    # linalg = KrylovJL_GMRES() on LinearProblem(J' * J, J' * f)
+    # linalg = KrylovJL_LSMR() on LinearProblem(J, f)
+    # https://jso.dev/Krylov.jl/stable/solvers/ls/
 
     # # reuse lincache
     # f = model(xyz, p0)
@@ -42,8 +46,11 @@ function (l::GalerkinCollocation{false})(
     J = dudp(l.model, l.xyz, ps)
     f = dudtRHS(l.prob, l.model, l.xyz, ps, t)
 
-    linprob = LinearProblem(J, vec(f))
+    linprob = LinearProblem(J' * J,  J' * vec(f))
+    # linprob = LinearProblem(J,  vec(f))
     linsol  = solve(linprob, l.linalg)
+    check_linsol_retcode(linsol)
+
     dp = linsol.u
 
     getdata(dp)
@@ -60,8 +67,10 @@ function (l::GalerkinCollocation{false})(
     J = dudp(l.model, l.xyz, ps)
     f = dudtRHS(l.prob, l.model, l.xyz, ps, t)
 
-    linprob = LinearProblem(J, vec(f); u0 = dp)
-    solve(linprob, l.linalg)
+    linprob = LinearProblem(J' * J, J' * vec(f); u0 = dp)
+    # linprob = LinearProblem(J, vec(f); u0 = dp)
+    linsol  = solve(linprob, l.linalg)
+    check_linsol_retcode(linsol)
 
     nothing
 end
@@ -87,6 +96,15 @@ function (l::GalerkinCollocation{true})(
     f = dudtRHS(l.prob, l.model, l.xyz, ps, t) |> vec
     J = dudp(l.model, l.xyz, ps)
     J * dpdt - f
+end
+#===========================================================#
+
+function check_linsol_retcode(linsol)
+    # ifsuccess = SciMLBase.successful_retcode(linsol)
+    # Factorization algorithms return ReturnCode.Default
+    ifsuccess = linsol.retcode ∈ (ReturnCode.Default, ReturnCode.Success)
+    @assert ifsuccess "Linear solve return code: $(linsol.retcode)"
+    return
 end
 #===========================================================#
 #

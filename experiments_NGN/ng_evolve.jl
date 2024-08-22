@@ -155,20 +155,7 @@ function ngEvolve(
 
     # autodiff
     ϵ_xyz = nothing
-    autodiff = AutoForwardDiff()
     autodiff_xyz = AutoForwardDiff()
-
-    # solver
-    linsolve = QRFactorization()
-    linesearch = LineSearch()
-    nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
-    nlsmaxiters = 20
-
-    abstol_inf, abstol_mse = if T === Float32
-        T(1e-3), T(1e-6)
-    elseif T === Float64
-        T(1e-5), T(1e-10)
-    end
 
     #==============#
     # Hyper-reduction
@@ -204,18 +191,36 @@ function ngEvolve(
     #==============#
     # scheme
     #==============#
-    scheme = if scheme === :GalerkinProjection
-        GalerkinProjection(linsolve, abstol_inf, abstol_mse)
-    elseif scheme === :LSPG
-        LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, T(1f-6), abstol_inf, abstol_mse)
+
+    scheme = if scheme ∈ (:GalerkinProjection, :LSPG)
+        autodiff = AutoForwardDiff()
+        linsolve = QRFactorization()
+        linesearch = LineSearch()
+        nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
+        nlsmaxiters = 20
+
+        abstol_inf, abstol_mse = if T === Float32
+            T(1e-3), T(1e-6)
+        elseif T === Float64
+            T(1e-5), T(1e-10)
+        end
+
+        if scheme === :GalerkinProjection
+            GalerkinProjection(linsolve, abstol_inf, abstol_mse)
+        else
+            LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, T(1f-6), abstol_inf, abstol_mse)
+        end
     elseif scheme === :GalerkinCollocation
-        GalerkinCollocation(prob, model, p0, data[1])
+        linalg = SimpleGMRES() # good for block matrices (?)
+        linalg = KrylovJL_GMRES()
+
+        GalerkinCollocation(prob, model, p0, data[1]; linalg)
     end
 
     #==============#
     # evolve
     #==============#
-    
+
     if !isa(scheme, GalerkinCollocation)
         args = (prob, device(model), timealg, scheme, (device(data[1:2])..., data[3]), device(p0 .|> T), Δt)
         kwargs = (; adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,)
@@ -265,10 +270,18 @@ function ngEvolve(
         tspan = extrema(data[3])
         saveat = data[3]
 
-        scheme = GalerkinCollocation(prob, model, p0, data[1])
+        odecb = begin
+            function affect!(int)
+                if int.iter % 1 == 0
+                    println("[$(int.iter)] \t Time $(round(int.t; digits=8))s")
+                end
+            end
+            DiscreteCallback((u,t,int) -> true, affect!, save_positions=(false,false))
+        end
+
         odefunc = ODEFunction{iip}(scheme)# ; jac)
         odeprob = ODEProblem(odefunc, getdata(p0), tspan; saveat)
-        integrator = SciMLBase.init(odeprob, timealg; dt)
+        integrator = SciMLBase.init(odeprob, timealg; dt)#, callback = odecb)
 
         if benchmark
             if device isa LuxDeviceUtils.AbstractLuxGPUDevice
@@ -304,7 +317,7 @@ function ngEvolve(
         @show sol.stats
         @show sol.retcode
         @show sol.stats.nf, sol.stats.nw, sol.stats.nsolve, sol.stats.njacs
-        @assert sol.retcode === SciMLBase.ReturnCode.Success
+        @assert SciMLBase.successful_retcode(sol)
 
         ps = Array(sol)
     end

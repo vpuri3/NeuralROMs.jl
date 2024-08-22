@@ -40,30 +40,42 @@ function rswaf(x, x̄, w, ω0, ω1, α)
 
     0.5 * (u1 - u2) * α
 end
+#======================================================#
+# x = LinRange(-1, 1, 1024)
+# ω = [5 10 20 50] # LinRange(0, 50, N)'
+# y = tanh.(x * ω)
+#
+# plt = plot()
+# cs = [:red, :green, :blue, :black, :brown, :cyan, :magenta]
+# for i in reverse(1:length(ω))
+#     w = ω[i]
+#     s = 4 / w
+#
+#     c = cs[i]
+#     plot!(plt, x, y[:, i]; w = 2, label = "ω = $w", c)
+#     scatter!(plt, [-s, s], [0,0]; w = 2, label = nothing, markersize = 4, c)
+# end
+# display(plt)
 
 #======================================================#
 x = LinRange(-1, 1, 1024)
+y1 = rswaf(x, 0, 0.5, 20, 20, 1.0)
+y2 = rswaf(x, 0, 0.1, 20, 30, 1.0)
+# y3 = rswaf(x, 0, 0.5, 20, 20, 0.8)
+# y4 = rswaf(x, 0, 0.5, 20, 20, 0.8)
+# y5 = rswaf(x, 0, 0.5, 20, 20, 0.8)
+# y6 = rswaf(x, 0, 0.5, 20, 20, 0.8)
 
-ω = 20
-y = 0
-y1 = rswaf(x, 0, 0.5, 20, 20, 0.8)
+# x = LinRange(-3, 3, 1024)
+# y1 = rswaf(sinpi.(x/2), 0, 0.5, 40, 5, 0.8)
 
-
-# y1 = rswaf(x, -0.5, 0.4, 10, 50)
-# y2 = rswaf(x,  0.1, 0.2, 10, 20)
-# y3 = rswaf(x, -0.1, 0.1, 50, 50)
-# y4 = rswaf(x, -0.5, 0.5, 50, 50) + rswaf(x, -0.25, 0.75, 50, 50)
-# y5 = rswaf(x,  0.5, -0.4, 10, 50)
-# y6 = rswaf(x,  0.0, 0.0, 20, 10)
-#
 plt = plot()
 plot!(plt, x, y1, w = 4)
-# plot!(plt, x, y2, w = 4)
+plot!(plt, x, y2, w = 4)
 # plot!(plt, x, y3, w = 4)
-# # plot!(plt, x, y4, w = 4)
-# # plot!(plt, x, y5, w = 4)
+# plot!(plt, x, y4, w = 4)
+# plot!(plt, x, y5, w = 4)
 # plot!(plt, x, y6, w = 4)
-#
 display(plt)
 #======================================================#
 

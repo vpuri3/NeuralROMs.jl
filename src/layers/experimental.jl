@@ -81,6 +81,7 @@ export Gaussian1D
     σmin
     σfactor
     σsplit::Bool
+    σinvert::Bool
 
     train_freq::Bool
 end
@@ -96,6 +97,7 @@ function Gaussian1D(
     σmin = T(1e-3), # consult find_sigmamin.jl. Could be higher...
     σfactor = T(4),
     σsplit::Bool = false,
+    σinvert::Bool = false,
     train_freq::Bool = true,
 )
     @assert in_dim == 1
@@ -103,7 +105,8 @@ function Gaussian1D(
 
     Gaussian1D(
         in_dim, out_dim, num_gauss, num_freqs,
-        T, T.(domain), periodic, T(σmin), T(σfactor), σsplit, train_freq,
+        T, T.(domain), periodic, T(σmin), T(σfactor),
+        σsplit, σinvert, train_freq,
     )
 end
 
@@ -136,7 +139,7 @@ function Lux.initialparameters(rng::Random.AbstractRNG, l::Gaussian1D)
     c = rand(rng, 1, l.num_freqs, l.num_gauss) .* 2 .- 1 .|> l.T
 
     # mean
-    x̄ = LinRange(x0 + span/2, x1 - span/2, l.num_gauss)
+    x̄ = LinRange(x0 + span/2, x1 - span/2, l.num_gauss) 
     x̄ = reshape(x̄, 1, 1, l.num_gauss) .|> l.T
 
     # variance
@@ -147,10 +150,19 @@ function Lux.initialparameters(rng::Random.AbstractRNG, l::Gaussian1D)
 
     ps = (; b, c, x̄)
 
-    if l.σsplit
-        ps = (; ps..., σl = σ, σr = σ, w = l.T[50])
+    if l.σinvert
+        σi = inv.(σ)
+        if l.σsplit
+            ps = (; ps..., σil = σi, σir = σi, w = l.T[50])
+        else
+            ps = (; ps..., σi)
+        end
     else
-        ps = (; ps..., σ)
+        if l.σsplit
+            ps = (; ps..., σl = σ, σr = σ, w = l.T[50])
+        else
+            ps = (; ps..., σ)
+        end
     end
 
     if l.train_freq
@@ -202,17 +214,26 @@ function (l::Gaussian1D)(x::AbstractMatrix{T}, ps, st::NamedTuple) where{T}
         xd = @. sinpi(xd * st.ω_domain)
     end
 
-    # get σ
-    σ = if l.σsplit
-        σl = @. abs(ps.σl) + st.σϵ
-        σr = @. abs(ps.σr) + st.σϵ
-        σ = scaled_tanh(xd, σl, σr, ps.w, zero(T))
-        # σ = scaled_tanh(x_re, σl, σr, ps.w, ps.x̄)
+    z = if l.σinvert                        # [1, 1, Ng, K]
+        σi = if l.σsplit
+            σil = @. abs(ps.σil)
+            σir = @. abs(ps.σir)
+            σ = scaled_tanh(xd, σil, σir, ps.w, zero(T))
+        else
+            @. abs(ps.σi)
+        end
+        @. xd * σi
     else
-        @. abs(ps.σ) + st.σϵ
+        σ = if l.σsplit
+            σl = @. abs(ps.σl) + st.σϵ
+            σr = @. abs(ps.σr) + st.σϵ
+            σ = scaled_tanh(xd, σl, σr, ps.w, zero(T))
+            # σ = scaled_tanh(x_re, σl, σr, ps.w, ps.x̄)
+        else
+            @. abs(ps.σ) + st.σϵ
+        end
+        @. xd / σ
     end
-
-    z = @. xd / σ                           # [1, 1, Ng, K]
 
     # apply Gaussian, sinusodal
     y_gauss = @. exp(st.minushalf * z^2)    # [1, 1 , Ng, K]
@@ -254,47 +275,112 @@ export RSWAF1D
 @concrete struct RSWAF1D{I<:Integer} <: Lux.AbstractExplicitLayer
     in_dim::I
     out_dim::I
-    # domain
+    num_plateaus::I
+    domain
+    split::Bool
+    periodic::Bool
+    T
 end
 
-# function RSWAF1D(
-#     in_dim::Integer,
-#     out_dim::Integer,
-#     N::Integer; # number of plateaus
-#     T = Float32,
-#     domain = [-1, 1],
-#     periodic::Bool = false,
-# )
-#     RSWAF1D(in_dim, out_dim, domain)
-# end
+function RSWAF1D(
+    in_dim::Integer,
+    out_dim::Integer,
+    num_plateaus::Integer; # number of plateaus
+    T = Float32,
+    domain = [-1, 1],
+    split::Bool = false,
+    periodic::Bool = false,
+)
+    @assert length(domain) == 2
+    @assert in_dim == out_dim == 1
+
+    RSWAF1D(in_dim, out_dim, num_plateaus, T.(domain), split, periodic, T)
+end
+
+function Base.show(io::IO, l::RSWAF1D)
+    println(io, "RSWAF1D($(l.in_dim), $(l.out_dim), $(l.num_plateaus))")
+end
 
 function Lux.initialstates(rng::Random.AbstractRNG, l::RSWAF1D)
     (;
-        half = Float32[0.5],
+        half = l.T[0.5],
+
+        xdom0 = l.T[l.domain[1]],
+        xdom1 = l.T[l.domain[2]],
+        # xmean = l.T[0.5 * (l.domain[1] + l.domain[2])],
+        # xspan = l.T[l.domain[2] - l.domain[1]],
     )
 end
 
+# Q. parameterize x̄, w or x0, x1 directly?
+# - x̄ ,  w: compact support, orientation fixed
+# - x0, x1: orientation switches if x0 < x1. Why is that a problem?
+#   potentially gives more flexibility with gradient descent ??
+#
+# Q. Adding RSWAF with x1=x0 (resultant zero func) and fitting
+#    with GD as a form of mesh refinement.
+#    Test this idea out with initializing w as [1, 0, ..., 0]
+#    and seeing if the last zeros change.
+#    How does it compare with setting c = [1, 0, ..., 0]
+#
+# Q. We can also switch between the two during training/ online solve
+#
+# - parameterize x0, x1 and force them to be in [-1, 1]
+# - try gradient boosting type approach
+
 function Lux.initialparameters(rng::Random.AbstractRNG, l::RSWAF1D)
-    (;
-        x̄ = Float32[0],
-        w = Float32[1],
 
-        ω0 = Float32[10],
-        ω1 = Float32[10],
+    x0, x1 = l.domain
+    xspan = (x1 - x0) / l.num_plateaus
 
-        b = Float32[0.0],
-        c = Float32[1.0],
-    )
+    # # principled
+    # x̄ = LinRange(x0 + xspan / 2, x1 - xspan / 2, l.num_plateaus) .|> l.T
+    # w = zeros(l.num_plateaus)                                    .|> l.T
+    # c = rand32(rng, l.num_plateaus) .* 2 .- 1                    .|> l.T
+    # w[l.num_plateaus ÷ 2] = 1
+
+    # [1, 0, ..., 0]
+    x̄ = zeros(l.T, l.num_plateaus)
+    w = ones( l.T, l.num_plateaus)
+    c = fill(l.T(1), l.num_plateaus)
+
+    w[2:end] .= 0
+    x̄[2:end] .+= randn(rng, l.num_plateaus-1) * 10^(-2)
+
+    #------------------------------#
+
+    # steepness
+    ω0 = fill(l.T(10), l.num_plateaus)
+    ω1 = fill(l.T(10), l.num_plateaus)
+
+    # global shift
+    b = zeros(l.T, 1)
+
+    (; x̄, w, ω0, ω1, b, c)
 end
 
 function (l::RSWAF1D)(x::AbstractMatrix{T}, ps, st::NamedTuple) where{T}
     x0 = @. ps.x̄ - ps.w
     x1 = @. ps.x̄ + ps.w
 
+    # ext0 = x0 - 3 ./ ps.ω0
+    # ext1 = x1 + 3 ./ ps.ω1
+    #
+    # if any(<(l.domain[1]), ext0) | any(>(l.domain[2]), ext1)
+    #     @show ext0
+    #     @show ext1
+    # end
+
+    if l.periodic
+    end
+
+    # make plateaus
     y0 = @. tanh(ps.ω0 * (x - x0))
     y1 = @. tanh(ps.ω1 * (x - x1))
+    y  = @. st.half * (y0 - y1) * ps.c
 
-    y = @. st.half * (y0 - y1) * ps.c + ps.b
+    y = sum(y; dims = 1)
+    y = @. y + ps.b
 
     y, st
 end

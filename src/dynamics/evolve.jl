@@ -279,7 +279,9 @@ function compute_f̃(
     lincache.b = vec(f)
     lincache.u = similar(lincache.u)
 
-    solve!(lincache)
+    linsol = solve!(lincache)
+    check_linsol_retcode(linsol)
+
     lincache.u
 end
 

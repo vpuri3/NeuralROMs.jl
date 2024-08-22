@@ -29,11 +29,11 @@ function makemodelGaussian(
     Nf = haskey(train_params, :Nf) ? train_params.f : 4 # num_freqs
     σmin = haskey(train_params, :σmin) ? train_params.σmin : 1e-4
     σsplit = haskey(train_params, :σsplit) ? train_params.σsplit : true
+    σinvert = haskey(train_params, :σinvert) ? train_params.σinvert : false
     train_freq = haskey(train_params, :train_freq) ? train_params.train_freq : true
 
-    # # RSWAF
-    # Ng = haskey(train_params, :Ng) ? train_params.N : 4 # num_gauss
-
+    # RSWAF
+    N = haskey(train_params, :N) ? train_params.N : 1
 
     T = haskey(train_params, :T) ? train_params.T : Float32
     E = haskey(train_params, :E) ? train_params.E : 200
@@ -50,7 +50,11 @@ function makemodelGaussian(
     o = out_dim
 
     decoder = if type === :RSWAF
-        RSWAF1D(i, o)
+        N = 1
+        # N = 4
+
+        RSWAF1D(i, o, N; periodic)
+
     elseif type === :Gaussian
         # # AD1D case 1-4
         # Ng = Nf = 1
@@ -81,8 +85,9 @@ function makemodelGaussian(
         # σsplit = true
         # train_freq = false
         # periodic = false
+        # σinvert = true
 
-        Gaussian1D(i, o, Ng, Nf; periodic, σmin, σsplit, train_freq)
+        Gaussian1D(i, o, Ng, Nf; periodic, σmin, σsplit, σinvert, train_freq)
     else
         @error "Unsupported type. Choose `:type = :Gaussian`, or `:RSWAF`"
     end
@@ -154,12 +159,22 @@ function makemodelGaussian(
             @show model[2].decoder.c
             @show model[2].decoder.x̄
 
-            if σsplit
-                @show model[2].decoder.w
-                @show model[2].decoder.σl
-                @show model[2].decoder.σr
+            if σinvert
+                if σsplit
+                    @show model[2].decoder.w
+                    @show model[2].decoder.σil
+                    @show model[2].decoder.σir
+                else
+                    @show model[2].decoder.σi
+                end
             else
-                @show model[2].decoder.σ
+                if σsplit
+                    @show model[2].decoder.w
+                    @show model[2].decoder.σl
+                    @show model[2].decoder.σr
+                else
+                    @show model[2].decoder.σ
+                end
             end
 
             if train_freq
