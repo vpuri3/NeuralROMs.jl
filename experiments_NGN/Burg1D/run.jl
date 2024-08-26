@@ -64,6 +64,7 @@ XD = TD = UD = UP = PS = ()
 NN, p, st = repeat([nothing], 3)
 
 for case in 1:1
+# for case in 3:3
 # for case in 1:6
     cc = mod1(case, 4)
 

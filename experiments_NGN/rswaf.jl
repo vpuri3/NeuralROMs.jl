@@ -59,21 +59,21 @@ end
 
 #======================================================#
 x = LinRange(-1, 1, 1024)
-y1 = rswaf(x, 0, 0.5, 20, 20, 1.0)
-y2 = rswaf(x, 0, 0.1, 20, 30, 1.0)
-# y3 = rswaf(x, 0, 0.5, 20, 20, 0.8)
-# y4 = rswaf(x, 0, 0.5, 20, 20, 0.8)
+y1 = rswaf(x, -0.5, 0.3, 20, 20, 1.0)
+y2 = rswaf(x,    0, 0.1, 20, 30, 0.8)
+y3 = rswaf(x,  0.8, 0.1, 50, 50, 1.0)
+y4 = rswaf(x,    0, 0.5,  1.8, 50, 0.5)
 # y5 = rswaf(x, 0, 0.5, 20, 20, 0.8)
 # y6 = rswaf(x, 0, 0.5, 20, 20, 0.8)
 
 # x = LinRange(-3, 3, 1024)
 # y1 = rswaf(sinpi.(x/2), 0, 0.5, 40, 5, 0.8)
 
-plt = plot()
+plt = plot(; legend = false)
 plot!(plt, x, y1, w = 4)
 plot!(plt, x, y2, w = 4)
-# plot!(plt, x, y3, w = 4)
-# plot!(plt, x, y4, w = 4)
+plot!(plt, x, y3, w = 4)
+plot!(plt, x, y4, w = 4)
 # plot!(plt, x, y5, w = 4)
 # plot!(plt, x, y6, w = 4)
 display(plt)

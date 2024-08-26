@@ -81,7 +81,16 @@ function makemodelGaussian(
 
         # # Burg 1D
         # Ng = Nf = 1
-        # σmin = 1f-2
+        # σmin = 1f-6
+        # σsplit = true
+        # train_freq = false
+        # periodic = false
+        # σinvert = true
+
+        # # Burg 1D
+        # Ng = 4
+        # Nf = 4
+        # σmin = 1f-6
         # σsplit = true
         # train_freq = false
         # periodic = false
