@@ -211,16 +211,29 @@ function ngEvolve(
             LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, T(1f-6), abstol_inf, abstol_mse)
         end
     elseif scheme === :GalerkinCollocation
-        linalg = SimpleGMRES() # good for block matrices (?)
-        linalg = KrylovJL_GMRES()
+        debug = false
+        normal = false
+        linalg = QRFactorization(ColumnNorm())
 
-        GalerkinCollocation(prob, model, p0, data[1]; linalg)
+        # debug = true
+        # debug = false
+        #
+        # normal = false
+        # linalg = KrylovJL_LSMR()
+        # linalg = QRFactorization(ColumnNorm())
+
+        # normal = true
+        # linalg = SimpleGMRES()
+        # linalg = KrylovJL_GMRES()
+        # linalg = QRFactorization(ColumnNorm())
+
+        GalerkinCollocation(prob, model, p0, data[1]; linalg, normal, debug)
     end
 
     #==============#
     # evolve
     #==============#
-
+    
     if !isa(scheme, GalerkinCollocation)
         args = (prob, device(model), timealg, scheme, (device(data[1:2])..., data[3]), device(p0 .|> T), Δt)
         kwargs = (; adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,)
@@ -235,36 +248,25 @@ function ngEvolve(
         else
             @timed _, ps, _ = evolve_model(args...; kwargs...)
         end
-    
+
         @set! statsROM.value = nothing
         if benchmark
             @set! statsROM.time  = timeROM
         end
+
         @show statsROM.time
     else
 
         if !isa(timealg, SciMLBase.AbstractODEAlgorithm)
+            # explicit: Euler(), RK4(), SSPRK43(), Tsit5()
+            # implicit: ImplicitEuler(autodiff = false), Rosenbrock32(autodiff = false), Rodas5(autodiff = false)
+
+            # for (autodiff = true), use PreallocationTools.dual_cache ?
+
             timealg = Tsit5()
             # timealg = Rodas5(autodiff = false)
         end
 
-        # # AD 1D
-        # timealg = Rodas5(autodiff = false)
-
-        # explicit
-        # timealg = Euler()
-        # timealg = RK4()
-        # timealg = SSPRK43()
-        # timealg = Tsit5()
-
-        # # implicit
-        # timealg = ImplicitEuler(autodiff = false)
-        # timealg = Rosenbrock32(autodiff = false)
-        # timealg = Rodas5(autodiff = false)
-
-        # for autodiff = true, use PreallocationTools.dual_cache ?
-
-        # ODE Problem
         dt = 1f-4
         iip = false
         tspan = extrema(data[3])
@@ -321,7 +323,6 @@ function ngEvolve(
 
         ps = Array(sol)
     end
-
 
     #==============#
     # analysis

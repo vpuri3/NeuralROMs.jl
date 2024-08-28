@@ -2,12 +2,13 @@
 #===========================================================#
 export GalerkinCollocation
 
-@concrete mutable struct GalerkinCollocation{mm} <: AbstractSolveScheme where{mm}
+@concrete mutable struct GalerkinCollocation{mass_matrix, normal} <: AbstractSolveScheme where{mass_matrix, normal}
     prob
     model
     xyz
     ca_axes
     linalg
+    debug::Bool
 end
 
 function GalerkinCollocation(
@@ -17,11 +18,14 @@ function GalerkinCollocation(
     xyz::AbstractMatrix{T};
     linalg::SciMLBase.AbstractLinearAlgorithm = KrylovJL_GMRES(),
     mass_matrix::Bool = false,
+    normal::Bool = false,
+    debug::Bool = false,
 ) where{T<:Number}
 
-    # linalg = KrylovJL_GMRES() on LinearProblem(J' * J, J' * f)
-    # linalg = KrylovJL_LSMR() on LinearProblem(J, f)
     # https://jso.dev/Krylov.jl/stable/solvers/ls/
+    # linalg = QRFactorization(ColumnNorm())
+    # linalg = KrylovJL_GMRES() on normal = true
+    # linalg = KrylovJL_LSMR() on normal = false
 
     # # reuse lincache
     # f = model(xyz, p0)
@@ -30,13 +34,18 @@ function GalerkinCollocation(
     # lincache = SciMLBase.init(linprob, linalg)
 
     ca_axes = getaxes(p0)
-    GalerkinCollocation{mass_matrix}(prob, model, xyz, ca_axes, linalg)
+
+    GalerkinCollocation{
+        mass_matrix, normal,
+    }(
+        prob, model, xyz, ca_axes, linalg, debug,
+    )
 end
 
 # function Adapt.adapt_structure(l::GalerkinCollocation)
 # end
 
-function (l::GalerkinCollocation{false})(
+function (l::GalerkinCollocation{false, false})(
     p::AbstractVector,
     params,
     t::Number,
@@ -44,20 +53,18 @@ function (l::GalerkinCollocation{false})(
     ps = ComponentArray(p, l.ca_axes)
 
     J = dudp(l.model, l.xyz, ps)
-    f = dudtRHS(l.prob, l.model, l.xyz, ps, t)
+    f = dudtRHS(l.prob, l.model, l.xyz, ps, t) |> vec
 
-    linprob = LinearProblem(J' * J,  J' * vec(f))
-    # linprob = LinearProblem(J,  vec(f))
+    linprob = LinearProblem(J,  f)
     linsol  = solve(linprob, l.linalg)
-    check_linsol_retcode(linsol)
+    check_linsol_retcode(J, f, linsol; debug = l.debug)
 
     dp = linsol.u
 
     getdata(dp)
 end
 
-function (l::GalerkinCollocation{false})(
-    dp::AbstractVector,
+function (l::GalerkinCollocation{false, true})(
     p::AbstractVector,
     params,
     t::Number,
@@ -65,15 +72,44 @@ function (l::GalerkinCollocation{false})(
     ps = ComponentArray(p, l.ca_axes)
 
     J = dudp(l.model, l.xyz, ps)
-    f = dudtRHS(l.prob, l.model, l.xyz, ps, t)
+    f = dudtRHS(l.prob, l.model, l.xyz, ps, t) |> vec
 
-    linprob = LinearProblem(J' * J, J' * vec(f); u0 = dp)
-    # linprob = LinearProblem(J, vec(f); u0 = dp)
+    linprob = LinearProblem(J' * J,  J' * f)
     linsol  = solve(linprob, l.linalg)
-    check_linsol_retcode(linsol)
+    check_linsol_retcode(J, f, linsol; debug = l.debug)
 
-    nothing
+    dp = linsol.u
+
+    getdata(dp)
 end
+
+##################
+# in place ODE problem
+# pointless unless we're reusuing lincache
+##################
+
+# function (l::GalerkinCollocation{false})(
+#     dp::AbstractVector,
+#     p::AbstractVector,
+#     params,
+#     t::Number,
+# )
+#     ps = ComponentArray(p, l.ca_axes)
+#
+#     J = dudp(l.model, l.xyz, ps)
+#     f = dudtRHS(l.prob, l.model, l.xyz, ps, t)
+#
+#     linprob = LinearProblem(J' * J, J' * vec(f); u0 = dp)
+#     # linprob = LinearProblem(J, vec(f); u0 = dp)
+#     linsol  = solve(linprob, l.linalg)
+#     check_linsol_retcode(linsol)
+#
+#     nothing
+# end
+
+##################
+# mass matrix form
+##################
 
 # want tighter integration between linear solve and ODE solve.
 # Make J the mass-matrix and have scheme(u, p, t) -> f
@@ -82,9 +118,7 @@ end
 # https://docs.sciml.ai/DiffEqDocs/stable/solvers/dae_solve/
 
 # TODO: write custom Jacobian
-#
 # J = d/dp (rhs(p, params, t))
-#
 
 function (l::GalerkinCollocation{true})(
     dpdt::AbstractVector,
@@ -96,15 +130,6 @@ function (l::GalerkinCollocation{true})(
     f = dudtRHS(l.prob, l.model, l.xyz, ps, t) |> vec
     J = dudp(l.model, l.xyz, ps)
     J * dpdt - f
-end
-#===========================================================#
-
-function check_linsol_retcode(linsol)
-    # ifsuccess = SciMLBase.successful_retcode(linsol)
-    # Factorization algorithms return ReturnCode.Default
-    ifsuccess = linsol.retcode ∈ (ReturnCode.Default, ReturnCode.Success)
-    @assert ifsuccess "Linear solve return code: $(linsol.retcode)"
-    return
 end
 #===========================================================#
 #

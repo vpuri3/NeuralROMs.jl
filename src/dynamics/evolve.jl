@@ -274,13 +274,14 @@ function compute_f̃(
 )
     # du/dp (N, n)
     J = dudp(model, x, p; autodiff = autodiff_jac, ϵ = ϵ_jac)
+    f = vec(f)
 
     lincache.A = J
-    lincache.b = vec(f)
+    lincache.b = f
     lincache.u = similar(lincache.u)
 
     linsol = solve!(lincache)
-    check_linsol_retcode(linsol)
+    check_linsol_retcode(J, f, linsol)
 
     lincache.u
 end

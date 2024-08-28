@@ -67,7 +67,6 @@ for case in 1:1
 # for case in 3:3
 # for case in 1:6
     cc = mod1(case, 4)
-
     prob = BurgersViscous1D(1f-4)
     modelfile = joinpath(modeldir, "project$(case)", modelfilename)
 

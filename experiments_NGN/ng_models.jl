@@ -51,7 +51,7 @@ function makemodelGaussian(
 
     decoder = if type === :RSWAF
         N = 1
-        # N = 4
+        N = 4
 
         RSWAF1D(i, o, N; periodic)
 

@@ -176,4 +176,32 @@ function _mod(a::Integer, b::Integer)
 end
 
 #===========================================================#
+function check_linsol_retcode(
+    J::AbstractMatrix,
+    f::AbstractVector,
+    linsol;
+    debug::Bool = false
+)
+    # ifsuccess = SciMLBase.successful_retcode(linsol)
+    # Factorization algorithms return ReturnCode.Default
+
+    ifsuccess = linsol.retcode ∈ (ReturnCode.Default, ReturnCode.Success)
+    @assert ifsuccess "Linear solve return code: $(linsol.retcode)"
+
+    if debug
+        u = linsol.u
+        r1 = J * u - f
+        r2 = (J' * J) * u - (J' * f)
+
+        # TODO: compute the spread of r1
+
+        r1 = sum(abs2, r1)
+        r2 = sum(abs2, r2)
+
+        println("Residuals: \t $(r1) \t $(r2)")
+    end
+
+    return
+end
+#===========================================================#
 #
