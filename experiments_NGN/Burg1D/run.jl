@@ -58,13 +58,23 @@ data_kws = (; Ix = :, It = :)
 #------------------------------------------------------#
 # Tanh kernels
 #------------------------------------------------------#
+# train_params  = (; N = 1, Nsplits = 2)
+# evolve_params  = (; scheme = :GalerkinCollocation)
+# # evolve_params = (; timealg = EulerForward())#, Δt = 1e-3, adaptive = false)
+#
+# makemodel = makemodelTanh
+# modelfilename = joinpath("split$(train_params.Nsplits)","model_05.jld2")
+# modeldir  = joinpath(@__DIR__, "dump_tanh")
+
+#------------------------------------------------------#
+# Tanh kernels
+#------------------------------------------------------#
 train_params  = (; N = 1, Nsplits = 2)
 evolve_params  = (; scheme = :GalerkinCollocation)
-# evolve_params = (; timealg = EulerForward())#, Δt = 1e-3, adaptive = false)
 
 makemodel = makemodelTanh
 modelfilename = joinpath("split$(train_params.Nsplits)","model_05.jld2")
-modeldir  = joinpath(@__DIR__, "dump_tanh")
+modeldir  = joinpath(@__DIR__, "dump")
 
 #------------------------------------------------------#
 # Evolve
@@ -82,7 +92,7 @@ for case in 1:1
     modelfile = joinpath(modeldir, "project$(case)", modelfilename)
 
     global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
-    (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
+    # (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
 
     # global XD = (XD..., Xd)
     # global TD = (TD..., Td)

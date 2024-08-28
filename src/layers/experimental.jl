@@ -429,5 +429,34 @@ function split_TanhKernel1D(
     NN_, p_, st_
 end
 
+export merge_TanhKernel1D
+
+function merge_TanhKernel1D(
+    models;
+    rng::AbstractRNG = Random.default_rng(),
+    debug::Bool = false,
+)
+    Nmodels = length(models)
+
+    NNs = map(x -> x[1], models)
+    pps = map(x -> x[2], models)
+    # sts = map(x -> x[3], models)
+
+    Nks = sum(x -> x.num_kernels, NNs)
+    NN  = TanhKernel1D(NNs[1].in_dim, NNs[1].out_dim, Nks)
+    p, st = Lux.setup(rng, NN)
+
+    p.x̄ .= vcat(map(p -> p.x̄, pps)...)
+    p.w .= vcat(map(p -> p.w, pps)...)
+    p.c .= vcat(map(p -> p.c, pps)...)
+
+    p.ω0 .= vcat(map(p -> p.ω0, pps)...)
+    p.ω1 .= vcat(map(p -> p.ω1, pps)...)
+
+    p.b .= sum(p -> p.b, pps)
+
+    NN, p, st
+end
+
 #======================================================#
 #
