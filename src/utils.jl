@@ -195,8 +195,8 @@ function check_linsol_retcode(
 
         # TODO: compute the spread of r1
 
-        r1 = sum(abs2, r1)
-        r2 = sum(abs2, r2)
+        r1 = sum(abs2, r1) / length(r1)
+        r2 = sum(abs2, r2) / length(r2)
 
         println("Residuals: \t $(r1) \t $(r2)")
     end

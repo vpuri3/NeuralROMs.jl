@@ -194,7 +194,7 @@ function ngEvolve(
 
     scheme = if scheme ∈ (:GalerkinProjection, :LSPG)
         autodiff = AutoForwardDiff()
-        linsolve = QRFactorization()
+        linsolve = QRFactorization(ColumnNorm())
         linesearch = LineSearch()
         nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
         nlsmaxiters = 20
@@ -234,37 +234,14 @@ function ngEvolve(
     # evolve
     #==============#
     
-    if !isa(scheme, GalerkinCollocation)
-        args = (prob, device(model), timealg, scheme, (device(data[1:2])..., data[3]), device(p0 .|> T), Δt)
-        kwargs = (; adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,)
-    
-        if benchmark # assume CUDA
-            Logging.disable_logging(Logging.Warn)
-            timeROM = @belapsed CUDA.@sync $evolve_model($args...; $kwargs...)
-        end
-    
-        statsROM = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
-            CUDA.@timed _, ps, _ = evolve_model(args...; kwargs...)
-        else
-            @timed _, ps, _ = evolve_model(args...; kwargs...)
-        end
-
-        @set! statsROM.value = nothing
-        if benchmark
-            @set! statsROM.time  = timeROM
-        end
-
-        @show statsROM.time
-    else
-
+    if isa(scheme, GalerkinCollocation)
         if !isa(timealg, SciMLBase.AbstractODEAlgorithm)
             # explicit: Euler(), RK4(), SSPRK43(), Tsit5()
             # implicit: ImplicitEuler(autodiff = false), Rosenbrock32(autodiff = false), Rodas5(autodiff = false)
-
             # for (autodiff = true), use PreallocationTools.dual_cache ?
 
-            timealg = Tsit5()
-            # timealg = Rodas5(autodiff = false)
+            # timealg = Tsit5()
+            timealg = Rodas5(autodiff = false)
         end
 
         dt = 1f-4
@@ -322,6 +299,29 @@ function ngEvolve(
         @assert SciMLBase.successful_retcode(sol)
 
         ps = Array(sol)
+    else
+        # LSPG, GalerkinProjection
+
+        args = (prob, device(model), timealg, scheme, (device(data[1:2])..., data[3]), device(p0 .|> T), Δt)
+        kwargs = (; adaptive, autodiff_xyz, ϵ_xyz, learn_ic, verbose, device,)
+    
+        if benchmark # assume CUDA
+            Logging.disable_logging(Logging.Warn)
+            timeROM = @belapsed CUDA.@sync $evolve_model($args...; $kwargs...)
+        end
+    
+        statsROM = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
+            CUDA.@timed _, ps, _ = evolve_model(args...; kwargs...)
+        else
+            @timed _, ps, _ = evolve_model(args...; kwargs...)
+        end
+
+        @set! statsROM.value = nothing
+        if benchmark
+            @set! statsROM.time  = timeROM
+        end
+
+        @show statsROM.time
     end
 
     #==============#

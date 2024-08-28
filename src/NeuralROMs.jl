@@ -49,7 +49,7 @@ using Tullio
 
 # data management
 using ComponentArrays
-using Setfield: @set!
+using Setfield: @set, @set!
 using UnPack
 using ConcreteStructs
 using IterTools

@@ -30,7 +30,7 @@ data_kws = (; Ix = :, It = :)
 # data_kws = (; Ix = LinRange(1, 8192, 64), It = :)
 # data_kws = map(x -> round.(Int, x), data_kws)
 
-# train_params  = (; E = 100,)
+# train_params  = (; E = 100, Ng = 1, Nf = 1, train_freq = false)
 # evolve_params  = (; scheme = :GalerkinCollocation)
 # # evolve_params = (; timealg = RungeKutta4(), Δt = 1e-4, adaptive = false)
 # # evolve_params = (; timealg = EulerForward(), Δt = 1e-4, adaptive = false)
@@ -40,20 +40,31 @@ data_kws = (; Ix = :, It = :)
 # modeldir  = joinpath(@__DIR__, "dump_gaussian")
 
 #------------------------------------------------------#
-# RSWAF
+# Tanh kernels
 #------------------------------------------------------#
-# data_kws = (; Ix = LinRange(1, 512, 64), It = LinRange(1, 500, 500))
-# data_kws = map(x -> round.(Int, x), data_kws)
+# # data_kws = (; Ix = LinRange(1, 512, 64), It = LinRange(1, 500, 500))
+# # data_kws = map(x -> round.(Int, x), data_kws)
+#
+# train_params  = (; N = 1, Nsplits = 0)
+# evolve_params  = (; scheme = :GalerkinCollocation)
+# # evolve_params  = (; scheme = :GalerkinCollocation, timealg = Tsit5())
+# # evolve_params = (; timealg = EulerForward())#, Δt = 1e-3, adaptive = false)
+# # evolve_params = (; timealg = RungeKutta4())#, Δt = 1e-3, adaptive = false)
+#
+# makemodel = makemodelTanh
+# modelfilename = "model_05.jld2"
+# modeldir  = joinpath(@__DIR__, "dump_tanh_orig")
 
-train_params  = (; type = :RSWAF)
+#------------------------------------------------------#
+# Tanh kernels
+#------------------------------------------------------#
+train_params  = (; N = 1, Nsplits = 2)
 evolve_params  = (; scheme = :GalerkinCollocation)
-# evolve_params  = (; scheme = :GalerkinCollocation, timealg = Tsit5())
 # evolve_params = (; timealg = EulerForward())#, Δt = 1e-3, adaptive = false)
-# evolve_params = (; timealg = RungeKutta4())#, Δt = 1e-3, adaptive = false)
 
-makemodel = makemodelGaussian
-modelfilename = "model_05.jld2"
-modeldir  = joinpath(@__DIR__, "dump_rswaf")
+makemodel = makemodelTanh
+modelfilename = joinpath("split$(train_params.Nsplits)","model_05.jld2")
+modeldir  = joinpath(@__DIR__, "dump_tanh")
 
 #------------------------------------------------------#
 # Evolve
@@ -63,8 +74,8 @@ modeldir  = joinpath(@__DIR__, "dump_rswaf")
 XD = TD = UD = UP = PS = ()
 NN, p, st = repeat([nothing], 3)
 
-for case in 1:1
-# for case in 3:3
+# for case in 1:1
+for case in 2:3
 # for case in 1:6
     cc = mod1(case, 4)
     prob = BurgersViscous1D(1f-4)
@@ -90,7 +101,7 @@ end
 # GAUSSIAN REFINEMENT/CULLING
 # - 
 #
-# RSWAF
+# TANH KERNELS
 # - intead of/ along with a global shift, have a localized shift by forming
 #   a plateau with tanh.
 #   The plateau can degrade to 0, or produce sharper features

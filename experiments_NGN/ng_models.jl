@@ -1,6 +1,88 @@
 #
 #======================================================#
-# Gaussian
+# Tanh kernels
+#======================================================#
+function makemodelTanh(
+    data::NTuple{2,Any},
+    train_params::NamedTuple,
+    periods,
+    metadata::NamedTuple,
+    modeldir::String;
+    rng::Random.AbstractRNG = Random.default_rng(),
+    verbose::Bool = true,
+    device = Lux.gpu_device()
+)
+    in_dim  = size(data[1], 1)
+    out_dim = size(data[2], 1)
+
+    #--------------------------------------------#
+    # get train params
+    #--------------------------------------------#
+
+    periodic = true
+
+    N = haskey(train_params, :N) ? train_params.N : 1
+    E = haskey(train_params, :E) ? train_params.E : 200
+    T = haskey(train_params, :T) ? train_params.T : Float32
+
+    Nsplits = haskey(train_params, :Nsplits) ? train_params.Nsplits : 0
+
+    warmup = haskey(train_params, :warmup) ? train_params.warmup : false
+    hessopt = haskey(train_params, :hessopt) ? train_params.hessopt : true
+
+    #--------------------------------------------#
+    # architecture
+    #--------------------------------------------#
+
+    i = in_dim
+    o = out_dim
+    decoder = TanhKernel1D(i, o, N)
+
+    NN = decoder
+    #-------------------------------------------#
+
+    lossfun = mse
+    batchsize_ = numobs(data)
+    opts, nepochs, schedules, early_stoppings, _batchsize = make_optimizer_gaussian(E, numobs(data), warmup, hessopt)
+
+    #-------------------------------------------#
+    train_args = (; E, _batchsize, batchsize_)
+    metadata   = (; metadata..., train_args)
+
+    #-------------------------------------------#
+    p, st = Lux.setup(rng, NN)
+    p = ComponentArray(p) .|> T
+    ST = nothing
+    #-------------------------------------------#
+
+    for isplit in 0:Nsplits
+        display(NN)
+        dir = if iszero(Nsplits)
+            modeldir
+        else
+            joinpath(modeldir, "split$(isplit)")
+        end
+
+        @time (NN, p, st), ST = train_model(
+            NN, data; rng, p, st, _batchsize, batchsize_,
+            opts, nepochs, schedules, early_stoppings,
+            device, dir, metadata, lossfun,
+        )
+
+        @show p
+        @show length(p)
+        plot_training!(ST...) |> display
+
+        if isplit != Nsplits
+            NN, p, st = split_TanhKernel1D(NN, p, st)
+        end
+    end
+
+    (NN, p, st), ST, metadata
+end
+
+#======================================================#
+# Gaussian kernels
 #======================================================#
 function makemodelGaussian(
     data::NTuple{2,Any},
@@ -22,9 +104,6 @@ function makemodelGaussian(
 
     periodic = true
 
-    type = haskey(train_params, :type) ? train_params.type : :Gaussian
-
-    # Gaussian
     Ng = haskey(train_params, :Ng) ? train_params.N : 4 # num_gauss
     Nf = haskey(train_params, :Nf) ? train_params.f : 4 # num_freqs
     σmin = haskey(train_params, :σmin) ? train_params.σmin : 1e-4
@@ -32,13 +111,8 @@ function makemodelGaussian(
     σinvert = haskey(train_params, :σinvert) ? train_params.σinvert : false
     train_freq = haskey(train_params, :train_freq) ? train_params.train_freq : true
 
-    # RSWAF
-    N = haskey(train_params, :N) ? train_params.N : 1
-
     T = haskey(train_params, :T) ? train_params.T : Float32
-    E = haskey(train_params, :E) ? train_params.E : 200
     exactIC = haskey(train_params, :exactIC) ? train_params.exactIC : (;)
-
     warmup = haskey(train_params, :warmup) ? train_params.warmup : false
     hessopt = haskey(train_params, :hessopt) ? train_params.hessopt : true
 
@@ -49,13 +123,7 @@ function makemodelGaussian(
     i = in_dim
     o = out_dim
 
-    decoder = if type === :RSWAF
-        N = 1
-        N = 4
-
-        RSWAF1D(i, o, N; periodic)
-
-    elseif type === :Gaussian
+    decoder = begin
         # # AD1D case 1-4
         # Ng = Nf = 1
         # σmin = 1e-2
@@ -97,8 +165,6 @@ function makemodelGaussian(
         # σinvert = true
 
         Gaussian1D(i, o, Ng, Nf; periodic, σmin, σsplit, σinvert, train_freq)
-    else
-        @error "Unsupported type. Choose `:type = :Gaussian`, or `:RSWAF`"
     end
 
     NN = Chain(; decoder)
@@ -153,50 +219,41 @@ function makemodelGaussian(
             opts, nepochs, schedules, early_stoppings,
             device, dir, metadata, lossfun,
         )
+
         plot_training!(ST...) |> display
 
-        if type === :RSWAF
-            @show model[2].decoder.x̄
-            @show model[2].decoder.w
-            @show model[2].decoder.b
-            @show model[2].decoder.c
-            @show model[2].decoder.ω0
-            @show model[2].decoder.ω1
-        elseif type === :Gaussian
-            
-            @show model[2].decoder.b
-            @show model[2].decoder.c
-            @show model[2].decoder.x̄
+        @show model[2].decoder.b
+        @show model[2].decoder.c
+        @show model[2].decoder.x̄
 
-            if σinvert
-                if σsplit
-                    @show model[2].decoder.w
-                    @show model[2].decoder.σil
-                    @show model[2].decoder.σir
-                else
-                    @show model[2].decoder.σi
-                end
+        if σinvert
+            if σsplit
+                @show model[2].decoder.w
+                @show model[2].decoder.σil
+                @show model[2].decoder.σir
             else
-                if σsplit
-                    @show model[2].decoder.w
-                    @show model[2].decoder.σl
-                    @show model[2].decoder.σr
-                else
-                    @show model[2].decoder.σ
-                end
+                @show model[2].decoder.σi
             end
-
-            if train_freq
-                @show model[2].decoder.ω
-                @show model[2].decoder.ϕ
+        else
+            if σsplit
+                @show model[2].decoder.w
+                @show model[2].decoder.σl
+                @show model[2].decoder.σr
             else
-                # @show model[3].decoder.ω
-                # @show model[3].decoder.ϕ
+                @show model[2].decoder.σ
             end
         end
 
+        if train_freq
+            @show model[2].decoder.ω
+            @show model[2].decoder.ϕ
+        else
+            # @show model[3].decoder.ω
+            # @show model[3].decoder.ϕ
+        end
+
         @show length(model[2])
-        
+
         model, ST, metadata
     end
 
@@ -207,6 +264,7 @@ end
 #======================================================#
 # MFN (Multiplicative Filter Networks)
 #======================================================#
+
 function makemodelMFN(
     data,
     train_params,
@@ -419,8 +477,7 @@ function make_optimizer_gaussian(
     # _batchsize = (1, 1, 1, 1)
 
     lrs = (1f-3, 1f-3, 1f-3, 1f-3)
-    # lrs = (1f-2, 1f-2, 1f-2, 1f-2)
-    _batchsize = (1, 8, 64, 512)
+    _batchsize = (1, 4, 16, 64)
 
     N = length(lrs)
     opts = Tuple(Optimisers.Adam(lr) for lr in lrs)

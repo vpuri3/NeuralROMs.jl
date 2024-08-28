@@ -26,21 +26,20 @@ data_kws = (; Ix = :, It = :)
 # modeldir  = joinpath(@__DIR__, "dump_dnn")
 
 #------------------------------------------------------#
-# RSWAF
+# Tanh Kernels
 #------------------------------------------------------#
 # data_kws = (; Ix = LinRange(1, 512, 64), It = LinRange(1, 500, 500))
 # data_kws = map(x -> round.(Int, x), data_kws)
 
-train_params  = (; type = :RSWAF)
+train_params  = (;)
 evolve_params  = (; scheme = :GalerkinCollocation)
-# evolve_params = (; timealg = RungeKutta4())#, Δt = 1e-3, adaptive = false)
 
-makemodel = makemodelGaussian
+makemodel = makemodelTanh
 modelfilename = "model_05.jld2"
-modeldir  = joinpath(@__DIR__, "dump_rswaf")
+modeldir  = joinpath(@__DIR__, "dump_tanh")
 
 #------------------------------------------------------#
-# Gaussian
+# Gaussian Kernels
 #------------------------------------------------------#
 # data_kws = (; Ix = LinRange(1, 512, 64), It = LinRange(1, 500, 500))
 # data_kws = map(x -> round.(Int, x), data_kws)
@@ -54,7 +53,7 @@ modeldir  = joinpath(@__DIR__, "dump_rswaf")
 # modeldir  = joinpath(@__DIR__, "dump_gaussian")
 
 #------------------------------------------------------#
-# Gaussian (exact)
+# Gaussian (exact IC)
 #------------------------------------------------------#
 # data_kws = (; Ix = LinRange(1, 256, 64), It = LinRange(1, 500, 500))
 # data_kws = map(x -> round.(Int, x), data_kws)
@@ -104,24 +103,5 @@ for case in 5:7
     # sleep(2)
 end
 
-#======================================================#
-#
-# ARCHITECTURE
-# - Check out multiplicative feature networks.
-#   Maybe they can speed-up SDF type problems.
-#
-# GAUSSIAN REFINEMENT/CULLING
-# - 
-#
-# HYPER-REDUCTION
-# - Each Gaussian needs ~5 points to be evolved properly. This should be
-#   helpful in hyper-reduction. We should do local sampling around each
-#   Gaussian. That is: uniformly pick 5 x ∈ [x̄ - 2σ, x̄ + 2σ]
-#
-# LITERATURE
-# - Check out Gaussian process literature
-#
-# NEW CONTRIB
-# - Make parameterization probabilistic. Then you get UQ for free.
 #======================================================#
 nothing

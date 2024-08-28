@@ -390,7 +390,7 @@ function learn_p0(
     if isnothing(nlssolve)
         linesearch = LineSearch()
         autodiff = AutoForwardDiff()
-        linsolve = QRFactorization()
+        linsolve = QRFactorization(ColumnNorm())
         nlssolve = GaussNewton(; autodiff, linsolve, linesearch)
     end
 

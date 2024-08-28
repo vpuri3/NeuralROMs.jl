@@ -86,9 +86,10 @@ end
 ##################
 # in place ODE problem
 # pointless unless we're reusuing lincache
+# and computing J, f in-place
 ##################
 
-# function (l::GalerkinCollocation{false})(
+# function (l::GalerkinCollocation{false, false})(
 #     dp::AbstractVector,
 #     p::AbstractVector,
 #     params,
