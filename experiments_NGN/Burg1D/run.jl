@@ -74,8 +74,8 @@ modeldir  = joinpath(@__DIR__, "dump_tanh")
 XD = TD = UD = UP = PS = ()
 NN, p, st = repeat([nothing], 3)
 
-# for case in 1:1
-for case in 2:3
+for case in 1:1
+# for case in 2:3
 # for case in 1:6
     cc = mod1(case, 4)
     prob = BurgersViscous1D(1f-4)
