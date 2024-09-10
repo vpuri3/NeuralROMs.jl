@@ -95,6 +95,7 @@ export
     PermutedBatchNorm, PermuteLayer, SplitRows
 
 include("layers/mfn.jl")
+include("layers/gaussian.jl")
 include("layers/experimental.jl")
 
 include("layers/encoder_decoder.jl")

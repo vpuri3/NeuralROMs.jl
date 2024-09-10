@@ -6,6 +6,7 @@ export GalerkinCollocation
     prob
     model
     xyz
+    α # regularization
     ca_axes
     linalg
     debug::Bool
@@ -16,11 +17,12 @@ function GalerkinCollocation(
     model::AbstractNeuralModel,
     p0::AbstractVector{T},
     xyz::AbstractMatrix{T};
+    α::T = zero(T),
     linalg::SciMLBase.AbstractLinearAlgorithm = KrylovJL_GMRES(),
     mass_matrix::Bool = false,
     normal::Bool = false,
     debug::Bool = false,
-) where{T<:Number}
+) where{T<:Real}
 
     # https://jso.dev/Krylov.jl/stable/solvers/ls/
     # linalg = QRFactorization(ColumnNorm())
@@ -38,7 +40,7 @@ function GalerkinCollocation(
     GalerkinCollocation{
         mass_matrix, normal,
     }(
-        prob, model, xyz, ca_axes, linalg, debug,
+        prob, model, xyz, α, ca_axes, linalg, debug,
     )
 end
 
@@ -55,7 +57,11 @@ function (l::GalerkinCollocation{false, false})(
     J = dudp(l.model, l.xyz, ps)
     f = dudtRHS(l.prob, l.model, l.xyz, ps, t) |> vec
 
-    linprob = LinearProblem(J,  f)
+    # A = iszero(l.α) ? J : (J + I * l.α)
+    A = J
+    b = f
+
+    linprob = LinearProblem(A,  b)
     linsol  = solve(linprob, l.linalg)
     check_linsol_retcode(J, f, linsol; debug = l.debug)
 
@@ -74,7 +80,11 @@ function (l::GalerkinCollocation{false, true})(
     J = dudp(l.model, l.xyz, ps)
     f = dudtRHS(l.prob, l.model, l.xyz, ps, t) |> vec
 
-    linprob = LinearProblem(J' * J,  J' * f)
+    A = J' * J
+    A = iszero(l.α) ? A : (A + I * l.α)
+    b = J' * f
+
+    linprob = LinearProblem(A,  b)
     linsol  = solve(linprob, l.linalg)
     check_linsol_retcode(J, f, linsol; debug = l.debug)
 

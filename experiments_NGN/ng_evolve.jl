@@ -116,7 +116,6 @@ function ngEvolve(
     data_kws = (; Ix = :, It = :),
     evolve_params = (;),
     learn_ic::Bool = false,
-    hyper_indices = nothing,
 
     verbose::Bool = true,
     benchmark::Bool = false,
@@ -149,6 +148,7 @@ function ngEvolve(
     #==============#
     T        = haskey(evolve_params, :T       ) ? evolve_params.T        : Float32
     Δt       = haskey(evolve_params, :Δt      ) ? evolve_params.Δt       : -(-(extrema(Tdata)...)) |> T
+    IX       = haskey(evolve_params, :IX      ) ? evolve_params.IX       : Colon()
     timealg  = haskey(evolve_params, :timealg ) ? evolve_params.timealg  : EulerForward()
     scheme   = haskey(evolve_params, :scheme  ) ? evolve_params.scheme   : :GalerkinProjection
     adaptive = haskey(evolve_params, :adaptive) ? evolve_params.adaptive : true
@@ -160,8 +160,6 @@ function ngEvolve(
     #==============#
     # Hyper-reduction
     #==============#
-
-    IX = isnothing(hyper_indices) ? Colon() : hyper_indices
 
     U0 = @view Udata[:, IX, case, 1]
     Xd = @view Xdata[:, IX]
@@ -211,6 +209,7 @@ function ngEvolve(
             LeastSqPetrovGalerkin(nlssolve, nlsmaxiters, T(1f-6), abstol_inf, abstol_mse)
         end
     elseif scheme === :GalerkinCollocation
+        α = 0f0
         debug = false
         normal = false
         linalg = QRFactorization(ColumnNorm())
@@ -222,12 +221,13 @@ function ngEvolve(
         # linalg = KrylovJL_LSMR()
         # linalg = QRFactorization(ColumnNorm())
 
+        # α = 1f-4
         # normal = true
         # linalg = SimpleGMRES()
         # linalg = KrylovJL_GMRES()
         # linalg = QRFactorization(ColumnNorm())
 
-        GalerkinCollocation(prob, model, p0, data[1]; linalg, normal, debug)
+        GalerkinCollocation(prob, model, p0, data[1]; linalg, normal, debug, α)
     end
 
     #==============#
@@ -240,27 +240,27 @@ function ngEvolve(
             # implicit: ImplicitEuler(autodiff = false), Rosenbrock32(autodiff = false), Rodas5(autodiff = false)
             # for (autodiff = true), use PreallocationTools.dual_cache ?
 
-            # timealg = Tsit5()
-            timealg = Rodas5(autodiff = false)
+            timealg = Tsit5()
+            # timealg = Rodas5(autodiff = false) # linsolve = ??
         end
 
-        dt = 1f-4
         iip = false
         tspan = extrema(data[3])
         saveat = data[3]
 
-        odecb = begin
-            function affect!(int)
-                if int.iter % 1 == 0
-                    println("[$(int.iter)] \t Time $(round(int.t; digits=8))s")
-                end
-            end
-            DiscreteCallback((u,t,int) -> true, affect!, save_positions=(false,false))
-        end
+        # dt = 1f-2
+        # odecb = begin
+        #     function affect!(int)
+        #         if int.iter % 1 == 0
+        #             println("[$(int.iter)] \t Time $(round(int.t; digits=8))s")
+        #         end
+        #     end
+        #     DiscreteCallback((u,t,int) -> true, affect!, save_positions=(false,false))
+        # end
 
         odefunc = ODEFunction{iip}(scheme)# ; jac)
         odeprob = ODEProblem(odefunc, getdata(p0), tspan; saveat)
-        integrator = SciMLBase.init(odeprob, timealg; dt)#, callback = odecb)
+        integrator = SciMLBase.init(odeprob, timealg)#; dt, callback = odecb)
 
         if benchmark
             if device isa LuxDeviceUtils.AbstractLuxGPUDevice

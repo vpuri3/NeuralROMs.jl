@@ -26,6 +26,7 @@ function makemodelTanh(
     T = haskey(train_params, :T) ? train_params.T : Float32
 
     Nsplits = haskey(train_params, :Nsplits) ? train_params.Nsplits : 0
+    Nboosts = haskey(train_params, :Nboosts) ? train_params.Nboosts : 0
 
     warmup = haskey(train_params, :warmup) ? train_params.warmup : false
     hessopt = haskey(train_params, :hessopt) ? train_params.hessopt : true
@@ -50,11 +51,12 @@ function makemodelTanh(
     metadata   = (; metadata..., train_args)
 
     #-------------------------------------------#
+    # Training with progressive splitting
+    #-------------------------------------------#
     p, st = Lux.setup(rng, NN)
     p = ComponentArray(p) .|> T
     ST = nothing
-    #-------------------------------------------#
-
+    
     for isplit in 0:Nsplits
         display(NN)
         dir = if iszero(Nsplits)
@@ -62,21 +64,57 @@ function makemodelTanh(
         else
             joinpath(modeldir, "split$(isplit)")
         end
-
+    
         @time (NN, p, st), ST = train_model(
             NN, data; rng, p, st, _batchsize, batchsize_,
             opts, nepochs, schedules, early_stoppings,
             device, dir, metadata, lossfun,
         )
-
+    
         @show p
         @show length(p)
         plot_training!(ST...) |> display
-
+    
         if isplit != Nsplits
-            NN, p, st = split_TanhKernel1D(NN, p, st)
+            NN, p, st = split_TanhKernel1D(NN, p, st; debug = true)
         end
     end
+
+    # #-------------------------------------------#
+    # # Training with progressive boosting
+    # #-------------------------------------------#
+    # models = ()
+    # ST = nothing
+    # _data = data
+    #
+    # for iboost in 0:Nboosts
+    #     display(NN)
+    #     dir = if iszero(Nboosts)
+    #         modeldir
+    #     else
+    #         joinpath(modeldir, "boost$(iboost)")
+    #     end
+    #
+    #     #----------------#
+    #     p, st = Lux.setup(rng, NN)
+    #     if iboost > 0
+    #         p.c .= sqrt(sum(abs2, _data[2]) / length(_data[2]))
+    #     end
+    #     #----------------#
+    #
+    #     @time (NN, p, st), ST = train_model(
+    #         NN, _data; rng, p, st, _batchsize, batchsize_,
+    #         opts, nepochs, schedules, early_stoppings,
+    #         device, dir, metadata, lossfun,
+    #     )
+    #     plot_training!(ST...) |> display
+    #
+    #     models = (models..., (NN, p, st))
+    #     _data = _data[1], _data[2] - NN(_data[1], p, st)[1]
+    # end
+    #
+    # NN, p, st = merge_TanhKernel1D(models; debug = true)
+    # #-------------------------------------------#
 
     (NN, p, st), ST, metadata
 end

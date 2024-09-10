@@ -15,9 +15,9 @@ device = Lux.gpu_device()
 case = 1
 data_kws = (; Ix = :, It = :)
 
-# #------------------------------------------------------#
-# # DNN
-# #------------------------------------------------------#
+#------------------------------------------------------#
+# DNN
+#------------------------------------------------------#
 # train_params = (;)
 # evolve_params = (;)
 #
@@ -28,15 +28,22 @@ data_kws = (; Ix = :, It = :)
 #------------------------------------------------------#
 # Tanh Kernels
 #------------------------------------------------------#
-# data_kws = (; Ix = LinRange(1, 512, 64), It = LinRange(1, 500, 500))
-# data_kws = map(x -> round.(Int, x), data_kws)
+# train_params  = (;)
+# evolve_params  = (; scheme = :GalerkinCollocation)
+#
+# makemodel = makemodelTanh
+# modelfilename = "model_05.jld2"
+# modeldir  = joinpath(@__DIR__, "dump_tanh")
 
-train_params  = (;)
+#------------------------------------------------------#
+# Tanh Kernels (split)
+#------------------------------------------------------#
+train_params  = (; N = 1, Nsplits = 3)
 evolve_params  = (; scheme = :GalerkinCollocation)
 
 makemodel = makemodelTanh
-modelfilename = "model_05.jld2"
-modeldir  = joinpath(@__DIR__, "dump_tanh")
+modelfilename = joinpath("split$(train_params.Nsplits)","model_05.jld2")
+modeldir  = joinpath(@__DIR__, "dump_tanh_split")
 
 #------------------------------------------------------#
 # Gaussian Kernels
@@ -86,14 +93,15 @@ cs = Float32[1,    0,    1, 2.5]
 XD = TD = UD = UP = PS = ()
 NN, p, st = repeat([nothing], 3)
 
-for case in 5:7
+for case in (6, 7,)
+# for case in (1, 2, 3, 5, 6, 7)
     cc = mod1(case, 4)
 
     prob = AdvectionDiffusion1D(cs[cc], νs[cc])
     modelfile = joinpath(modeldir, "project$(case)", modelfilename)
 
-    global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
-    # (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
+    # global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
+    (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
 
     # global XD = (XD..., Xd)
     # global TD = (TD..., Td)

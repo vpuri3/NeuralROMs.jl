@@ -56,25 +56,27 @@ data_kws = (; Ix = :, It = :)
 # modeldir  = joinpath(@__DIR__, "dump_tanh_orig")
 
 #------------------------------------------------------#
-# Tanh kernels
+# Tanh kernels (with boosting)
 #------------------------------------------------------#
-# train_params  = (; N = 1, Nsplits = 2)
+# train_params  = (; N = 1, Nsplits = 0, Nboosts = 5)
 # evolve_params  = (; scheme = :GalerkinCollocation)
-# # evolve_params = (; timealg = EulerForward())#, Δt = 1e-3, adaptive = false)
 #
 # makemodel = makemodelTanh
-# modelfilename = joinpath("split$(train_params.Nsplits)","model_05.jld2")
-# modeldir  = joinpath(@__DIR__, "dump_tanh")
+# modelfilename = joinpath("boost$(train_params.Nboosts)","model_05.jld2")
+# modeldir  = joinpath(@__DIR__, "dump_tanh_boost")
 
 #------------------------------------------------------#
-# Tanh kernels
+# Tanh kernels (with splitting)
 #------------------------------------------------------#
+IX = Colon()
+# IX = LinRange(1, 8192, 1024) .|> Base.Fix1(round, Int)
+
 train_params  = (; N = 1, Nsplits = 2)
-evolve_params  = (; scheme = :GalerkinCollocation)
+evolve_params  = (; scheme = :GalerkinCollocation, IX)
 
 makemodel = makemodelTanh
 modelfilename = joinpath("split$(train_params.Nsplits)","model_05.jld2")
-modeldir  = joinpath(@__DIR__, "dump")
+modeldir  = joinpath(@__DIR__, "dump_tanh_split")
 
 #------------------------------------------------------#
 # Evolve
@@ -84,15 +86,15 @@ modeldir  = joinpath(@__DIR__, "dump")
 XD = TD = UD = UP = PS = ()
 NN, p, st = repeat([nothing], 3)
 
-for case in 1:1
-# for case in 2:3
-# for case in 1:6
+# for case in (1, 2, 3,)
+# for case in (1,)
+for case in (2,)
     cc = mod1(case, 4)
     prob = BurgersViscous1D(1f-4)
     modelfile = joinpath(modeldir, "project$(case)", modelfilename)
 
-    global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
-    # (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
+    # global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
+    (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
 
     # global XD = (XD..., Xd)
     # global TD = (TD..., Td)
