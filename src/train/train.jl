@@ -257,136 +257,6 @@ function savemodel!( # modifies STATS
     model, STATS
 end
 #===============================================================#
-"""
-    minibatch_metric(NN, p, st, loader, lossfun, ismean) -> l
-
-Only for callbacks. Enforce this by setting Lux.testmode
-
-- `NN, p, st`: neural network
-- `loader`: data loader
-- `lossfun`: loss function: (x::Array, y::Array) -> l::Real
-"""
-function minibatch_metric(NN, p, st, loader, lossfun)
-    lossfun(NN, p, Lux.testmode(st), first(loader))
-end
-
-"""
-    fullbatch_metric(NN, p, st, loader, lossfun, ismean) -> l
-
-Only for callbacks. Enforce this by setting Lux.testmode
-
-- `NN, p, st`: neural network
-- `loader`: data loader
-- `lossfun`: loss function: (x::Array, y::Array) -> l::Real
-"""
-function fullbatch_metric(NN, p, st, loader, lossfun)
-    N = 0
-    L = 0f0
-
-    SK = nothing # stats keys
-    SV = nothing # stats values
-
-    st = Lux.testmode(st)
-
-    for batch in loader
-        l, _, stats = lossfun(NN, p, st, batch)
-
-        if isnothing(SK)
-            SK = keys(stats)
-        end
-
-        n = numobs(batch)
-        N += n
-
-        # compute mean stats
-        if isnothing(SV)
-            SV = values(stats) .* n
-        else
-            SV = SV .+ values(stats) .* n
-        end
-
-        L += l * n
-    end
-
-    SV   = SV ./ N
-    loss = L   / N
-    stats = NamedTuple{SK}(SV)
-
-    loss, stats
-end
-
-"""
-$SIGNATURES
-
-"""
-function printstatistics(
-    NN::Lux.AbstractExplicitLayer,
-    p::Union{NamedTuple, AbstractVector},
-    st::NamedTuple,
-    loader::Union{CuIterator, MLUtils.DataLoader};
-    io::Union{Nothing, IO} = stdout,
-)
-    st = Lux.testmode(st) # https://github.com/LuxDL/Lux.jl/issues/432
-
-    N = 0
-    SUM   = 0f0
-    VAR   = 0f0
-    ABSER = 0f0
-    SQRER = 0f0
-
-    MAXER = 0f0
-
-    for (x, ŷ) in loader
-        y, _ = NN(x, p, st)
-        Δy = y - ŷ
-
-        N += length(ŷ)
-        SUM += sum(y)
-
-        ABSER += sum(abs , Δy)
-        SQRER += sum(abs2, Δy)
-        MAXER  = max(MAXER, norm(Δy, Inf32))
-    end
-
-    ȳ   = SUM / N
-    MSE = SQRER / N
-    RMSE = sqrt(MSE)
-
-    meanAE = ABSER / N
-    maxAE  = MAXER # TODO - seems off
-
-    # variance
-    for (x, _) in loader
-        y, _ = NN(x, p, st)
-
-        VAR += sum(abs2, y .- ȳ) / N
-    end
-
-    R2 = 1f0 - MSE / (VAR + eps(Float32))
-
-    # rel   = Δy ./ ŷ
-    # meanRE = norm(rel, 1) / length(ŷ)
-    # maxRE  = norm(rel, Inf32)
-
-    cbound = compute_cbound(NN, p, st)
-
-    if !isnothing(io)
-        str = ""
-        str *= string("R² score:             ", round(R2     ; sigdigits=8), "\n")
-        str *= string("MSE (mean SQR error): ", round(MSE    ; sigdigits=8), "\n")
-        str *= string("RMSE (Root MSE):      ", round(RMSE   ; sigdigits=8), "\n")
-        str *= string("MAE (mean ABS error): ", round(meanAE ; sigdigits=8), "\n")
-        str *= string("maxAE (max ABS error) ", round(maxAE  ; sigdigits=8), "\n")
-        # str *= string("mean REL error: ", round(meanRE, digits=8), "\n")
-        # str *= string("max  REL error: ", round(maxRE , digits=8))
-
-        str *= string("Lipschitz bound:      ", round(cbound ; sigdigits=8), "\n")
-
-        println(io, str)
-    end
-
-    R2, MSE, meanAE, maxAE #, meanRE, maxRE
-end
 
 #===============================================================#
 """
@@ -409,8 +279,8 @@ function makecallback(
     kwargs = (; _loss, loss_, notestdata)
 
     if stats
-        _printstatistics = (p, st; io = io) -> printstatistics(NN, p, st, _loader; io)
-        printstatistics_ = (p, st; io = io) -> printstatistics(NN, p, st, loader_; io)
+        _printstatistics = (p, st) -> statistics(NN, p, st, _loader)
+        printstatistics_ = (p, st) -> statistics(NN, p, st, loader_)
 
         kwargs = (;kwargs..., _printstatistics, printstatistics_)
     end
@@ -533,68 +403,27 @@ function callback(p, st;
     # end
 
     if !isnothing(_printstatistics)
+		_stats, _str = _printstatistics(p, st)
         println(io, "#======================#")
         println(io, "TRAIN STATS")
-        _printstatistics(p, st; io)
+		println(io, _str)
         println(io, "#======================#")
     end
 
     if !isnothing(printstatistics_) 
+		stats_, str_ = printstatistics_(p, st)
         println(io, "#======================#")
         println(io, "TEST  STATS")
-        printstatistics_(p, st; io)
+		println(io, str_)
         println(io, "#======================#")
     end
 
-    # terminate optimization
-    MSE_MIN = 5f-7
+    # terminate optimization if
     ifbreak = false
-
-    # # avoid over-fitting on training set
-    # if !isnothing(_stats)
-    #     if haskey(_stats, :mse)
-    #         lmse = _stats[:mse]
-    #         if lmse < MSE_MIN
-    #             println("Ending optimization")
-    #             println("MSE = $lmse < 5f-7 reached on training set.")
-    #             ifbreak = true
-    #         end
-    #     end
-    # end
-    #
-    # # avoid over-fitting on test set
-    # if !isnothing(stats_)
-    #     if haskey(stats_, :mse)
-    #         lmse = stats_[:mse]
-    #         if lmse < MSE_MIN
-    #             println("Ending optimization")
-    #             println("MSE = $lmse < 5f-7 reached on test set.")
-    #             ifbreak = true
-    #         end
-    #     end
-    # end
 
     _l, l_, ifbreak
 end
 
-#===============================================================#
-struct Loss{TNN, Tst, Tbatch, Tl}
-    NN::TNN
-    st::Tst
-    batch::Tbatch
-    lossfun::Tl
-end
-
-function (L::Loss)(p)
-    L.lossfun(L.NN, p, L.st, L.batch)
-end
-
-function grad(loss::Loss, p)
-    (l, st, stats), pb = Zygote.pullback(loss, p)
-    gr = pb((one.(l), nothing, nothing))[1]
-
-    l, st, stats, gr
-end
 #===============================================================#
 
 """
@@ -626,6 +455,10 @@ function optimize(
 )
     # ensure testing mode
     st = Lux.trainmode(st)
+
+	if isnothing(schedule)
+		schedule = ParameterSchedulers.Step(Float32(opt.eta), 1f0, Inf32)
+	end
 
     # make callback
     cb = isnothing(cb) ? makecallback(NN, __loader, loader_, lossfun; io) : cb
@@ -800,53 +633,6 @@ function optimize(
     println(io, "#=======================#")
 
     mincfg[].p, mincfg[].st, mincfg[].opt_st
-end
-
-"""
-early stopping based on mini-batch loss from test set
-https://github.com/jeffheaton/app_deep_learning/blob/main/t81_558_class_03_4_early_stop.ipynb
-"""
-function make_minconfig(early_stopping, patience, l, p, st, opt_st)
-    (; count = 0, early_stopping, patience, l, p, st, opt_st,)
-end
-
-function update_minconfig(
-    minconfig::NamedTuple,
-    l::Real,
-    p::Union{NamedTuple, AbstractVector},
-    st::NamedTuple,
-    opt_st;
-    io::Union{IO, Nothing} = stdout,
-)
-    ifbreak = false
-
-    if l < minconfig.l
-        printstyled(io,
-            "Improvement in loss found: $(l) < $(minconfig.l)\n",
-            color = :green,
-        )
-        p = deepcopy(p)
-        st = deepcopy(st)
-        opt_st = deepcopy(opt_st)
-        minconfig = (; minconfig..., count = 0, l, p, st, opt_st,)
-    else
-        printstyled(io,
-            "No improvement in loss found in the last \
-            $(minconfig.count) epochs. $(l) > $(minconfig.l)\n",
-            color = :red,
-        )
-        @set! minconfig.count = minconfig.count + 1
-    end
-
-    if (minconfig.count >= minconfig.patience) & minconfig.early_stopping
-        printstyled(io, "Early Stopping triggered after $(minconfig.count) \
-            epochs of no improvement.\n",
-            color = :red,
-        )
-        ifbreak = true
-    end
-
-    minconfig, ifbreak
 end
 
 #===============================================================#

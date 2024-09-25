@@ -41,6 +41,7 @@ using Adapt
 using CUDA
 using CUDA: AbstractGPUArray
 using KernelAbstractions
+import LuxDeviceUtils
 
 # numerical
 using FFTW
@@ -176,8 +177,11 @@ export DecoderWeightDecay, IdxWeightDecay
 include("nonlinleastsq.jl")
 export nonlinleastsq
 
-include("train.jl")
+include("train/utils.jl")
+include("train/train.jl")
 export train_model, callback, optimize, plot_training!
+include("train/trainer.jl")
+export Trainer, train!
 
 ###
 # visualization
