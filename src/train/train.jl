@@ -75,8 +75,8 @@ function train_model(
 
     # callback functions
 
-    # EPOCH, _LOSS, LOSS_, _MSE, MSE_, _MAE, MAE_
-    STATS = Int[], Float32[], Float32[], Float32[], Float32[], Float32[], Float32[]
+    # EPOCH, TIME, _LOSS, LOSS_, _MSE, MSE_, _MAE, MAE_
+	STATS = Int[], Float32[], Float32[], Float32[], Float32[], Float32[], Float32[], Float32[]
 
     cb = makecallback(NN, __loader, loader_, lossfun; io, STATS, cb_epoch, notestdata)
     cb_stats = makecallback(NN, __loader, loader_, lossfun; io, stats = true, notestdata)
@@ -209,56 +209,6 @@ function train_model(
 end
 
 #===============================================================#
-function savemodel!( # modifies STATS
-    NN::Lux.AbstractExplicitLayer,
-    p::Union{NamedTuple, AbstractVector},
-    st::NamedTuple,
-    metadata,
-    STATS::NTuple{7, Vector},
-    cb::Function,
-    dir::String,
-    name::String,
-    count::Integer,
-)
-    # save statistics
-    statsfile = joinpath(dir, "statistics.txt")
-
-    mkpath(dir)
-    touch(statsfile)
-
-    count = lpad(count, 2, "0")
-    statsio = open(joinpath(dir, "statistics.txt"), "a")
-    println(statsio, "CHECKPOINT $count")
-    cb(p, st; io = statsio)
-    close(statsio)
-
-    # transfer model to host device
-    p, st = (p, st) |> Lux.cpu
-    model = NN, p, st
-
-    # training plot
-    plt = plot_training!(STATS...)
-    png(plt, joinpath(dir, "plt_training"))
-    display(plt)
-
-    # save model
-    if length(name) > 5
-        if name[end-4:end] !== ".jld2"
-            name = name[1:end-5]
-        end
-    end
-
-    filename = joinpath(dir, "$(name)_$(count).jld2")
-    isfile(filename) && rm(filename)
-    jldsave(filename; model, metadata, STATS)
-
-    @info "Saved model at $filename"
-
-    model, STATS
-end
-#===============================================================#
-
-#===============================================================#
 """
 $SIGNATURES
 """
@@ -267,7 +217,7 @@ function makecallback(
     _loader::Union{CuIterator, MLUtils.DataLoader},
     loader_::Union{CuIterator, MLUtils.DataLoader},
     lossfun;
-    STATS::Union{Nothing, NTuple{7, Vector}} = nothing,
+    STATS::Union{Nothing, NTuple{8, Vector}} = nothing,
     stats::Bool = false,
     io::IO = stdout,
     cb_epoch = nothing, # (NN, p, st) -> nothing
@@ -288,11 +238,11 @@ function makecallback(
     if !isnothing(STATS)
 
         if lossfun === mse
-            STATS = (STATS[1:3]..., STATS[2:3]..., STATS[6], STATS[7])
+            STATS = (STATS[1:4]..., STATS[3:4]..., STATS[7], STATS[8])
         end
 
         if lossfun === mae
-            STATS = (STATS[1:5]...,  STATS[2:3]...)
+            STATS = (STATS[1:6]...,  STATS[3:4]...)
         end
 
         kwargs = (;kwargs..., STATS)
@@ -324,7 +274,7 @@ function callback(p, st;
     #
     notestdata::Bool = false,
 )
-    EPOCH, _LOSS, LOSS_, _MSE, MSE_, _MAE, MAE_ = isnothing(STATS) ? ntuple(Returns(nothing), 7) : STATS
+    EPOCH, TIME, _LOSS, LOSS_, _MSE, MSE_, _MAE, MAE_ = isnothing(STATS) ? ntuple(Returns(nothing), 8) : STATS
 
     if !isnothing(epoch)
         cbstep = 1
@@ -589,11 +539,13 @@ function optimize(
     # optimizer functions
     #======================#
 
-    function optloss(optx, optp, batch...)
-        lossfun(NN, optx, state[], batch)..., batch
+	batch = first(__loader)
+
+    function optloss(optx, optp)
+        lossfun(NN, optx, state[], batch)
     end
 
-    function optcb(optx, l, st, stats, batch)
+    function optcb(optx, l, st, stats)
         count[] += 1
         nextepoch = iszero(count[] % num_batches)
 
@@ -620,13 +572,13 @@ function optimize(
     end
 
     #======================#
-    # set up optimization solve
+    # set up optimization and solve
     #======================#
     adtype  = AutoZygote()
     optfun  = OptimizationFunction(optloss, adtype)
-    optprob = OptimizationProblem(optfun, p, st)
+    optprob = OptimizationProblem(optfun, p)
 
-    @time optsol = solve(optprob, opt, ncycle(_loader, nepoch); callback = optcb)
+    @time optsol = solve(optprob, opt; callback = optcb, maxiters = nepoch)
 
     println(io, "#=======================#")
     @show optsol.retcode
@@ -636,41 +588,52 @@ function optimize(
 end
 
 #===============================================================#
-function plot_training!(EPOCH, _LOSS, LOSS_, _MSE, MSE_, _MAE, MAE_)
-    z = findall(iszero, EPOCH)
+function savemodel!( # modifies STATS
+    NN::Lux.AbstractExplicitLayer,
+    p::Union{NamedTuple, AbstractVector},
+    st::NamedTuple,
+    metadata,
+    STATS::NTuple{8, Vector},
+    cb::Function,
+    dir::String,
+    name::String,
+    count::Integer,
+)
+    # save statistics
+    statsfile = joinpath(dir, "statistics.txt")
 
-    # fix EPOCH to account for multiple training loops
-    if length(z) > 1
-            for i in 2:length(z)-1
-            idx =  z[i]:z[i+1] - 1
-            EPOCH[idx] .+= EPOCH[z[i] - 1]
+    mkpath(dir)
+    touch(statsfile)
+
+    count = lpad(count, 2, "0")
+    statsio = open(joinpath(dir, "statistics.txt"), "a")
+    println(statsio, "CHECKPOINT $count")
+    cb(p, st; io = statsio)
+    close(statsio)
+
+    # transfer model to host device
+	p, st = (p, st) |> Lux.cpu_device()
+    model = NN, p, st
+
+    # training plot
+    plt = plot_training!(STATS...)
+    png(plt, joinpath(dir, "plt_training"))
+    display(plt)
+
+    # save model
+    if length(name) > 5
+        if name[end-4:end] !== ".jld2"
+            name = name[1:end-5]
         end
-        EPOCH[z[end]:end] .+= EPOCH[z[end] - 1]
     end
 
-    plt = plot(
-        title = "Training Plot", yaxis = :log,
-        xlabel = "Epochs", ylabel = "Loss",
-        yticks = (@. 10.0^(-20:10)),
-    )
+    filename = joinpath(dir, "$(name)_$(count).jld2")
+    isfile(filename) && rm(filename)
+    jldsave(filename; model, metadata, STATS)
 
-    # (; ribbon = (lower, upper))
-    plot!(plt, EPOCH, _LOSS, w = 2.0, s = :solid, c = :red , label = "LOSS (Train)")
-    plot!(plt, EPOCH, LOSS_, w = 2.0, s = :solid, c = :blue, label = "LOSS (Test)")
+    @info "Saved model at $filename"
 
-    if !isempty(_MSE)
-        plot!(plt, EPOCH, _MSE, w = 2.0, s = :dash, c = :magenta, label = "MSE (Train)")
-        plot!(plt, EPOCH, MSE_, w = 2.0, s = :dash, c = :cyan   , label = "MSE (Test)")
-    end
-
-    if !isempty(_MAE)
-        plot!(plt, EPOCH, _MAE, w = 2.0, s = :dot, c = :magenta, label = "MAE (Train)")
-        plot!(plt, EPOCH, MAE_, w = 2.0, s = :dot, c = :cyan   , label = "MAE (Test)")
-    end
-
-    vline!(plt, EPOCH[z[2:end]], c = :black, w = 2.0, label = nothing)
-
-    plt
+    model, STATS
 end
 
 #===============================================================#

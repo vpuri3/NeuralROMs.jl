@@ -141,6 +141,44 @@ function statistics(
 end
 
 #===============================================================#
+function plot_training!(EPOCH, TIME, _LOSS, LOSS_, _MSE, MSE_, _MAE, MAE_)
+    z = findall(iszero, EPOCH)
+
+    # fix EPOCH to account for multiple training loops
+    if length(z) > 1
+            for i in 2:length(z)-1
+            idx =  z[i]:z[i+1] - 1
+            EPOCH[idx] .+= EPOCH[z[i] - 1]
+        end
+        EPOCH[z[end]:end] .+= EPOCH[z[end] - 1]
+    end
+
+    plt = plot(
+        title = "Training Plot", yaxis = :log,
+        xlabel = "Epochs", ylabel = "Loss",
+        yticks = (@. 10.0^(-20:10)),
+    )
+
+    # (; ribbon = (lower, upper))
+    plot!(plt, EPOCH, _LOSS, w = 2.0, s = :solid, c = :red , label = "LOSS (Train)")
+    plot!(plt, EPOCH, LOSS_, w = 2.0, s = :solid, c = :blue, label = "LOSS (Test)")
+
+    if !isempty(_MSE)
+        plot!(plt, EPOCH, _MSE, w = 2.0, s = :dash, c = :magenta, label = "MSE (Train)")
+        plot!(plt, EPOCH, MSE_, w = 2.0, s = :dash, c = :cyan   , label = "MSE (Test)")
+    end
+
+    if !isempty(_MAE)
+        plot!(plt, EPOCH, _MAE, w = 2.0, s = :dot, c = :magenta, label = "MAE (Train)")
+        plot!(plt, EPOCH, MAE_, w = 2.0, s = :dot, c = :cyan   , label = "MAE (Test)")
+    end
+
+    vline!(plt, EPOCH[z[2:end]], c = :black, w = 2.0, label = nothing)
+
+    plt
+end
+
+#===============================================================#
 # EARLY STOPPING
 #===============================================================#
 """

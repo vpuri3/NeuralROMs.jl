@@ -142,13 +142,14 @@ function makemodelGaussian(
 
     periodic = true
 
-    Ng = haskey(train_params, :Ng) ? train_params.N : 4 # num_gauss
-    Nf = haskey(train_params, :Nf) ? train_params.f : 4 # num_freqs
+    Ng = haskey(train_params, :Ng) ? train_params.Ng : 4 # num_gauss
+    Nf = haskey(train_params, :Nf) ? train_params.Nf : 4 # num_freqs
     σmin = haskey(train_params, :σmin) ? train_params.σmin : 1e-4
     σsplit = haskey(train_params, :σsplit) ? train_params.σsplit : true
     σinvert = haskey(train_params, :σinvert) ? train_params.σinvert : false
     train_freq = haskey(train_params, :train_freq) ? train_params.train_freq : true
 
+    E = haskey(train_params, :E) ? train_params.E : 100
     T = haskey(train_params, :T) ? train_params.T : Float32
     exactIC = haskey(train_params, :exactIC) ? train_params.exactIC : (;)
     warmup = haskey(train_params, :warmup) ? train_params.warmup : false

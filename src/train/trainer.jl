@@ -21,9 +21,6 @@ abstract type AbstractTrainer end
 	opt_args
 	lossfun
 
-	# optim_loss
-	# optim_cb
-
 	# misc
 	io
 	rng
@@ -71,8 +68,6 @@ function Trainer(
     p_ca = p |> ComponentArray
     p = isreal(p_ca) ? p_ca : p
 
-    p, st = (p, st) |> device
-
 	#========= DATA =========#
 
     notestdata = isnothing(data_)
@@ -95,12 +90,6 @@ function Trainer(
     loader_  = DataLoader(data_; batchsize = batchsize_ , rng, shuffle = false)
     __loader = DataLoader(_data; batchsize = __batchsize, rng, shuffle = false)
 
-    if device isa Lux.LuxCUDADevice
-        _loader  = _loader  |> CuIterator
-        loader_  = loader_  |> CuIterator
-        __loader = __loader |> CuIterator
-    end
-
 	#========= OPT =========#
 
 	if opt isa Optimisers.AbstractRule
@@ -122,7 +111,9 @@ function Trainer(
 				or else the method may be unstable. If you want a stochastic \
 				optimizer, try `Optimisers.jl`."
 			end
-			_loader = __loader
+		else
+			msg = "Optimizer of type $(typeof(opt)) is not supported."
+			throw(ArgumentError(msg))
 		end
 		opt_st = nothing
 	else
@@ -130,16 +121,12 @@ function Trainer(
 		throw(ArgumentError(msg))
 	end
 
-	opt = opt |> device
-	opt_st = opt_st |> device
-
 	patience = round(Int, nepochs * patience_frac)
 	opt_args = (; nepochs, schedule, early_stopping, patience, return_minimum)
 	opt_iter = (; epoch = [0], start_time=[0f0], epoch_time=[0f0], epoch_dt=[0f0],)
 	
 	#========= MISC =========#
 
-    # EPOCH, TIME, _LOSS, LOSS_, _MSE, MSE_, _MAE, MAE_
 	STATS = (;
 		EPOCH = Int[]    , TIME  = Float32[],
 		_LOSS = Float32[], LOSS_ = Float32[],
@@ -148,6 +135,19 @@ function Trainer(
 
 	)
 
+	#========= DEVICE =========#
+    p, st = (p, st) |> device
+
+    if device isa Lux.LuxCUDADevice
+        _loader  = _loader  |> CuIterator
+        loader_  = loader_  |> CuIterator
+        __loader = __loader |> CuIterator
+    end
+
+	opt = opt |> device
+	opt_st = opt_st |> device
+	#==========================#
+
 	Trainer(
 		NN, p, st,
 		_loader, __loader, loader_, notestdata,
@@ -155,11 +155,9 @@ function Trainer(
 		io, rng, name, STATS, device, verbose, callbacks
 	)
 end
+
 #===============================================================#
-
 function train!(trainer::Trainer)
-	# TODO - move to device here?
-
 	@unpack opt_args, opt_iter = trainer
 	@unpack io, name, device, verbose = trainer
 
@@ -183,20 +181,9 @@ function train!(trainer::Trainer)
 
 	opt_iter.start_time[] = time()
 
-	# train loop
-	for _ in 1:opt_args.nepochs
-		opt_iter.epoch[] += 1
-		opt_iter.epoch_time[] = time() - opt_iter.start_time[]
+	minconfig = train_loop!(trainer, minconfig) # loop over epochs
 
-		doepoch!(trainer)
-		evaluate(trainer)
-
-		opt_iter.epoch_dt[] = time() - opt_iter.epoch_time[] - opt_iter.start_time[]
-
-		# update minconfig
-		minconfig, ifbreak = update_minconfig(trainer, minconfig)
-		ifbreak && break
-	end
+	# end-time
 
 	if opt_args.return_minimum
 		if verbose
@@ -220,10 +207,31 @@ function train!(trainer::Trainer)
 end
 
 #============================================================#
+# 1. make copies here as Optimisers.update! is in place
+# 2. move minconfig to cpu to save GPU memory
+# 3. make io async (move to separate thread?)
+#============================================================#
+
+function train_loop!(trainer::Trainer, minconfig::NamedTuple)
+	train_loop!(trainer, trainer.opt, minconfig)
+end
+
+function epoch!(trainer::Trainer)
+	epoch!(trainer, trainer.opt)
+end
+
+function step!(trainer::Trainer, batch)
+	step!(trainer, trainer.opt, batch)
+end
+
 function statistics(trainer::Trainer)
+	statistics(trainer, trainer.io, trainer.verbose)
+end
+
+#============================================================#
+function statistics(trainer::Trainer, io::IO, verbose::Bool)
 	@unpack NN, p, st = trainer
 	@unpack notestdata, __loader, loader_ = trainer
-	@unpack io, verbose = trainer
 
 	_, _str = statistics(NN, p, st, __loader)
 
@@ -292,78 +300,59 @@ function evaluate(trainer::Trainer; update_stats::Bool = true)
 end
 
 #============================================================#
+function save_trainer(
+	trainer::Trainer,
+	dir::String,
+	name::String = "";
+	metadata::NamedTuple = (;),
+)
+	@unpack NN, p, st, opt_st = trainer
+	@unpack STATS = trainer
 
-function doepoch!(trainer::Trainer)
-	doepoch!(trainer, trainer.opt)
-end
+	name = isempty(name) ? trainer.name : name
 
-function doepoch!(trainer::Trainer, ::Optimisers.AbstractRule)
+	statsfile = joinpath(dir, "stats_$(name).txt")
+	imagefile = joinpath(dir, "image_$(name).png")
+	modelfile = joinpath(dir, "model_$(name).jld2")
+	chkptfile = joinpath(dir, "chkpt_$(name).jld2")
 
-	@unpack _loader, opt_st, lossfun = trainer
-	@unpack opt, opt_args, opt_iter, io = trainer
+	mkpath(dir)
 
-	if trainer.verbose
-		prog_meter = ProgressMeter.Progress(
-			length(_loader);
-			barglyphs = ProgressMeter.BarGlyphs("[=> ]"),
-			desc = "Epoch [$(opt_iter.epoch[]) / $(opt_args.nepochs)] LR: $(round(opt.eta; sigdigits=3))",
-			dt = 1e-4, barlen = 25, color = :normal, showspeed = true, output = io,
-		)
-	end
+	# STATISTICS
+	touch(statsfile)
+	statsio = open(statsfile, "a")
+	statistics(trainer, statsio, true)
+	close(statsio)
+	@info "Saving statistics at $(statsfile)"
 
-	trainer.st = Lux.trainmode(trainer.st)
+	# IMAGE
+    plt = plot_training!(trainer.STATS...)
+    png(plt, imagefile)
+    trainer.verbose && display(plt)
+	@info "Saving plot at $(imagefile)"
 
-	for batch in _loader
-		loss = Loss(trainer.NN, trainer.st, batch, lossfun)
-		l, st, stats, g = grad(loss, trainer.p)
-		opt_st, p = Optimisers.update!(opt_st, trainer.p, g)
+	# MODEL
+	p, st = (p, st) |> Lux.cpu_device()
+	model = NN, p, st
+    jldsave(modelfile; model, metadata)
+	@info "Saving model at $(modelfile)"
 
-		if isnan(l)
-			throw(ErrorException("Loss in NaN"))
-		end
-
-		trainer.p = p
-		trainer.st = st
-		trainer.opt_st = opt_st
-
-		if trainer.verbose
-			showvalues = Any[(:LOSS, round(l; sigdigits = 8)),]
-			!isempty(stats) && push!(showvalues, (:INFO, stats))
-			ProgressMeter.next!(prog_meter; showvalues, valuecolor = :magenta)
-		end
-	end
-
-	if trainer.verbose
-		ProgressMeter.finish!(prog_meter)
-	end
+	# CHECKPOINT
+	opt_st = opt_st |> Lux.cpu_device()
+    jldsave(chkptfile; opt_st, STATS)
+	@info "Saving model at $(chkptfile)"
 
 	return
 end
 
-function doepoch!(trainer::Trainer, opt::Optim.AbstractOptimizer)
-	return
+function plot_trainer(trainer::Trainer)
+	plot_training!(deepcopy(trainer.STATS))
 end
 
-#============================================================#
-# 1. make copies here as Optimisers.update! is in place
-# 2. move minconfig to cpu to save GPU memory
-# 3. make io async (move to separate thread?)
-#============================================================#
-function save_checkpoint(trainer::Trainer, filename::String)
-	# including optimzier state if trainer.verbose
-		@info "Saving checkpoint $(filename)"
+function load_trainer(trainer::Trainer, dir::String, name::String)
 end
 
-function save_model(trainer::Trainer, filename::String)
-	if trainer.verbose
-		@info "Saving model at $(filename)"
-	end
-end
-
-function load_checkpoint(trainer::Trainer, filename::String)
-	if trainer.verbose
-		@info "Loading checkpoint $(filename)"
-	end
+function move_to_device(trainer::Trainer, device)
 end
 
 #============================================================#
