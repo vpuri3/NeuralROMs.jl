@@ -176,18 +176,12 @@ function train!(trainer::Trainer)
 	verbose && statistics(trainer)
 	evaluate(trainer)
 	minconfig = make_minconfig(trainer)
-
-	if verbose
-		println(io)
-		println(io, "Starting Trainig Loop")
-		println(io)
-	end
+	trigger_callback!(trainer, :START_TRAINING)
 
 	opt_iter.start_time[] = time()
+	verbose && println(io, "\nStarting Trainig Loop\n")
 
 	minconfig = train_loop!(trainer, minconfig) # loop over epochs
-
-	# end-time
 
 	if opt_args.return_minimum
 		if verbose
@@ -198,10 +192,9 @@ function train!(trainer::Trainer)
 		trainer.opt_st = minconfig.opt_st |> device
 	end
 
-	if verbose
-		statistics(trainer)
-		evaluate(trainer; update_stats=false)
-	end
+	verbose && statistics(trainer)
+	verbose && evaluate(trainer; update_stats=false)
+	trigger_callback!(trainer, :END_TRAINING)
 
 	NN = trainer.NN
 	p  = trainer.p  |> Lux.cpu_device()
@@ -215,6 +208,13 @@ end
 # 2. move minconfig to cpu to save GPU memory
 # 3. make io async (move to separate thread?)
 #============================================================#
+
+function trigger_callback!(
+	trainer::Trainer,
+	event::Symbol,
+)
+	nothing
+end
 
 function train_loop!(trainer::Trainer, minconfig::NamedTuple)
 	train_loop!(trainer, trainer.opt, minconfig)

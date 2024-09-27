@@ -663,9 +663,10 @@ function optimize(
     #======================#
 
 	batch = if __loader isa CuIterator
+		# Adapt.adapt(__loader, __loader.batches.data)
 		__loader.batches.data |> cu
 	else
-		__loader.data |> cu
+		__loader.data
 	end
 	# batch = first(__loader)
 

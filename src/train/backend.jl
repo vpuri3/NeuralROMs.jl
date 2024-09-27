@@ -17,6 +17,7 @@ function train_loop!(
 		evaluate(trainer)
 
 		opt_iter.epoch_dt[] = time() - opt_iter.epoch_time[] - opt_iter.start_time[]
+		trigger_callback!(trainer, :EPOCH_END)
 
 		# update minconfig
 		minconfig, ifbreak = update_minconfig(trainer, minconfig)
@@ -46,6 +47,7 @@ function epoch!(
 
 	for batch in _loader
 		l, stats = step!(trainer, batch)
+		trigger_callback!(trainer, :BATCH_END)
 
 		if trainer.verbose
 			showvalues = Any[(:LOSS, round(l; sigdigits = 8)),]
@@ -94,9 +96,10 @@ function train_loop!(
 	@unpack io, verbose = trainer
 
 	batch = if __loader isa CuIterator
+		# Adapt.adapt(__loader, __loader.batches.data)
 		__loader.batches.data |> cu
 	else
-		__loader.data |> cu
+		__loader.data
 	end
 	# batch = first(__loader)
 
@@ -118,6 +121,7 @@ function train_loop!(
 		opt_iter.epoch[] += 1
 		opt_iter.epoch_dt[] = time() - opt_iter.epoch_time[] - opt_iter.start_time[]
 		opt_iter.epoch_time[] = time() - opt_iter.start_time[]
+		trigger_callback!(trainer, :EPOCH_END)
 
 		minconfig, ifbreak = update_minconfig(trainer, minconfig)
 
