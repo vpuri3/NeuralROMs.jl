@@ -134,7 +134,7 @@ function train_model(
         patience = isnothing(patience_frac) ? nothing : round(Int, patience_frac * nepoch)
 
         if _loader isa CuIterator
-            @set! _loader.batches.batchsize = _batchsize[iopt]
+			_loader = DataLoader(_data, batchsize = _batchsize[iopt], shuffle = true)
         else
             @set! _loader.batchsize = _batchsize[iopt]
         end
@@ -539,7 +539,12 @@ function optimize(
     # optimizer functions
     #======================#
 
-	batch = first(__loader)
+	batch = if __loader isa CuIterator
+		__loader.batches.data |> cu
+	else
+		__loader.data |> cu
+	end
+	# batch = first(__loader)
 
     function optloss(optx, optp)
         lossfun(NN, optx, state[], batch)

@@ -93,7 +93,12 @@ function train_loop!(
 	@unpack opt_args, opt_iter = trainer
 	@unpack io, verbose = trainer
 
-	batch = first(__loader)
+	batch = if __loader isa CuIterator
+		__loader.batches.data |> cu
+	else
+		__loader.data |> cu
+	end
+	# batch = first(__loader)
 
     function optloss(optx, optp)
         lossfun(trainer.NN, optx, trainer.st, batch)

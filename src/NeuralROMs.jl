@@ -178,11 +178,11 @@ include("nonlinleastsq.jl")
 export nonlinleastsq
 
 include("train/utils.jl")
-include("train/train.jl")
-export train_model, plot_training! # old implementation. deprecate!
 include("train/trainer.jl")
 include("train/backend.jl")
 export Trainer, train!, save_trainer, plot_trainer, load_trainer
+include("train/train.jl")
+export train_model, plot_training! # old implementation. deprecate!
 
 ###
 # visualization

@@ -109,11 +109,15 @@ function Trainer(
 				Hessian-based optimizers such as Newton / BFGS / L-BFGS may be \
 				unstable with mini-batching. Set batchsize to equal data-size, \
 				or else the method may be unstable. If you want a stochastic \
-				optimizer, try `Optimisers.jl`."
+				optimizer, try `Optimisers.jl`." maxlog = 1
 			end
 		else
 			msg = "Optimizer of type $(typeof(opt)) is not supported."
 			throw(ArgumentError(msg))
+		end
+		if !isnothing(opt_st)
+			@warn "Optimization state of type $(opt_st) provided to \
+			Optim.AbstractOptimizer." maxlog = 1
 		end
 		opt_st = nothing
 	else
@@ -305,11 +309,15 @@ function save_trainer(
 	dir::String,
 	name::String = "";
 	metadata::NamedTuple = (;),
+	verbose::Union{Bool, Nothing} = nothing,
 )
 	@unpack NN, p, st, opt_st = trainer
 	@unpack STATS = trainer
 
 	name = isempty(name) ? trainer.name : name
+	if isnothing(verbose)
+		verbose = trainer.verbose
+	end
 
 	statsfile = joinpath(dir, "stats_$(name).txt")
 	imagefile = joinpath(dir, "image_$(name).png")
@@ -323,24 +331,24 @@ function save_trainer(
 	statsio = open(statsfile, "a")
 	statistics(trainer, statsio, true)
 	close(statsio)
-	@info "Saving statistics at $(statsfile)"
+	verbose && @info "Saving statistics at $(statsfile)"
 
 	# IMAGE
-    plt = plot_training!(trainer.STATS...)
+	plt = plot_training!(deepcopy(trainer.STATS)...)
     png(plt, imagefile)
     trainer.verbose && display(plt)
-	@info "Saving plot at $(imagefile)"
+	verbose && @info "Saving plot at $(imagefile)"
 
 	# MODEL
 	p, st = (p, st) |> Lux.cpu_device()
 	model = NN, p, st
     jldsave(modelfile; model, metadata)
-	@info "Saving model at $(modelfile)"
+	verbose && @info "Saving model at $(modelfile)"
 
 	# CHECKPOINT
 	opt_st = opt_st |> Lux.cpu_device()
     jldsave(chkptfile; opt_st, STATS)
-	@info "Saving model at $(chkptfile)"
+	verbose && @info "Saving model at $(chkptfile)"
 
 	return
 end
