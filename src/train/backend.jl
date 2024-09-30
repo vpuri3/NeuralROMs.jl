@@ -2,37 +2,61 @@
 #============================================================#
 # Optimisers.jl
 #============================================================#
+@concrete struct Loss
+    NN
+    st
+    batch
+    lossfun
+end
+
+function (L::Loss)(p)
+    L.lossfun(L.NN, p, L.st, L.batch)
+end
+
+function grad(loss::Loss, p)
+    (l, st, stats), pb = Zygote.pullback(loss, p)
+    gr = pb((one.(l), nothing, nothing))[1]
+
+    l, st, stats, gr
+end
+
+#===============================================================#
 function train_loop!(
 	trainer::Trainer,
-	::Optimisers.AbstractRule,
-	minconfig::NamedTuple,
+	opt::Optimisers.AbstractRule,
+	state::TrainState,
+	loaders::NamedTuple,
 )
 	@unpack opt_args, opt_iter = trainer
 
-	for _ in 1:opt_args.nepochs
+	while opt_iter.epoch[] < opt_args.nepochs
 		opt_iter.epoch[] += 1
 		opt_iter.epoch_time[] = time() - opt_iter.start_time[]
 
-		epoch!(trainer)
-		evaluate(trainer)
+		state = doepoch(trainer, state, opt, loaders._loader)
+		evaluate(trainer, state, loaders)
 
 		opt_iter.epoch_dt[] = time() - opt_iter.epoch_time[] - opt_iter.start_time[]
 		trigger_callback!(trainer, :EPOCH_END)
 
-		# update minconfig
-		minconfig, ifbreak = update_minconfig(trainer, minconfig)
+		# update state loss
+		@set! state.loss_ = trainer.STATS.LOSS_[end]
+
+		# save state to CPU if loss improves
+		state, ifbreak = update_trainer_state!(trainer, state)
 		ifbreak && break
 	end
 
-	return minconfig
+	return state
 end
 
-function epoch!(
+function doepoch(
 	trainer::Trainer,
-	::Optimisers.AbstractRule
+	state::TrainState,
+	opt::Optimisers.AbstractRule,
+	_loader,
 )
-	@unpack _loader = trainer
-	@unpack opt, opt_args, opt_iter, io = trainer
+	@unpack opt_args, opt_iter, io = trainer
 
 	if trainer.verbose
 		prog_meter = ProgressMeter.Progress(
@@ -43,10 +67,10 @@ function epoch!(
 		)
 	end
 
-	trainer.st = Lux.trainmode(trainer.st)
+	state.st = Lux.trainmode(state.st)
 
 	for batch in _loader
-		l, stats = step!(trainer, batch)
+		state, (l, stats) = step(trainer, state, opt, batch)
 		trigger_callback!(trainer, :BATCH_END)
 
 		if trainer.verbose
@@ -60,27 +84,30 @@ function epoch!(
 		ProgressMeter.finish!(prog_meter)
 	end
 
-	return
+	return state
 end
 
-function step!(
+function step(
 	trainer::Trainer,
+	state::TrainState,
 	::Optimisers.AbstractRule,
 	batch,
 )
-	loss = Loss(trainer.NN, trainer.st, batch, trainer.lossfun)
-	l, st, stats, g = grad(loss, trainer.p)
-	opt_st, p = Optimisers.update!(trainer.opt_st, trainer.p, g)
+	@unpack lossfun = trainer
+	@unpack NN, p, st, opt_st = state
+
+	loss = Loss(NN, st, batch, lossfun)
+	l, st, stats, g = grad(loss, p)
+	opt_st, p = Optimisers.update!(opt_st, p, g)
 
 	if isnan(l)
 		throw(ErrorException("Loss in NaN"))
 	end
 
-	trainer.p = p
-	trainer.st = st
-	trainer.opt_st = opt_st
+	# wrong l. want STATS.LOSS_[end]
+	state = TrainState(NN, p, st, opt_st, state.count, state.loss_)
 
-	return l, stats
+	return state, (l, stats)
 end
 
 #============================================================#
@@ -88,31 +115,30 @@ end
 #============================================================#
 function train_loop!(
 	trainer::Trainer,
-	::Optim.AbstractOptimizer,
-	minconfig::NamedTuple,
+	opt::Optim.AbstractOptimizer,
+	state::TrainState,
+	loaders::NamedTuple,
 )
-	@unpack __loader, lossfun = trainer
-	@unpack opt_args, opt_iter = trainer
+	@unpack __loader = loaders
+	@unpack lossfun, opt_args, opt_iter = trainer
 	@unpack io, verbose = trainer
 
+	# batch = first(__loader)
 	batch = if __loader isa CuIterator
 		# Adapt.adapt(__loader, __loader.batches.data)
 		__loader.batches.data |> cu
 	else
 		__loader.data
 	end
-	# batch = first(__loader)
 
+	### using wrong st here. pass in st as optp
     function optloss(optx, optp)
-        lossfun(trainer.NN, optx, trainer.st, batch)
+        lossfun(state.NN, optx, state.st, batch)
     end
 
 	function optcb(optx, l, st, stats)
-		trainer.p  = optx.u
-		trainer.st = st
-
-		evaluate(trainer)
-		trainer.st = Lux.trainmode(trainer.st)
+		evaluate(trainer, state, loaders)
+		state = TrainState(state.NN, optx.u, Lux.trainmode(st), state.opt_st, state.count, trainer.STATS.LOSS_[end])
 
 		if !isempty(stats) & verbose
 			println(io, stats)
@@ -123,8 +149,7 @@ function train_loop!(
 		opt_iter.epoch_time[] = time() - opt_iter.start_time[]
 		trigger_callback!(trainer, :EPOCH_END)
 
-		minconfig, ifbreak = update_minconfig(trainer, minconfig)
-
+		state, ifbreak = update_trainer_state!(trainer, state)
 		return ifbreak
 	end
 
@@ -133,17 +158,19 @@ function train_loop!(
     #======================#
     adtype  = AutoZygote()
     optfun  = OptimizationFunction(optloss, adtype)
-    optprob = OptimizationProblem(optfun, trainer.p)
+    optprob = OptimizationProblem(optfun, state.p)
 
-	kwargs = (; callback = optcb, maxiters = opt_args.nepochs)
-    optsol = solve(optprob, trainer.opt; kwargs...)
+    optsol = solve(optprob, trainer.opt;
+		callback = optcb, maxiters = opt_args.nepochs,
+	)
 
 	if trainer.verbose
 		@show optsol.retcode
 	end
 
-	return minconfig
+	return state
 end
-
+#============================================================#
+# Gradient API?
 #============================================================#
 #

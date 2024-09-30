@@ -1,26 +1,5 @@
 #
 #===============================================================#
-# Gradient API
-#===============================================================#
-@concrete struct Loss
-    NN
-    st
-    batch
-    lossfun
-end
-
-function (L::Loss)(p)
-    L.lossfun(L.NN, p, L.st, L.batch)
-end
-
-function grad(loss::Loss, p)
-    (l, st, stats), pb = Zygote.pullback(loss, p)
-    gr = pb((one.(l), nothing, nothing))[1]
-
-    l, st, stats, gr
-end
-
-#===============================================================#
 # STATISTICS COMPUTATION
 #===============================================================#
 """
@@ -177,56 +156,4 @@ function plot_training!(EPOCH, TIME, _LOSS, LOSS_, _MSE, MSE_, _MAE, MAE_)
 
     plt
 end
-
-#===============================================================#
-# EARLY STOPPING
-#===============================================================#
-"""
-early stopping based on mini-batch loss from test set
-https://github.com/jeffheaton/app_deep_learning/blob/main/t81_558_class_03_4_early_stop.ipynb
-"""
-function make_minconfig(early_stopping, patience, l, p, st, opt_st)
-    (; count = 0, early_stopping, patience, l, p, st, opt_st,)
-end
-
-function update_minconfig(
-    minconfig::NamedTuple,
-    l::Real,
-    p::Union{NamedTuple, AbstractVector},
-    st::NamedTuple,
-    opt_st;
-    io::IO = stdout,
-	verbose::Bool = true,
-)
-    ifbreak = false
-
-    if l < minconfig.l
-		if verbose
-			msg = "Improvement in loss found: $(l) < $(minconfig.l)\n"
-			printstyled(io, msg, color = :green)
-		end
-
-        p = deepcopy(p)
-        st = deepcopy(st)
-        opt_st = deepcopy(opt_st)
-        minconfig = (; minconfig..., count = 0, l, p, st, opt_st,)
-    else
-		if verbose
-		    msg = "No improvement in loss found in the last $(minconfig.count) epochs. $(l) > $(minconfig.l)\n"
-	        printstyled(io, msg, color = :red)
-		end
-        @set! minconfig.count = minconfig.count + 1
-    end
-
-    if (minconfig.count >= minconfig.patience) & minconfig.early_stopping
-		if verbose
-			msg = "Early Stopping triggered after $(minconfig.count) epochs of no improvement.\n"
-			printstyled(io, msg, color = :red)
-		end
-        ifbreak = true
-    end
-
-    minconfig, ifbreak
-end
-
 #===============================================================#

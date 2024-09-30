@@ -1,22 +1,43 @@
 #
+# create loaders in the training loop.
+# struct Trainer should only contain training essentials
+#     data, minconfig (NN, p, st, opt_st) on CPU
+#     (NN, p, st, opt_st) on device
+# create a struct TrainState for latest training TrainingState
+# return TrainState on train!(trainer::Trainer)
+# minconfig won't be necessary then??
+# alternatively keep loaders in the dataset but CuIterators elsewhere
+#===============================================================#
+abstract type AbstractTrainState end
+
+@concrete mutable struct TrainState <: AbstractTrainState
+	NN
+	p
+	st
+	opt_st
+	count
+	loss_
+end
+
+function Adapt.adapt_structure(to, state::TrainState)
+    p  = Adapt.adapt_structure(to, state.p )
+    st = Adapt.adapt_structure(to, state.st)
+    opt_st = Adapt.adapt_structure(to, state.opt_st)
+
+	TrainState(state.NN, p, st, opt_st, state.count, state.loss_)
+end
+
 #===============================================================#
 abstract type AbstractTrainer end
 
 @concrete mutable struct Trainer <: AbstractTrainer
-	# model
-	NN
-	p
-	st
-
-	# data
-	_loader
-	__loader
-	loader_
+	state # (NN, p, st, opt_st, count, patience, early_stopping)
+	data  # (_data, data_)
+	batchsizes
 	notestdata
 
 	# optimizer
 	opt
-	opt_st
 	opt_iter
 	opt_args
 	lossfun
@@ -50,7 +71,7 @@ function Trainer(
     nepochs::Int = 100,
 	schedule = nothing, # handle lr, batchsize scheduling via callbacks later
 	early_stopping::Bool = true,
-	return_minimum::Bool = true, # returns state with smallest loss value
+	return_last::Bool = false, # returns final state as opposed to minconfig
 	patience_frac::Real = 0.2,
 # MISC
     io::IO = stdout,
@@ -86,9 +107,7 @@ function Trainer(
 		__batchsize = numobs(_data)
 	end
 
-    _loader  = DataLoader(_data; batchsize = _batchsize , rng, shuffle = true)
-    loader_  = DataLoader(data_; batchsize = batchsize_ , rng, shuffle = false)
-    __loader = DataLoader(_data; batchsize = __batchsize, rng, shuffle = false)
+	batchsizes = (; _batchsize, batchsize_, __batchsize)
 
 	#========= OPT =========#
 
@@ -100,12 +119,10 @@ function Trainer(
 		end
 	elseif opt isa Optim.AbstractOptimizer
 		if opt isa Union{
-			Optim.Newton,
-			Optim.BFGS,
-			Optim.LBFGS,
+			Optim.Newton, Optim.BFGS, Optim.LBFGS,
 		}
-			if length(__loader) != 1
-				@warn " Data loader has $(length(__loader)) minibatches. \
+			if __batchsize != numobs(_data)
+				@warn "Got batchsize $(__batchsize) < $(numobs(_data)) (numobs). \
 				Hessian-based optimizers such as Newton / BFGS / L-BFGS may be \
 				unstable with mini-batching. Set batchsize to equal data-size, \
 				or else the method may be unstable. If you want a stochastic \
@@ -126,7 +143,7 @@ function Trainer(
 	end
 
 	patience = round(Int, nepochs * patience_frac)
-	opt_args = (; nepochs, schedule, early_stopping, patience, return_minimum)
+	opt_args = (; nepochs, schedule, early_stopping, patience, return_last)
 	opt_iter = (; epoch = [0], start_time=[0f0], epoch_time=[0f0], epoch_dt=[0f0],)
 	
 	#========= MISC =========#
@@ -139,23 +156,13 @@ function Trainer(
 
 	)
 
-	#========= DEVICE =========#
-    p, st = (p, st) |> device
-
-    if device isa Lux.LuxCUDADevice
-        _loader  = _loader  |> CuIterator
-        loader_  = loader_  |> CuIterator
-        __loader = __loader |> CuIterator
-    end
-
-	opt = opt |> device
-	opt_st = opt_st |> device
 	#==========================#
+	data  = (; _data, data_)
+	state = TrainState(NN, p, st, opt_st, 0, Inf32)
 
 	Trainer(
-		NN, p, st,
-		_loader, __loader, loader_, notestdata,
-		opt, opt_st, opt_iter, opt_args, lossfun,
+		state, data, batchsizes, notestdata,
+		opt, opt_iter, opt_args, lossfun,
 		io, rng, name, STATS, device, verbose, callbacks
 	)
 end
@@ -167,40 +174,37 @@ function train!(trainer::Trainer)
 
 	if verbose
 		println(io, "#============================================#")
-		println(io, "Trainig $(name) with $(length(trainer.p)) parameters.")
+		println(io, "Trainig $(name) with $(length(trainer.state.p)) parameters.")
 		println(io, "Using optimizer $(string(trainer.opt))")
 		println(io, "with args: $(opt_args)")
 		println(io, "#============================================#")
 	end
 
-	verbose && statistics(trainer)
-	evaluate(trainer)
-	minconfig = make_minconfig(trainer)
+	state = trainer.state |> device
+	loaders = make_dataloaders(trainer)
+
+	verbose && printstatistics(trainer, state, loaders)
+	evaluate(trainer, state, loaders)
 	trigger_callback!(trainer, :START_TRAINING)
 
 	opt_iter.start_time[] = time()
 	verbose && println(io, "\nStarting Trainig Loop\n")
 
-	minconfig = train_loop!(trainer, minconfig) # loop over epochs
+	state = train_loop!(trainer, state, loaders) # loop over epochs
 
-	if opt_args.return_minimum
-		if verbose
-			println(io, "Returning minimum value from training run.")
-		end
-		trainer.p  = minconfig.p          |> device
-		trainer.st = minconfig.st         |> device
-		trainer.opt_st = minconfig.opt_st |> device
+	if opt_args.return_last
+		# trainer.state = state |> Lux.cpu_device()
+		verbose && println(io, "Returning state at final iteration.")
+	else
+		# state = trainer.state |> device
+		verbose && println(io, "Returning state with minimum loss.")
 	end
 
-	verbose && statistics(trainer)
-	verbose && evaluate(trainer; update_stats=false)
+	verbose && printstatistics(trainer, trainer.state, loaders)
+	verbose && evaluate(trainer, trainer.state, loaders; update_stats = false)
 	trigger_callback!(trainer, :END_TRAINING)
 
-	NN = trainer.NN
-	p  = trainer.p  |> Lux.cpu_device()
-	st = trainer.st |> Lux.cpu_device()
-
-	return (NN, p, st), trainer.STATS
+	return trainer.state, trainer.STATS
 end
 
 #============================================================#
@@ -209,33 +213,40 @@ end
 # 3. make io async (move to separate thread?)
 #============================================================#
 
+function trigger_callback!(trainer::Trainer, event::Symbol)
+	nothing
+end
+
 function trigger_callback!(
 	trainer::Trainer,
-	event::Symbol,
+	state::TrainState,
+	event::Symbol
 )
 	nothing
 end
 
-function train_loop!(trainer::Trainer, minconfig::NamedTuple)
-	train_loop!(trainer, trainer.opt, minconfig)
+function train_loop!(trainer::Trainer, state::TrainState, loaders::NamedTuple)
+	train_loop!(trainer, trainer.opt, state, loaders)
 end
 
-function epoch!(trainer::Trainer)
-	epoch!(trainer, trainer.opt)
-end
-
-function step!(trainer::Trainer, batch)
-	step!(trainer, trainer.opt, batch)
-end
-
-function statistics(trainer::Trainer)
-	statistics(trainer, trainer.io, trainer.verbose)
+function printstatistics(
+	trainer::Trainer,
+	state::TrainState,
+	loaders::NamedTuple
+)
+	printstatistics(trainer, state, loaders, trainer.io, trainer.verbose)
 end
 
 #============================================================#
-function statistics(trainer::Trainer, io::IO, verbose::Bool)
-	@unpack NN, p, st = trainer
-	@unpack notestdata, __loader, loader_ = trainer
+function printstatistics(
+	trainer::Trainer,
+	state::TrainState,
+	loaders::NamedTuple,
+	io::IO, verbose::Bool
+)
+	@unpack NN, p, st = state
+	@unpack notestdata = trainer
+	@unpack __loader, loader_ = loaders
 
 	_, _str = statistics(NN, p, st, __loader)
 
@@ -261,11 +272,17 @@ function statistics(trainer::Trainer, io::IO, verbose::Bool)
 	return
 end
 
-function evaluate(trainer::Trainer; update_stats::Bool = true)
-	@unpack NN, p, st, lossfun = trainer
-	@unpack notestdata, __loader, loader_ = trainer
+function evaluate(
+	trainer::Trainer,
+	state::TrainState,
+	loaders::NamedTuple;
+	update_stats::Bool = true
+)
+	@unpack NN, p, st = state
+	@unpack notestdata, lossfun = trainer
 	@unpack opt_args, opt_iter = trainer
 	@unpack io, verbose, STATS = trainer
+	@unpack __loader, loader_ = loaders
 
 	_l, _stats = fullbatch_metric(NN, p, st, __loader, lossfun)
 
@@ -304,6 +321,62 @@ function evaluate(trainer::Trainer; update_stats::Bool = true)
 end
 
 #============================================================#
+function make_dataloaders(trainer::Trainer)
+	@unpack device, rng = trainer
+	@unpack _data, data_ = trainer.data
+	@unpack _batchsize, batchsize_, __batchsize = trainer.batchsizes
+
+	_loader  = DataLoader(_data; batchsize = _batchsize , rng, shuffle = true)
+	loader_  = DataLoader(data_; batchsize = batchsize_ , rng, shuffle = false)
+	__loader = DataLoader(_data; batchsize = __batchsize, rng, shuffle = false)
+	
+    if device isa Lux.LuxCUDADevice
+        _loader  = _loader  |> CuIterator
+        loader_  = loader_  |> CuIterator
+        __loader = __loader |> CuIterator
+    end
+
+	(; _loader, loader_, __loader)
+end
+
+#===============================================================#
+function update_trainer_state!(trainer::Trainer, state::TrainState)
+	@unpack opt_args, device, io, verbose = trainer
+    ifbreak = false
+
+	transfer = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
+		Lux.cpu_deivce()
+	else
+		deepcopy
+	end
+
+    if state.loss_ < trainer.state.loss_
+		if verbose
+			msg = "Improvement in loss found: $(state.loss_) < $(trainer.state.loss_)\n"
+			printstyled(io, msg, color = :green)
+		end
+		state.count = 0
+		trainer.state = state |> transfer
+    else
+		@set! state.count = state.count + 1
+		if verbose
+		    msg = "No improvement in loss found in the last $(state.count) epochs. $(state.loss_) > $(trainer.state.loss_)\n"
+	        printstyled(io, msg, color = :red)
+		end
+    end
+
+    if (state.count >= opt_args.patience) & opt_args.early_stopping
+		if verbose
+			msg = "Early Stopping triggered after $(state.count) epochs of no improvement.\n"
+			printstyled(io, msg, color = :red)
+		end
+        ifbreak = true
+    end
+
+    state, ifbreak
+end
+
+#============================================================#
 function save_trainer(
 	trainer::Trainer,
 	dir::String,
@@ -311,8 +384,7 @@ function save_trainer(
 	metadata::NamedTuple = (;),
 	verbose::Union{Bool, Nothing} = nothing,
 )
-	@unpack NN, p, st, opt_st = trainer
-	@unpack STATS = trainer
+	@unpack state, STATS = trainer
 
 	name = isempty(name) ? trainer.name : name
 	if isnothing(verbose)
@@ -329,7 +401,7 @@ function save_trainer(
 	# STATISTICS
 	touch(statsfile)
 	statsio = open(statsfile, "a")
-	statistics(trainer, statsio, true)
+	printstatistics(trainer, statsio, true)
 	close(statsio)
 	verbose && @info "Saving statistics at $(statsfile)"
 
@@ -340,8 +412,7 @@ function save_trainer(
 	verbose && @info "Saving plot at $(imagefile)"
 
 	# MODEL
-	p, st = (p, st) |> Lux.cpu_device()
-	model = NN, p, st
+	model = state.NN, state.p, state.st
     jldsave(modelfile; model, metadata)
 	verbose && @info "Saving model at $(modelfile)"
 
@@ -358,38 +429,6 @@ function plot_trainer(trainer::Trainer)
 end
 
 function load_trainer(trainer::Trainer, dir::String, name::String)
-end
-
-function move_to_device(trainer::Trainer, device)
-end
-
-#============================================================#
-
-function make_minconfig(trainer::Trainer)
-	@unpack p, st, opt_st = trainer
-	@unpack early_stopping, patience = trainer.opt_args
-	@unpack device = trainer
-
-	transfer = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
-		LuxDeviceUtils.cpu_device()
-	else
-		deepcopy
-	end
-
-	l  = trainer.STATS.LOSS_[end]
-	p  = trainer.p  |> transfer
-	st = trainer.st |> transfer
-	opt_st = trainer.opt_st |> transfer
-
-    (; count = 0, early_stopping, patience, l, p, st, opt_st,)
-end
-
-function update_minconfig(trainer::Trainer, minconfig)
-	@unpack p, st, opt_st = trainer
-	@unpack io, verbose = trainer
-	l = trainer.STATS.LOSS_[end]
-
-	update_minconfig(minconfig, l, p, st, opt_st; io, verbose)
 end
 #============================================================#
 #
