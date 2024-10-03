@@ -1,6 +1,6 @@
 #
 # function train_model(
-#     NN::Lux.AbstractExplicitLayer,
+#     NN::AbstractLuxLayer,
 #     _data::NTuple{2, Any},
 #     data_::Union{Nothing,NTuple{2, Any}} = nothing;
 # #
@@ -26,7 +26,7 @@
 #     p = nothing,
 #     st = nothing,
 #     lossfun = mse,
-#     device = Lux.gpu_device(),
+#     device = gpu_device(),
 # #
 #     cb_epoch = nothing, # (NN, p, st) -> nothing
 # ) where{M}
@@ -117,7 +117,7 @@
 # 		save_trainer(trainer, dir, name_; metadata)
 # 	end
 #
-#     p, st = Lux.cpu_device()((p, st))
+#     p, st = cpu_device()((p, st))
 #     (NN, p, st), STATS
 # end
 #===============================================================#
@@ -140,7 +140,7 @@ $SIGNATURES
 - `p/st`: initial model parameter, state. if nothing, initialized with `Lux.setup(rng, NN)`
 """
 function train_model(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     _data::NTuple{2, Any},
     data_::Union{Nothing,NTuple{2, Any}} = nothing;
 #
@@ -166,7 +166,7 @@ function train_model(
     p = nothing,
     st = nothing,
     lossfun = mse,
-    device = Lux.gpu_device(),
+    device = gpu_device(),
 #
     cb_epoch = nothing, # (NN, p, st) -> nothing
 ) where{M}
@@ -326,7 +326,7 @@ function train_model(
     println(io, "Optimization done")
     println(io, "#======================#")
 
-    p, st = Lux.cpu_device()((p, st))
+    p, st = cpu_device()((p, st))
 
     (NN, p, st), STATS
 end
@@ -336,7 +336,7 @@ end
 $SIGNATURES
 """
 function makecallback(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     _loader::Union{CuIterator, MLUtils.DataLoader},
     loader_::Union{CuIterator, MLUtils.DataLoader},
     lossfun;
@@ -510,7 +510,7 @@ Train parameters `p` to minimize `loss` using optimization strategy `opt`.
 """
 function optimize(
     opt::Optimisers.AbstractRule,
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     p::Union{NamedTuple, AbstractVector},
     st::NamedTuple,
     nepoch::Integer,
@@ -609,7 +609,7 @@ https://lux.csail.mit.edu/dev/tutorials/advanced/1_GravitationalWaveForm#trainin
 """
 function optimize(
     opt::Optim.AbstractOptimizer,
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     p::Union{NamedTuple, AbstractVector},
     st::NamedTuple,
     nepoch::Integer,
@@ -718,7 +718,7 @@ end
 
 #===============================================================#
 function savemodel!( # modifies STATS
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     p::Union{NamedTuple, AbstractVector},
     st::NamedTuple,
     metadata,
@@ -741,7 +741,7 @@ function savemodel!( # modifies STATS
     close(statsio)
 
     # transfer model to host device
-	p, st = (p, st) |> Lux.cpu_device()
+	p, st = (p, st) |> cpu_device()
     model = NN, p, st
 
     # training plot

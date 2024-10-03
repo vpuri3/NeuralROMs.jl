@@ -1,6 +1,9 @@
 #
 #===============================================================#
 # 1. make io async with @async or Threads.@spawn
+# 2. call evaluate, update_trainer_state! every so many steps
+# 3. asssert that evaluate has been called before update_trainer_state!
+# 4. make data transfer in update_trainer_state! async
 #===============================================================#
 abstract type AbstractTrainState end
 
@@ -9,23 +12,25 @@ abstract type AbstractTrainState end
 	p
 	st
 	opt_st
-	count
-	loss_
 end
+
+# rm once https://github.com/FluxML/Optimisers.jl/pull/180
+# is merged
+Adapt.@adapt_structure Optimisers.Leaf
 
 function Adapt.adapt_structure(to, state::TrainState)
     p  = Adapt.adapt_structure(to, state.p )
     st = Adapt.adapt_structure(to, state.st)
     opt_st = Adapt.adapt_structure(to, state.opt_st)
 
-	TrainState(state.NN, p, st, opt_st, state.count, state.loss_)
+	TrainState(state.NN, p, st, opt_st)
 end
 
 #===============================================================#
 abstract type AbstractTrainer end
 
 @concrete mutable struct Trainer <: AbstractTrainer
-	state # (NN, p, st, opt_st, count, patience, early_stopping)
+	state # (NN, p, st, opt_st)
 	data  # (_data, data_)
 	batchsizes
 	notestdata
@@ -47,7 +52,7 @@ abstract type AbstractTrainer end
 end
 
 function Trainer(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     _data::NTuple{2, Any},
     data_::Union{Nothing,NTuple{2, Any}} = nothing;
 # MODEL PARAMETER/ STATES
@@ -71,7 +76,7 @@ function Trainer(
     io::IO = stdout,
     rng::Random.AbstractRNG = Random.default_rng(),
 	name::String = "model",
-    device = Lux.gpu_device(),
+    device = gpu_device(),
 	verbose::Bool = true,
 	callbacks = nothing,
 )
@@ -138,8 +143,12 @@ function Trainer(
 
 	patience = round(Int, nepochs * patience_frac)
 	opt_args = (; nepochs, schedule, early_stopping, patience, return_last)
-	opt_iter = (; epoch = [0], start_time=[0f0], epoch_time=[0f0], epoch_dt=[0f0],)
-	
+	opt_iter = (;
+		epoch = [0], start_time=[0f0], epoch_time=[0f0], epoch_dt=[0f0],
+		# early stopping
+		count = [0], loss_mincfg = [Inf32],
+	)
+
 	#========= MISC =========#
 
 	STATS = (;
@@ -147,12 +156,11 @@ function Trainer(
 		_LOSS = Float32[], LOSS_ = Float32[],
 		_MSE  = Float32[], MSE_  = Float32[],
 		_MAE  = Float32[], MAE_  = Float32[],
-
 	)
 
 	#==========================#
 	data  = (; _data, data_)
-	state = TrainState(NN, p, st, opt_st, 0, Inf32)
+	state = TrainState(NN, p, st, opt_st)
 
 	Trainer(
 		state, data, batchsizes, notestdata,
@@ -182,7 +190,7 @@ function train!(
 	end
 
 	state = state |> device
-	loaders = make_dataloaders(trainer)
+	loaders = make_dataloaders(trainer) |> device
 
 	verbose && printstatistics(trainer, state, loaders)
 	evaluate(trainer, state, loaders)
@@ -194,7 +202,7 @@ function train!(
 	state = train_loop!(trainer, state, loaders) # loop over epochs
 
 	if opt_args.return_last
-		trainer.state = state |> Lux.cpu_device()
+		trainer.state = state |> cpu_device()
 		verbose && println(io, "Returning state at final iteration.")
 	else
 		state = trainer.state |> device
@@ -319,7 +327,7 @@ end
 
 #============================================================#
 function make_dataloaders(trainer::Trainer)
-	@unpack device, rng = trainer
+	@unpack rng = trainer
 	@unpack _data, data_ = trainer.data
 	@unpack _batchsize, batchsize_, __batchsize = trainer.batchsizes
 
@@ -327,44 +335,44 @@ function make_dataloaders(trainer::Trainer)
 	loader_  = DataLoader(data_; batchsize = batchsize_ , rng, shuffle = false)
 	__loader = DataLoader(_data; batchsize = __batchsize, rng, shuffle = false)
 	
-    if device isa Lux.LuxCUDADevice
-        _loader  = _loader  |> CuIterator
-        loader_  = loader_  |> CuIterator
-        __loader = __loader |> CuIterator
-    end
-
 	(; _loader, loader_, __loader)
 end
 
 #===============================================================#
 function update_trainer_state!(trainer::Trainer, state::TrainState)
-	@unpack opt_args, device, io, verbose = trainer
+	@unpack device, io, verbose = trainer
+	@unpack opt_args, opt_iter, STATS = trainer
     ifbreak = false
 
-	transfer = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
-		Lux.cpu_deivce()
+	# make this transfer async
+	transfer = if device isa AbstractGPUDevice
+		cpu_device()
 	else
 		deepcopy
 	end
 
-    if state.loss_ < trainer.state.loss_
+	# LATEST EPOCH LOSS: STATS.LOSS_[end]
+	# MIN-CONFIG   LOSS: opt_iter.loss_mincfg[]
+
+	if STATS.LOSS_[end] < opt_iter.loss_mincfg[]
 		if verbose
-			msg = "Improvement in loss found: $(state.loss_) < $(trainer.state.loss_)\n"
+			msg = "Improvement in loss found: $(STATS.LOSS_[end]) < $(opt_iter.loss_mincfg[])\n"
 			printstyled(io, msg, color = :green)
 		end
-		state.count = 0
+		opt_iter.count[] = 0
 		trainer.state = state |> transfer
+		opt_iter.loss_mincfg[] = STATS.LOSS_[end] # new
     else
-		@set! state.count = state.count + 1
+		opt_iter.count[] += 1
 		if verbose
-		    msg = "No improvement in loss found in the last $(state.count) epochs. $(state.loss_) > $(trainer.state.loss_)\n"
+			msg = "No improvement in loss found in the last $(opt_iter.count[]) epochs. $(STATS.LOSS_[end]) > $(opt_iter.loss_mincfg[])\n"
 	        printstyled(io, msg, color = :red)
 		end
     end
 
-    if (state.count >= opt_args.patience) & opt_args.early_stopping
+	if (opt_iter.count[] >= opt_args.patience) & opt_args.early_stopping
 		if verbose
-			msg = "Early Stopping triggered after $(state.count) epochs of no improvement.\n"
+			msg = "Early Stopping triggered after $(opt_iter.count[]) epochs of no improvement.\n"
 			printstyled(io, msg, color = :red)
 		end
         ifbreak = true
@@ -414,7 +422,7 @@ function save_trainer(
 	verbose && @info "Saving model at $(modelfile)"
 
 	# CHECKPOINT
-	opt_st = opt_st |> Lux.cpu_device()
+	opt_st = opt_st |> cpu_device()
     jldsave(chkptfile; opt_st, STATS)
 	verbose && @info "Saving model at $(chkptfile)"
 

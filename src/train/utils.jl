@@ -12,10 +12,10 @@ Only for callbacks. Enforce this by setting Lux.testmode
 - `lossfun`: loss function: (x::Array, y::Array) -> l::Real
 """
 function fullbatch_metric(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     p::Union{NamedTuple, AbstractVector},
     st::NamedTuple,
-    loader::Union{CuIterator, MLUtils.DataLoader},
+    loader,
 	lossfun,
 )
     N = 0
@@ -59,10 +59,10 @@ $SIGNATURES
 
 """
 function statistics(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     p::Union{NamedTuple, AbstractVector},
     st::NamedTuple,
-    loader::Union{CuIterator, MLUtils.DataLoader},
+    loader,
 )
     st = Lux.testmode(st)
 

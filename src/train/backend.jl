@@ -39,9 +39,6 @@ function train_loop!(
 		opt_iter.epoch_dt[] = time() - opt_iter.epoch_time[] - opt_iter.start_time[]
 		trigger_callback!(trainer, :EPOCH_END)
 
-		# update state loss
-		@set! state.loss_ = trainer.STATS.LOSS_[end]
-
 		# save state to CPU if loss improves
 		state, ifbreak = update_trainer_state!(trainer, state)
 		ifbreak && break
@@ -67,7 +64,8 @@ function doepoch(
 		)
 	end
 
-	state.st = Lux.trainmode(state.st)
+	# state.st = Lux.trainmode(state.st)
+	@set! state.st = Lux.trainmode(state.st)
 
 	for batch in _loader
 		state, (l, stats) = step(trainer, state, opt, batch)
@@ -104,9 +102,7 @@ function step(
 		throw(ErrorException("Loss in NaN"))
 	end
 
-	# wrong l. want STATS.LOSS_[end]
-	state = TrainState(NN, p, st, opt_st, state.count, state.loss_)
-
+	state = TrainState(NN, p, st, opt_st)
 	return state, (l, stats)
 end
 
@@ -138,7 +134,7 @@ function train_loop!(
 
 	function optcb(optx, l, st, stats)
 		evaluate(trainer, state, loaders)
-		state = TrainState(state.NN, optx.u, Lux.trainmode(st), state.opt_st, state.count, trainer.STATS.LOSS_[end])
+		state = TrainState(state.NN, optx.u, Lux.trainmode(st), state.opt_st)
 
 		if !isempty(stats) & verbose
 			println(io, stats)
