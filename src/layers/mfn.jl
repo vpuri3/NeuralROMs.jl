@@ -6,7 +6,7 @@
 
 export FourierMFN, GaborMFN
 
-@concrete struct MFN{I} <: Lux.AbstractExplicitContainerLayer{(:filters, :linears)}
+@concrete struct MFN{I} <: AbstractLuxContainerLayer{(:filters, :linears)}
     in_dim::I
     hd_dim::I
     out_dim::I
@@ -117,8 +117,8 @@ end
 
 export GaborLayer
 
-# @concrete struct GaborLayer{I} <: Lux.AbstractExplicitContainerLayer{(:dense,)}
-@concrete struct GaborLayer{I} <: Lux.AbstractExplicitLayer
+# @concrete struct GaborLayer{I} <: AbstractLuxContainerLayer{(:dense,)}
+@concrete struct GaborLayer{I} <: AbstractLuxLayer
     in_dim::I
     out_dim::I
 

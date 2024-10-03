@@ -232,7 +232,7 @@ export INRModel
 end
 
 function INRModel(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     st::NamedTuple,
     x::AbstractArray{T},
     grid::NTuple{D, Integer}, # (Nx, Ny)
@@ -290,7 +290,7 @@ export CAEModel
 end
 
 function CAEModel(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     p::Union{NamedTuple, ComponentVector},
     st::NamedTuple,
     x::AbstractArray{T},

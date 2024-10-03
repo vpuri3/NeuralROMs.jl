@@ -9,6 +9,7 @@ using CalculustCore
 
 # ML Stack
 using Lux
+import LuxCore: AbstractLuxLayer, AbstractLuxContainerLayer, AbstractLuxWrapperLayer
 using MLUtils
 using Optimisers
 using Optimization
@@ -41,7 +42,8 @@ using Adapt
 using CUDA
 using CUDA: AbstractGPUArray
 using KernelAbstractions
-import LuxDeviceUtils
+using MLDataDevices
+using MLDataDevices: AbstractGPUDevice
 
 # numerical
 using FFTW
@@ -53,7 +55,7 @@ using ComponentArrays
 using Setfield: @set, @set!
 using UnPack
 using ConcreteStructs
-using IterTools
+using IterTools # train.jl BFGS
 
 # linear/nonlinear solvers
 using LinearSolve

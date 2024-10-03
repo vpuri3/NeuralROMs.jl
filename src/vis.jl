@@ -193,7 +193,7 @@ $SIGNATURES
 function plot_1D_surrogate_steady(V::Spaces.AbstractSpace{<:Any, 1},
     _data::NTuple{2, Any},
     data_::NTuple{2, Any},
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     p,
     st;
     nsamples = 5,

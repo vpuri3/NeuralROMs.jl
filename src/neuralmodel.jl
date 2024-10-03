@@ -12,7 +12,7 @@
 end
 
 function NeuralModel(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     st::NamedTuple,
     metadata::NamedTuple,
 )

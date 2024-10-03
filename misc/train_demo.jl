@@ -12,8 +12,8 @@ y = @. sin(1x)
 
 data = (x, y)
 NN = Chain(Dense(1, W, tanh), Dense(W, W, tanh), Dense(W, 1))
-device = Lux.cpu_device()
-device = Lux.gpu_device()
+device = cpu_device()
+device = gpu_device()
 
 # # MIXED TEST
 # @time (NN, p, st), ST = train_model(
@@ -23,7 +23,7 @@ device = Lux.gpu_device()
 # )
 
 # @time (NN, p, st), ST = train_model(NN, data)
-trainer = Trainer(NN, data; device, verbose = true, patience_frac = .8)
+trainer = Trainer(NN, data; device, verbose = true, patience_frac = .1)
 @time model, ST = train!(trainer)
 
 # @time train_model(NN, data; opts = (Optim.LBFGS(),), device)

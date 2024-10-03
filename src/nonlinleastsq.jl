@@ -54,7 +54,7 @@ function nonlinleastsq(
 end
 #======================================================#
 function nonlinleastsq(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     p0::Union{NamedTuple, AbstractVector},
     st::NamedTuple,
     data::NTuple{2, Any},
@@ -171,7 +171,7 @@ end
 #======================================================#
 
 function nonlinleastsq(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     p0::Union{NamedTuple, AbstractVector},
     st::NamedTuple,
     data::NTuple{2, Any},

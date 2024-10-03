@@ -38,8 +38,8 @@ trajectory.
 
 """
 function ImplicitEncoderDecoder(
-    encoder::Lux.AbstractExplicitLayer,
-    decoder::Lux.AbstractExplicitLayer,
+    encoder::AbstractLuxLayer,
+    decoder::AbstractLuxLayer,
     Npoints::NTuple{D, Integer},
     out_dim::Integer,
 ) where{D}
@@ -67,7 +67,7 @@ function ImplicitEncoderDecoder(
     )
 end
 
-function get_encoder_decoder(NN::Lux.AbstractExplicitLayer, p, st)
+function get_encoder_decoder(NN::AbstractLuxLayer, p, st)
     encoder = (NN.layers.encode.layers.encoder, p.encode.encoder, st.encode.encoder)
     decoder = (NN.layers.decoder, p.decoder, st.decoder)
     
@@ -83,7 +83,7 @@ end
 Assumes input is `(xyz, idx)` of sizes `[in_dim, K]`, `[1, K]` respectively
 """
 function AutoDecoder(
-    decoder::Lux.AbstractExplicitLayer,
+    decoder::AbstractLuxLayer,
     num_batches::Int,
     code_len::Int;
     init_weight = randn32, # scale_init(randn32, 1f-1, 0f0) # N(μ = 0, σ2 = 0.1^2)
@@ -104,7 +104,7 @@ function AutoDecoder(
 end
 
 function get_autodecoder(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     p::Union{NamedTuple, AbstractArray},
     st::NamedTuple,
 )
@@ -124,8 +124,8 @@ Input: `(x, param)` of sizes `[x_dim, K]`, and `[p_dim, K]` respectively.
 Output: solution field `u` of size `[out_dim, K]`.
 """
 function FlatDecoder(
-    hyper::Lux.AbstractExplicitLayer,
-    decoder::Lux.AbstractExplicitLayer,
+    hyper::AbstractLuxLayer,
+    decoder::AbstractLuxLayer,
 )
     noop = NoOpLayer()
 
@@ -136,7 +136,7 @@ function FlatDecoder(
 end
 
 function get_flatdecoder(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     p::Union{NamedTuple, AbstractArray},
     st::NamedTuple,
 )
@@ -150,7 +150,7 @@ end
 # OneEmbedding, freeze_decoder
 #======================================================#
 
-struct OneEmbedding{F} <: Lux.AbstractExplicitLayer
+struct OneEmbedding{F} <: AbstractLuxLayer
     len::Int
     init::F
 end
@@ -206,8 +206,8 @@ end
 Assumes input is `(xyz, idx)` of sizes `[D, K]`, `[1, K]` respectively
 """
 function HyperDecoder(
-    weight_gen::Lux.AbstractExplicitLayer,
-    evaluator::Lux.AbstractExplicitLayer,
+    weight_gen::AbstractLuxLayer,
+    evaluator::AbstractLuxLayer,
     num_batches::Int,
     code_len::Int;
     init_weight = randn32,
@@ -228,7 +228,7 @@ function HyperDecoder(
     HyperNet(code_gen, evaluator)
 end
 
-function get_hyperdecoder(NN::Lux.AbstractExplicitLayer, p, st)
+function get_hyperdecoder(NN::AbstractLuxLayer, p, st)
     NN.weight_generator.code, p.weight_generator.code, st.weight_generator.code
 end
 #======================================================#

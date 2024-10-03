@@ -1,5 +1,5 @@
 #
-# TODO: subtype AbstractTransform <: Lux.AbstractExplicitLayer and make
+# TODO: subtype AbstractTransform <: AbstractLuxLayer and make
 # TODO: OpConv(Bilinear) a hyper network/ Lux Container layer.
 # TODO: then we can think about trainable transform types
 abstract type AbstractTransform{D} end

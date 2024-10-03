@@ -39,7 +39,7 @@ export Gaussian1D
 # of the Gaussian. E.g. https://en.wikipedia.org/wiki/Gabor_filter
 # [Gabor Splatting for High-Quality Gigapixel Image Representations]
 
-@concrete struct Gaussian1D{I<:Integer} <: Lux.AbstractExplicitLayer
+@concrete struct Gaussian1D{I<:Integer} <: AbstractLuxLayer
     in_dim::I
     out_dim::I
     num_gauss::I

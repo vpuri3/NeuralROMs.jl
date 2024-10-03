@@ -10,7 +10,7 @@ x -> sin(π⋅x/L)
 Works when input is symmetric around 0, i.e., x ∈ [-1, 1).
 If working with something like [0, 1], use cosines instead.
 """
-@concrete struct PeriodicLayer <: Lux.AbstractExplicitLayer
+@concrete struct PeriodicLayer <: AbstractLuxLayer
     idxs
     periods
 end
@@ -49,7 +49,7 @@ end
 
 export TanhKernel1D
 
-@concrete struct TanhKernel1D{I<:Integer} <: Lux.AbstractExplicitLayer
+@concrete struct TanhKernel1D{I<:Integer} <: AbstractLuxLayer
     in_dim::I
     out_dim::I
     num_kernels::I

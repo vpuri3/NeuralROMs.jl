@@ -103,7 +103,7 @@ end
 function train_CINR(
     datafile::String,
     modeldir::String,
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     E::Int; # num epochs
     rng::Random.AbstractRNG = Random.default_rng(),
     warmup::Bool = true,

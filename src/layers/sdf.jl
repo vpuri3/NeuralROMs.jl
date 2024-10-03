@@ -5,10 +5,10 @@ clamp_vanilla(x::AbstractArray , δ) = @. clamp(x, -δ, δ)
 clamp_sigmoid(x::AbstractArray , δ) = @. δ * (2 * sigmoid_fast(x) - 1)
 clamp_softsign(x::AbstractArray, δ) = @. δ * softsign(x)
 
-struct ClampTanh{T <: Real}     <: Lux.AbstractExplicitLayer; δ::T; end
-struct ClampVanilla{T <: Real}  <: Lux.AbstractExplicitLayer; δ::T; end
-struct ClampSigmoid{T <: Real}  <: Lux.AbstractExplicitLayer; δ::T; end
-struct ClampSoftsign{T <: Real} <: Lux.AbstractExplicitLayer; δ::T; end
+struct ClampTanh{T <: Real}     <: AbstractLuxLayer; δ::T; end
+struct ClampVanilla{T <: Real}  <: AbstractLuxLayer; δ::T; end
+struct ClampSigmoid{T <: Real}  <: AbstractLuxLayer; δ::T; end
+struct ClampSoftsign{T <: Real} <: AbstractLuxLayer; δ::T; end
 
 Lux.initialstates(::ClampTanh    ) = (;)
 Lux.initialstates(::ClampVanilla ) = (;)
@@ -173,7 +173,7 @@ end
 
 export SpatialHash, SpatialGrid
 
-@concrete struct FeatureGrid{D} <: Lux.AbstractExplicitContainerLayer{(:embedding,)}
+@concrete struct FeatureGrid{D} <: AbstractLuxContainerLayer{(:embedding,)}
     shape
     indexfun
     interpfun

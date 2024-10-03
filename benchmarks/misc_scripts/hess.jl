@@ -7,7 +7,7 @@ CUDA.allowscalar(false)
 
 #==========================#
 function testhessian(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     data::Tuple;
     device = cpu_device(),
 )

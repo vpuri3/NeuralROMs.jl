@@ -83,7 +83,7 @@ end
 #===========================================================#
 
 function train_SDF(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     casename::String,
     modeldir::String,
     E::Int; # num epochs

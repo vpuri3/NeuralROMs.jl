@@ -92,7 +92,7 @@ Neural Operator convolution layer
 so that eltype(params) is always real
 
 """
-struct OpConv{D, F, I} <: Lux.AbstractExplicitLayer
+struct OpConv{D, F, I} <: AbstractLuxLayer
     ch_in::Int
     ch_out::Int
     modes::NTuple{D, Int}
@@ -163,7 +163,7 @@ end
 Neural Operator bilinear convolution layer
 
 """
-struct OpConvBilinear{D, F, I} <: Lux.AbstractExplicitLayer
+struct OpConvBilinear{D, F, I} <: AbstractLuxLayer
     ch_in1::Int
     ch_in2::Int
     ch_out::Int

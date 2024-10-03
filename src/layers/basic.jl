@@ -3,16 +3,16 @@
 # Hyper Network
 #======================================================#
 
-struct HyperNet{W <: Lux.AbstractExplicitLayer, C <: Lux.AbstractExplicitLayer, A} <:
-       Lux.AbstractExplicitContainerLayer{(:weight_generator, :evaluator)}
+struct HyperNet{W <: AbstractLuxLayer, C <: AbstractLuxLayer, A} <:
+       Lux.AbstractLuxContainerLayer{(:weight_generator, :evaluator)}
     weight_generator::W
     evaluator::C
     ca_axes::A
 end
 
 function HyperNet(
-    weight_gen::Lux.AbstractExplicitLayer,
-    evaluator::Lux.AbstractExplicitLayer
+    weight_gen::AbstractLuxLayer,
+    evaluator::AbstractLuxLayer
 )
     rng = Random.default_rng()
     ca_axes = Lux.initialparameters(rng, evaluator) |> ComponentArray |> getaxes
@@ -77,7 +77,7 @@ SplitRows
 
 Split rows of ND array, into `Tuple` of ND arrays.
 """
-struct SplitRows{T} <: Lux.AbstractExplicitLayer
+struct SplitRows{T} <: AbstractLuxLayer
     splits::T
     channel_dim::Int
 end

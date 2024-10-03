@@ -91,7 +91,7 @@ end
 #===========================================================#
 
 function remake_ca_in_model(
-    NN::Lux.AbstractExplicitLayer,
+    NN::AbstractLuxLayer,
     p::Union{NamedTuple, AbstractArray},
     st::NamedTuple,
 )

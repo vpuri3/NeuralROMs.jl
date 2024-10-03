@@ -678,7 +678,7 @@ function compute_residual(
     prob, model, timealg, scheme, Δt,
     adaptive, autodiff_xyz, ϵ_xyz, learn_ic;
     verbose::Bool = false,
-    device = Lux.gpu_deivce(),
+    device = Lux.gpu_device(),
 )
     res = zeros(Float32, size(Xdata, 2))
 
