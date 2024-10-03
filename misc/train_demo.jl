@@ -8,7 +8,7 @@ W = 32
 
 x = LinRange(0f0, 1f0, N) |> Array
 x = reshape(x, 1, N)
-y = @. sin(x)
+y = @. sin(1x)
 
 data = (x, y)
 NN = Chain(Dense(1, W, tanh), Dense(W, W, tanh), Dense(W, 1))

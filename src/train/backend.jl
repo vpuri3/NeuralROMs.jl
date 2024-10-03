@@ -131,7 +131,7 @@ function train_loop!(
 		__loader.data
 	end
 
-	### using wrong st here. pass in st as optp
+	### TODO: using old st in BFGS
     function optloss(optx, optp)
         lossfun(state.NN, optx, state.st, batch)
     end

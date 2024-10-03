@@ -1,12 +1,6 @@
 #
-# create loaders in the training loop.
-# struct Trainer should only contain training essentials
-#     data, minconfig (NN, p, st, opt_st) on CPU
-#     (NN, p, st, opt_st) on device
-# create a struct TrainState for latest training TrainingState
-# return TrainState on train!(trainer::Trainer)
-# minconfig won't be necessary then??
-# alternatively keep loaders in the dataset but CuIterators elsewhere
+#===============================================================#
+# 1. make io async with @async or Threads.@spawn
 #===============================================================#
 abstract type AbstractTrainState end
 
@@ -169,18 +163,25 @@ end
 
 #===============================================================#
 function train!(trainer::Trainer)
+	train!(trainer, trainer.state)
+end
+
+function train!(
+	trainer::Trainer,
+	state::TrainState,
+)
 	@unpack opt_args, opt_iter = trainer
 	@unpack io, name, device, verbose = trainer
 
 	if verbose
 		println(io, "#============================================#")
-		println(io, "Trainig $(name) with $(length(trainer.state.p)) parameters.")
+		println(io, "Trainig $(name) with $(length(state.p)) parameters.")
 		println(io, "Using optimizer $(string(trainer.opt))")
 		println(io, "with args: $(opt_args)")
 		println(io, "#============================================#")
 	end
 
-	state = trainer.state |> device
+	state = state |> device
 	loaders = make_dataloaders(trainer)
 
 	verbose && printstatistics(trainer, state, loaders)
@@ -193,24 +194,20 @@ function train!(trainer::Trainer)
 	state = train_loop!(trainer, state, loaders) # loop over epochs
 
 	if opt_args.return_last
-		# trainer.state = state |> Lux.cpu_device()
+		trainer.state = state |> Lux.cpu_device()
 		verbose && println(io, "Returning state at final iteration.")
 	else
-		# state = trainer.state |> device
+		state = trainer.state |> device
 		verbose && println(io, "Returning state with minimum loss.")
 	end
 
-	verbose && printstatistics(trainer, trainer.state, loaders)
-	verbose && evaluate(trainer, trainer.state, loaders; update_stats = false)
+	verbose && printstatistics(trainer, state, loaders)
+	verbose && evaluate(trainer, state, loaders; update_stats = false)
 	trigger_callback!(trainer, :END_TRAINING)
 
 	return trainer.state, trainer.STATS
 end
 
-#============================================================#
-# 1. make copies here as Optimisers.update! is in place
-# 2. move minconfig to cpu to save GPU memory
-# 3. make io async (move to separate thread?)
 #============================================================#
 
 function trigger_callback!(trainer::Trainer, event::Symbol)
@@ -428,7 +425,11 @@ function plot_trainer(trainer::Trainer)
 	plot_training!(deepcopy(trainer.STATS))
 end
 
-function load_trainer(trainer::Trainer, dir::String, name::String)
+function load_trainer(
+	trainer::Trainer,
+	dir::String,
+	name::String
+)
 end
 #============================================================#
 #
