@@ -14,10 +14,6 @@ abstract type AbstractTrainState end
 	opt_st
 end
 
-# rm once https://github.com/FluxML/Optimisers.jl/pull/180
-# is merged
-Adapt.@adapt_structure Optimisers.Leaf
-
 function Adapt.adapt_structure(to, state::TrainState)
     p  = Adapt.adapt_structure(to, state.p )
     st = Adapt.adapt_structure(to, state.st)
@@ -25,6 +21,9 @@ function Adapt.adapt_structure(to, state::TrainState)
 
 	TrainState(state.NN, p, st, opt_st)
 end
+
+# rm once https://github.com/FluxML/Optimisers.jl/pull/180 is merged
+Adapt.@adapt_structure Optimisers.Leaf
 
 #===============================================================#
 abstract type AbstractTrainer end

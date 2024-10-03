@@ -117,28 +117,30 @@ function train_loop!(
 )
 	@unpack __loader = loaders
 	@unpack lossfun, opt_args, opt_iter = trainer
-	@unpack io, verbose = trainer
+	@unpack io, verbose, device = trainer
 
 	# batch = first(__loader)
-	batch = if __loader isa CuIterator
-		# Adapt.adapt(__loader, __loader.batches.data)
-		__loader.batches.data |> cu
+	batch = if __loader isa MLDataDevices.DeviceIterator
+		__loader.iterator.data |> device
 	else
 		__loader.data
 	end
 
+	# https://github.com/SciML/Optimization.jl/issues/839
+
 	### TODO: using old st in BFGS
     function optloss(optx, optp)
-        lossfun(state.NN, optx, state.st, batch)
+		lossfun(state.NN, optx, state.st, batch)[1] # l, st, stats
     end
 
-	function optcb(optx, l, st, stats)
+	function optcb(optx, l) # optx, l, st, stats
 		evaluate(trainer, state, loaders)
-		state = TrainState(state.NN, optx.u, Lux.trainmode(st), state.opt_st)
+		# state = TrainState(state.NN, optx.u, Lux.trainmode(st), state.opt_st)
+		@set! state.p = optx.u
 
-		if !isempty(stats) & verbose
-			println(io, stats)
-		end
+		# if !isempty(stats) & verbose
+		# 	println(io, stats)
+		# end
 
 		opt_iter.epoch[] += 1
 		opt_iter.epoch_dt[] = time() - opt_iter.epoch_time[] - opt_iter.start_time[]
