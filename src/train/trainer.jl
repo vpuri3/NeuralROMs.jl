@@ -14,16 +14,16 @@ abstract type AbstractTrainState end
 	opt_st
 end
 
-function Adapt.adapt_structure(to, state::TrainState)
-    p  = Adapt.adapt_structure(to, state.p )
-    st = Adapt.adapt_structure(to, state.st)
-    opt_st = Adapt.adapt_structure(to, state.opt_st)
-
-	TrainState(state.NN, p, st, opt_st)
+# discussion https://github.com/FluxML/Optimisers.jl/pull/180 is merged
+function (dev::MLDataDevices.CPUDevice)(state::TrainState)
+	TrainState(state.NN, dev(state.p), dev(state.st), dev(state.opt_st))
 end
 
-# rm once https://github.com/FluxML/Optimisers.jl/pull/180 is merged
-Adapt.@adapt_structure Optimisers.Leaf
+for DEV in MLDataDevices.GPU_DEVICES
+	function (dev::DEV)(state::TrainState)
+		TrainState(state.NN, dev(state.p), dev(state.st), dev(state.opt_st))
+	end
+end
 
 #===============================================================#
 abstract type AbstractTrainer end

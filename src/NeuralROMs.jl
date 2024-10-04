@@ -43,7 +43,7 @@ using CUDA
 using CUDA: AbstractGPUArray
 using KernelAbstractions
 using MLDataDevices
-using MLDataDevices: AbstractGPUDevice
+using MLDataDevices: AbstractDevice, AbstractGPUDevice
 
 # numerical
 using FFTW

@@ -12,8 +12,8 @@ y = @. sin(1x)
 
 data = (x, y)
 NN = Chain(Dense(1, W, tanh), Dense(W, W, tanh), Dense(W, 1))
-device = cpu_device()
-device = gpu_device()
+# device = cpu_device()
+# device = gpu_device()
 
 # # MIXED TEST
 # @time (NN, p, st), ST = train_model(
