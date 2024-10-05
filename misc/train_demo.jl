@@ -10,25 +10,33 @@ x = LinRange(0f0, 1f0, N) |> Array
 x = reshape(x, 1, N)
 y = @. sin(1x)
 
-data = (x, y)
+_data = (x, y)
+data_ = (x, y)
 NN = Chain(Dense(1, W, tanh), Dense(W, W, tanh), Dense(W, 1))
-# device = cpu_device()
-# device = gpu_device()
+device = cpu_device()
+device = gpu_device()
 
-# # MIXED TEST
+trainer = Trainer(NN, _data; device,
+	verbose = true, print_config = false, print_stats = false,
+	print_batch = false, print_epoch = true, fullbatch_freq = 10,
+)
+@time model, ST = train!(trainer)
+
+# trainer = Trainer(
+# 	NN, _data; make_ca = true, opt = Optim.BFGS(),
+# 	verbose = true, print_config = false, print_stats = false, print_epoch = true,
+# 	fullbatch_freq = 10,
+# )
+# @time model, ST = train!(trainer)
+
+# @time train_model(NN, data; opts = (Optim.LBFGS(),), device)
+# @time (NN, p, st), ST = train_model(NN, _data)
 # @time (NN, p, st), ST = train_model(
-# 	NN, data; device,
+# 	NN, _data; device,
 # 	opts = (Optimisers.Adam(), Optimisers.Adam(), Optim.BFGS(),),
 # 	nepochs = (10, 10, 10),
 # )
 
-# @time (NN, p, st), ST = train_model(NN, data)
-trainer = Trainer(NN, data; device, verbose = true, patience_frac = .1)
-@time model, ST = train!(trainer)
-
-# @time train_model(NN, data; opts = (Optim.LBFGS(),), device)
-# trainer = Trainer(NN, data, verbose = true, opt = Optim.BFGS())
-# @time model, ST = train!(trainer)
 
 #
 nothing

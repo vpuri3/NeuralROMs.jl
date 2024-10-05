@@ -14,7 +14,7 @@ abstract type AbstractTrainState end
 	opt_st
 end
 
-# discussion https://github.com/FluxML/Optimisers.jl/pull/180 is merged
+# discussion: https://github.com/FluxML/Optimisers.jl/pull/180 is merged
 function (dev::MLDataDevices.CPUDevice)(state::TrainState)
 	TrainState(state.NN, dev(state.p), dev(state.st), dev(state.opt_st))
 end
@@ -29,10 +29,9 @@ end
 abstract type AbstractTrainer end
 
 @concrete mutable struct Trainer <: AbstractTrainer
-	state # (NN, p, st, opt_st)
-	data  # (_data, data_)
-	batchsizes
-	notestdata
+	state     # (NN, p, st, opt_st)
+	data      # (_data, data_)
+	data_args # (notestdata, batchsizes....)
 
 	# optimizer
 	opt
@@ -41,12 +40,10 @@ abstract type AbstractTrainer end
 	lossfun
 
 	# misc
-	io
 	rng
-	name
 	STATS
 	device
-	verbose
+	io_args
 	callbacks
 end
 
@@ -57,6 +54,7 @@ function Trainer(
 # MODEL PARAMETER/ STATES
     p = nothing,
     st = nothing,
+	make_ca = false, # make p a component array
 # DATA BATCH-SIZE
 	_batchsize::Union{Int, Nothing}  = nothing,
 	batchsize_::Union{Int, Nothing}  = nothing,
@@ -67,32 +65,41 @@ function Trainer(
     lossfun = mse,
 # OPTIMIZATION ARGUMENTS
     nepochs::Int = 100,
-	schedule = nothing, # handle lr, batchsize scheduling via callbacks later
 	early_stopping::Bool = true,
+	fullbatch_freq::Int = 1,   # evaluate full-batch loss every K epochs. (0 => never!)
 	return_last::Bool = false, # returns final state as opposed to minconfig
-	patience_frac::Real = 0.2,
+	patience::Int = round(Int, nepochs/5),
 # MISC
-    io::IO = stdout,
     rng::Random.AbstractRNG = Random.default_rng(),
-	name::String = "model",
     device = gpu_device(),
-	verbose::Bool = true,
 	callbacks = nothing,
+# IO-ARGS
+    io::IO = stdout,
+	name::String = "model",
+	verbose::Bool = true,
+	print_config::Bool = true,
+	print_stats::Bool = true,
+	print_batch::Bool = true,
+	print_epoch::Bool = true,
 )
+
 	#========= MODEL =========#
     p_new, st_new = Lux.setup(rng, NN)
     p  = isnothing(p)  ? p_new  : p
     st = isnothing(st) ? st_new : st
 
-    p_ca = p |> ComponentArray
-    p = isreal(p_ca) ? p_ca : p
+	if make_ca
+		p = ComponentArray(p)
+	end
 
 	#========= DATA =========#
 
     notestdata = isnothing(data_)
     if notestdata
         data_ = _data
-		verbose && println(io, "[train_model] No test dataset provided.")
+		if verbose & print_config
+			println(io, "No test dataset provided.")
+		end
     end
 
 	if isnothing(_batchsize)
@@ -105,7 +112,7 @@ function Trainer(
 		__batchsize = numobs(_data)
 	end
 
-	batchsizes = (; _batchsize, batchsize_, __batchsize)
+	data_args = (; notestdata, _batchsize, batchsize_, __batchsize)
 
 	#========= OPT =========#
 
@@ -140,8 +147,7 @@ function Trainer(
 		throw(ArgumentError(msg))
 	end
 
-	patience = round(Int, nepochs * patience_frac)
-	opt_args = (; nepochs, schedule, early_stopping, patience, return_last)
+	opt_args = (; nepochs, early_stopping, patience, fullbatch_freq, return_last)
 	opt_iter = (;
 		epoch = [0], start_time=[0f0], epoch_time=[0f0], epoch_dt=[0f0],
 		# early stopping
@@ -150,6 +156,10 @@ function Trainer(
 
 	#========= MISC =========#
 
+	io_args = (;
+		io, name, verbose, print_config, print_stats, print_batch, print_epoch,
+	)
+
 	STATS = (;
 		EPOCH = Int[]    , TIME  = Float32[],
 		_LOSS = Float32[], LOSS_ = Float32[],
@@ -157,14 +167,18 @@ function Trainer(
 		_MAE  = Float32[], MAE_  = Float32[],
 	)
 
+	callbacks = (;
+		# batch_start, batch_pre_opt, batch_post_opt,
+	)
+
 	#==========================#
 	data  = (; _data, data_)
 	state = TrainState(NN, p, st, opt_st)
 
 	Trainer(
-		state, data, batchsizes, notestdata,
+		state, data, data_args,
 		opt, opt_iter, opt_args, lossfun,
-		io, rng, name, STATS, device, verbose, callbacks
+		rng, STATS, device, io_args, callbacks
 	)
 end
 
@@ -177,42 +191,54 @@ function train!(
 	trainer::Trainer,
 	state::TrainState,
 )
-	@unpack opt_args, opt_iter = trainer
-	@unpack io, name, device, verbose = trainer
+	@unpack opt_args, opt_iter, device, io_args = trainer
+	@unpack io, verbose, print_config, print_stats = io_args
+	@unpack fullbatch_freq = opt_args
 
-	if verbose
+	if verbose & print_config
 		println(io, "#============================================#")
-		println(io, "Trainig $(name) with $(length(state.p)) parameters.")
-		println(io, "Using optimizer $(string(trainer.opt))")
-		println(io, "with args: $(opt_args)")
+		println(io, "Trainig $(io_args.name) with $(length(state.p)) parameters.")
+		println(io, "Optimizer: $(string(trainer.opt)) with args $(opt_args)")
+		println(io, "Device: $(device)")
 		println(io, "#============================================#")
 	end
 
 	state = state |> device
 	loaders = make_dataloaders(trainer) |> device
 
-	verbose && printstatistics(trainer, state, loaders)
-	evaluate(trainer, state, loaders)
-	trigger_callback!(trainer, :START_TRAINING)
+	if verbose & print_stats
+		printstatistics(trainer, state, loaders)
+	end
+	if !iszero(fullbatch_freq)
+		evaluate(trainer, state, loaders)
+	end
 
 	opt_iter.start_time[] = time()
-	verbose && println(io, "\nStarting Trainig Loop\n")
-
 	state = train_loop!(trainer, state, loaders) # loop over epochs
 
 	if opt_args.return_last
 		trainer.state = state |> cpu_device()
-		verbose && println(io, "Returning state at final iteration.")
+		if verbose & print_config
+			println(io, "Returning state at final iteration.")
+		end
 	else
 		state = trainer.state |> device
-		verbose && println(io, "Returning state with minimum loss.")
+		if verbose & print_config
+			println(io, "Returning state with minimum loss.")
+		end
 	end
 
-	verbose && printstatistics(trainer, state, loaders)
-	verbose && evaluate(trainer, state, loaders; update_stats = false)
-	trigger_callback!(trainer, :END_TRAINING)
+	if verbose
+		print_stats && printstatistics(trainer, state, loaders)
+		!iszero(fullbatch_freq) && evaluate(trainer, state, loaders; update_stats = false)
+	end
 
 	return trainer.state, trainer.STATS
+end
+
+#============================================================#
+function train_loop!(trainer::Trainer, state::TrainState, loaders::NamedTuple)
+	train_loop!(trainer, trainer.opt, state, loaders)
 end
 
 #============================================================#
@@ -221,61 +247,46 @@ function trigger_callback!(trainer::Trainer, event::Symbol)
 	nothing
 end
 
-function trigger_callback!(
-	trainer::Trainer,
-	state::TrainState,
-	event::Symbol
-)
+function trigger_callback!(trainer::Trainer, state::TrainState, event::Symbol)
 	nothing
 end
 
-function train_loop!(trainer::Trainer, state::TrainState, loaders::NamedTuple)
-	train_loop!(trainer, trainer.opt, state, loaders)
-end
-
-function printstatistics(
-	trainer::Trainer,
-	state::TrainState,
-	loaders::NamedTuple
-)
-	printstatistics(trainer, state, loaders, trainer.io, trainer.verbose)
-end
-
 #============================================================#
+function printstatistics(trainer::Trainer, state::TrainState, loaders::NamedTuple)
+	printstatistics(trainer, state, loaders, trainer.io_args.io)
+end
+
 function printstatistics(
 	trainer::Trainer,
 	state::TrainState,
 	loaders::NamedTuple,
-	io::IO, verbose::Bool
+	io::IO,
 )
 	@unpack NN, p, st = state
-	@unpack notestdata = trainer
+	@unpack notestdata = trainer.data_args
 	@unpack __loader, loader_ = loaders
 
 	_, _str = statistics(NN, p, st, __loader)
 
-	if verbose
-        println(io, "#----------------------#")
-        println(io, "TRAIN DATA STATISTICS")
-        println(io, "#----------------------#")
-		println(io, _str)
-        println(io, "#----------------------#")
-	end
+	println(io, "#----------------------#")
+	println(io, "TRAIN DATA STATISTICS")
+	println(io, "#----------------------#")
+	println(io, _str)
+	println(io, "#----------------------#")
 
 	if !notestdata
 		_, str_ = statistics(NN, p, st, loader_)
-		if verbose
-			println(io, "#----------------------#")
-			println(io, "TEST DATA STATISTICS")
-			println(io, "#----------------------#")
-			println(io, str_)
-			println(io, "#----------------------#")
-		end
+		println(io, "#----------------------#")
+		println(io, "TEST DATA STATISTICS")
+		println(io, "#----------------------#")
+		println(io, str_)
+		println(io, "#----------------------#")
 	end
 
 	return
 end
 
+#============================================================#
 function evaluate(
 	trainer::Trainer,
 	state::TrainState,
@@ -283,20 +294,19 @@ function evaluate(
 	update_stats::Bool = true
 )
 	@unpack NN, p, st = state
-	@unpack notestdata, lossfun = trainer
-	@unpack opt_args, opt_iter = trainer
-	@unpack io, verbose, STATS = trainer
 	@unpack __loader, loader_ = loaders
+	@unpack data_args, opt_args, opt_iter, lossfun, STATS, io_args = trainer
+	@unpack io, verbose, print_epoch = io_args
 
 	_l, _stats = fullbatch_metric(NN, p, st, __loader, lossfun)
 
-	if trainer.notestdata
+	if data_args.notestdata
 		l_, stats_ = _l, _stats
 	else
 		l_, stats_ = fullbatch_metric(NN, p, st, loader_, lossfun)
 	end
 
-	if verbose
+	if verbose & print_epoch
 		print(io, "Epoch [$(opt_iter.epoch[]) / $(opt_args.nepochs)]\t")
 
         print(io, "TRAIN LOSS: ")
@@ -326,9 +336,9 @@ end
 
 #============================================================#
 function make_dataloaders(trainer::Trainer)
-	@unpack rng = trainer
-	@unpack _data, data_ = trainer.data
-	@unpack _batchsize, batchsize_, __batchsize = trainer.batchsizes
+	@unpack rng, data, data_args = trainer
+	@unpack _data, data_ = data
+	@unpack _batchsize, batchsize_, __batchsize = data_args
 
 	_loader  = DataLoader(_data; batchsize = _batchsize , rng, shuffle = true)
 	loader_  = DataLoader(data_; batchsize = batchsize_ , rng, shuffle = false)
@@ -339,7 +349,8 @@ end
 
 #===============================================================#
 function update_trainer_state!(trainer::Trainer, state::TrainState)
-	@unpack device, io, verbose = trainer
+	@unpack device, io_args = trainer
+	@unpack io, verbose, print_epoch = io_args
 	@unpack opt_args, opt_iter, STATS = trainer
     ifbreak = false
 
@@ -354,7 +365,7 @@ function update_trainer_state!(trainer::Trainer, state::TrainState)
 	# MIN-CONFIG   LOSS: opt_iter.loss_mincfg[]
 
 	if STATS.LOSS_[end] < opt_iter.loss_mincfg[]
-		if verbose
+		if verbose & print_epoch
 			msg = "Improvement in loss found: $(STATS.LOSS_[end]) < $(opt_iter.loss_mincfg[])\n"
 			printstyled(io, msg, color = :green)
 		end
@@ -363,14 +374,14 @@ function update_trainer_state!(trainer::Trainer, state::TrainState)
 		opt_iter.loss_mincfg[] = STATS.LOSS_[end] # new
     else
 		opt_iter.count[] += 1
-		if verbose
+		if verbose & print_epoch
 			msg = "No improvement in loss found in the last $(opt_iter.count[]) epochs. $(STATS.LOSS_[end]) > $(opt_iter.loss_mincfg[])\n"
 	        printstyled(io, msg, color = :red)
 		end
     end
 
 	if (opt_iter.count[] >= opt_args.patience) & opt_args.early_stopping
-		if verbose
+		if verbose & print_epoch
 			msg = "Early Stopping triggered after $(opt_iter.count[]) epochs of no improvement.\n"
 			printstyled(io, msg, color = :red)
 		end

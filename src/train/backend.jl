@@ -28,19 +28,26 @@ function train_loop!(
 	loaders::NamedTuple,
 )
 	@unpack opt_args, opt_iter = trainer
+	@unpack fullbatch_freq = opt_args
+	ifbreak = false
+
+	# epoch loop
 
 	while opt_iter.epoch[] < opt_args.nepochs
 		opt_iter.epoch[] += 1
 		opt_iter.epoch_time[] = time() - opt_iter.start_time[]
 
 		state = doepoch(trainer, state, opt, loaders._loader)
-		evaluate(trainer, state, loaders)
 
 		opt_iter.epoch_dt[] = time() - opt_iter.epoch_time[] - opt_iter.start_time[]
-		trigger_callback!(trainer, :EPOCH_END)
 
-		# save state to CPU if loss improves
-		state, ifbreak = update_trainer_state!(trainer, state)
+		trigger_callback!(trainer, :EPOCH_END)
+		if !iszero(fullbatch_freq)
+			if (opt_iter.epoch[] % fullbatch_freq) == 0
+				evaluate(trainer, state, loaders)
+				state, ifbreak = update_trainer_state!(trainer, state)
+			end
+		end
 		ifbreak && break
 	end
 
@@ -53,9 +60,12 @@ function doepoch(
 	opt::Optimisers.AbstractRule,
 	_loader,
 )
-	@unpack opt_args, opt_iter, io = trainer
+	@unpack opt_args, opt_iter, io_args = trainer
+	@unpack io, verbose, print_batch = io_args
 
-	if trainer.verbose
+	show_batch = (length(_loader) > 1) & verbose & print_batch
+
+	if show_batch
 		prog_meter = ProgressMeter.Progress(
 			length(_loader);
 			barglyphs = ProgressMeter.BarGlyphs("[=> ]"),
@@ -67,18 +77,18 @@ function doepoch(
 	# state.st = Lux.trainmode(state.st)
 	@set! state.st = Lux.trainmode(state.st)
 
-	for batch in _loader
+	for (k, batch) in enumerate(_loader)
 		state, (l, stats) = step(trainer, state, opt, batch)
 		trigger_callback!(trainer, :BATCH_END)
 
-		if trainer.verbose
+		if show_batch
 			showvalues = Any[(:LOSS, round(l; sigdigits = 8)),]
 			!isempty(stats) && push!(showvalues, (:INFO, stats))
 			ProgressMeter.next!(prog_meter; showvalues, valuecolor = :magenta)
 		end
 	end
 
-	if trainer.verbose
+	if show_batch
 		ProgressMeter.finish!(prog_meter)
 	end
 
@@ -116,10 +126,12 @@ function train_loop!(
 	loaders::NamedTuple,
 )
 	@unpack __loader = loaders
-	@unpack lossfun, opt_args, opt_iter = trainer
-	@unpack io, verbose, device = trainer
+	@unpack lossfun, opt_args, opt_iter, io_args, device = trainer
+	@unpack io, verbose, print_epoch, print_config = io_args
+	@unpack fullbatch_freq = opt_args
 
-	# batch = first(__loader)
+	ifbreak = false
+
 	batch = if __loader isa MLDataDevices.DeviceIterator
 		__loader.iterator.data |> device
 	else
@@ -128,26 +140,31 @@ function train_loop!(
 
 	# https://github.com/SciML/Optimization.jl/issues/839
 
-	### TODO: using old st in BFGS
     function optloss(optx, optp)
-		lossfun(state.NN, optx, state.st, batch)[1] # l, st, stats
+		l, st, stats = lossfun(state.NN, optx, state.st, batch)
+		@set! state.st = st
+		l
     end
 
-	function optcb(optx, l) # optx, l, st, stats
-		evaluate(trainer, state, loaders)
-		# state = TrainState(state.NN, optx.u, Lux.trainmode(st), state.opt_st)
+	function optcb(optx, l)
 		@set! state.p = optx.u
 
-		# if !isempty(stats) & verbose
+		# if !isempty(stats) & verbose & print_epoch
 		# 	println(io, stats)
 		# end
+
+		if !iszero(fullbatch_freq)
+			if (opt_iter.epoch[] % fullbatch_freq) == 0
+				evaluate(trainer, state, loaders)
+				state, ifbreak = update_trainer_state!(trainer, state)
+			end
+		end
 
 		opt_iter.epoch[] += 1
 		opt_iter.epoch_dt[] = time() - opt_iter.epoch_time[] - opt_iter.start_time[]
 		opt_iter.epoch_time[] = time() - opt_iter.start_time[]
 		trigger_callback!(trainer, :EPOCH_END)
 
-		state, ifbreak = update_trainer_state!(trainer, state)
 		return ifbreak
 	end
 
@@ -162,7 +179,7 @@ function train_loop!(
 		callback = optcb, maxiters = opt_args.nepochs,
 	)
 
-	if trainer.verbose
+	if verbose & print_config
 		@show optsol.retcode
 	end
 
