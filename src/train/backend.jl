@@ -27,28 +27,38 @@ function train_loop!(
 	state::TrainState,
 	loaders::NamedTuple,
 )
-	@unpack opt_args, opt_iter = trainer
-	@unpack fullbatch_freq = opt_args
-	ifbreak = false
+	@unpack opt_args, opt_iter, callbacks = trainer
+	@unpack fullbatch_freq, nepochs = opt_args
+	@unpack verbose = trainer.io_args
 
 	# epoch loop
 
-	while opt_iter.epoch[] < opt_args.nepochs
+	while opt_iter.epoch[] < nepochs
+		# update epoch
 		opt_iter.epoch[] += 1
-		opt_iter.epoch_time[] = time() - opt_iter.start_time[]
 
-		state = doepoch(trainer, state, opt, loaders._loader)
+		# do epoch
+		state, ifbreak = doepoch(trainer, state, opt, loaders._loader)
+		ifbreak && break
 
-		opt_iter.epoch_dt[] = time() - opt_iter.epoch_time[] - opt_iter.start_time[]
-
-		trigger_callback!(trainer, :EPOCH_END)
+		# fullbatch metric
 		if !iszero(fullbatch_freq)
 			if (opt_iter.epoch[] % fullbatch_freq) == 0
 				evaluate(trainer, state, loaders)
 				state, ifbreak = update_trainer_state!(trainer, state)
+				ifbreak && break
 			end
 		end
-		ifbreak && break
+
+		# callback
+		state, ifbreak = callbacks.cb_epoch(trainer, state, opt_iter.epoch[])
+		if ifbreak
+			if verbose
+				@info "Got signal from epoch callback to stop training at \
+				epoch $(opt_iter.epoch[])."
+			end
+			break
+		end
 	end
 
 	return state
@@ -63,6 +73,7 @@ function doepoch(
 	@unpack opt_args, opt_iter, io_args = trainer
 	@unpack io, verbose, print_batch = io_args
 
+	ifbreak = false
 	show_batch = (length(_loader) > 1) & verbose & print_batch
 
 	if show_batch
@@ -74,25 +85,25 @@ function doepoch(
 		)
 	end
 
-	# state.st = Lux.trainmode(state.st)
 	@set! state.st = Lux.trainmode(state.st)
 
-	for (k, batch) in enumerate(_loader)
-		state, (l, stats) = step(trainer, state, opt, batch)
-		trigger_callback!(trainer, :BATCH_END)
+	for (ibatch, batch) in enumerate(_loader)
+		state, l, stats, ifbreak = step(trainer, state, opt, batch, ibatch)
 
 		if show_batch
 			showvalues = Any[(:LOSS, round(l; sigdigits = 8)),]
 			!isempty(stats) && push!(showvalues, (:INFO, stats))
 			ProgressMeter.next!(prog_meter; showvalues, valuecolor = :magenta)
 		end
+
+		ifbreak && break
 	end
 
 	if show_batch
 		ProgressMeter.finish!(prog_meter)
 	end
 
-	return state
+	return state, ifbreak
 end
 
 function step(
@@ -100,20 +111,30 @@ function step(
 	state::TrainState,
 	::Optimisers.AbstractRule,
 	batch,
+	ibatch::Integer,
 )
-	@unpack lossfun = trainer
 	@unpack NN, p, st, opt_st = state
+	@unpack lossfun, callbacks = trainer
+	epoch = trainer.opt_iter.epoch[]
 
+	# compute gradient
 	loss = Loss(NN, st, batch, lossfun)
 	l, st, stats, g = grad(loss, p)
-	opt_st, p = Optimisers.update!(opt_st, p, g)
+	isnan(l) && throw(ErrorException("Loss in NaN"))
 
-	if isnan(l)
-		throw(ErrorException("Loss in NaN"))
+	# callback
+	state, ifbreak = callbacks.cb_batch(trainer, state, batch, l, g, epoch, ibatch)
+	if ifbreak
+		@info "Got signal from batch callback to stop training at batch \
+		$(ibatch) of epoch $(epoch)."
+		return state, l, stats, true # return w/o applying grads
 	end
 
+	# apply gradient
+	opt_st, p = Optimisers.update!(opt_st, p, g)
 	state = TrainState(NN, p, st, opt_st)
-	return state, (l, stats)
+
+	return state, l, stats, false
 end
 
 #============================================================#
@@ -126,11 +147,11 @@ function train_loop!(
 	loaders::NamedTuple,
 )
 	@unpack __loader = loaders
-	@unpack lossfun, opt_args, opt_iter, io_args, device = trainer
-	@unpack io, verbose, print_epoch, print_config = io_args
-	@unpack fullbatch_freq = opt_args
+	@unpack lossfun, opt_iter, device, callbacks = trainer
+	@unpack nepochs, fullbatch_freq = trainer.opt_args
+	@unpack io, verbose, print_epoch, print_config = trainer.io_args
 
-	ifbreak = false
+	stats_global = nothing
 
 	batch = if __loader isa MLDataDevices.DeviceIterator
 		__loader.iterator.data |> device
@@ -138,34 +159,42 @@ function train_loop!(
 		__loader.data
 	end
 
-	# https://github.com/SciML/Optimization.jl/issues/839
-
     function optloss(optx, optp)
 		l, st, stats = lossfun(state.NN, optx, state.st, batch)
 		@set! state.st = st
+		stats_global = stats
 		l
     end
 
 	function optcb(optx, l)
 		@set! state.p = optx.u
 
-		# if !isempty(stats) & verbose & print_epoch
-		# 	println(io, stats)
-		# end
+		if !isempty(stats_global) & verbose & print_epoch
+			println(io, stats)
+		end
 
 		if !iszero(fullbatch_freq)
 			if (opt_iter.epoch[] % fullbatch_freq) == 0
 				evaluate(trainer, state, loaders)
 				state, ifbreak = update_trainer_state!(trainer, state)
+				ifbreak && return true
 			end
 		end
 
-		opt_iter.epoch[] += 1
-		opt_iter.epoch_dt[] = time() - opt_iter.epoch_time[] - opt_iter.start_time[]
-		opt_iter.epoch_time[] = time() - opt_iter.start_time[]
-		trigger_callback!(trainer, :EPOCH_END)
+		# callback
+		state, ifbreak = callbacks.cb_epoch(trainer, state, opt_iter.epoch[])
+		if ifbreak
+			if verbose
+				@info "Got signal from epoch callback to stop training at \
+				epoch $(opt_iter.epoch[])."
+			end
+			return true
+		end
 
-		return ifbreak
+		# update epoch
+		opt_iter.epoch[] += 1
+
+		return false
 	end
 
     #======================#
@@ -176,11 +205,11 @@ function train_loop!(
     optprob = OptimizationProblem(optfun, state.p)
 
     optsol = solve(optprob, trainer.opt;
-		callback = optcb, maxiters = opt_args.nepochs,
+		callback = optcb, maxiters = nepochs,
 	)
 
-	if verbose & print_config
-		@show optsol.retcode
+	if verbose
+		println(io, "Optimiser retcode: $(optsol.retcode)")
 	end
 
 	return state

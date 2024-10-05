@@ -72,7 +72,9 @@ function Trainer(
 # MISC
     rng::Random.AbstractRNG = Random.default_rng(),
     device = gpu_device(),
-	callbacks = nothing,
+# CALLBACKS
+	cb_epoch = DEFAULT_CB_EPOCH, # (trainer, state, epoch) -> state
+	cb_batch = DEFAULT_CB_BATCH, # (trainer, state, batch, loss, grad, epoch, ibatch) -> state
 # IO-ARGS
     io::IO = stdout,
 	name::String = "model",
@@ -150,8 +152,7 @@ function Trainer(
 	opt_args = (; nepochs, early_stopping, patience, fullbatch_freq, return_last)
 	opt_iter = (;
 		epoch = [0], start_time=[0f0], epoch_time=[0f0], epoch_dt=[0f0],
-		# early stopping
-		count = [0], loss_mincfg = [Inf32],
+		count = [0], loss_mincfg = [Inf32], # early stopping
 	)
 
 	#========= MISC =========#
@@ -167,9 +168,7 @@ function Trainer(
 		_MAE  = Float32[], MAE_  = Float32[],
 	)
 
-	callbacks = (;
-		# batch_start, batch_pre_opt, batch_post_opt,
-	)
+	callbacks = (; cb_epoch, cb_batch,)
 
 	#==========================#
 	data  = (; _data, data_)
@@ -242,14 +241,8 @@ function train_loop!(trainer::Trainer, state::TrainState, loaders::NamedTuple)
 end
 
 #============================================================#
-
-function trigger_callback!(trainer::Trainer, event::Symbol)
-	nothing
-end
-
-function trigger_callback!(trainer::Trainer, state::TrainState, event::Symbol)
-	nothing
-end
+DEFAULT_CB_EPOCH = (trainer, state, epoch) -> (state, false)
+DEFAULT_CB_BATCH = (trainer, state, batch, loss, grad, epoch, ibatch) -> (state, false)
 
 #============================================================#
 function printstatistics(trainer::Trainer, state::TrainState, loaders::NamedTuple)
