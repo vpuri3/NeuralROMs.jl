@@ -1,9 +1,6 @@
 #======================================================#
 # 1D Gaussian Layer
-#======================================================#
-
-export Gaussian1D
-
+#
 # Assumes x ∈ [-1, 1], u ∈ [ 0, 1]
 # What normalization to assume for u?
 # Would [0, 1] work for Gabor (must have -ve vals )
@@ -38,6 +35,10 @@ export Gaussian1D
 # For 2D Gaussian/Gabor, let the sinusodal be in the periodic (angular) direction
 # of the Gaussian. E.g. https://en.wikipedia.org/wiki/Gabor_filter
 # [Gabor Splatting for High-Quality Gigapixel Image Representations]
+
+#======================================================#
+
+export Gaussian1D
 
 @concrete struct Gaussian1D{I<:Integer} <: AbstractLuxLayer
     in_dim::I

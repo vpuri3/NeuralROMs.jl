@@ -10,8 +10,8 @@ rng = Random.default_rng()
 Random.seed!(rng, 199)
 
 datafile  = joinpath(@__DIR__, "data_burg1D", "data.jld2")
-device = Lux.gpu_device()
-device = Lux.cpu_device()
+device = gpu_device()
+device = cpu_device()
 
 data_kws = (; Ix = :, It = :)
 
@@ -28,16 +28,26 @@ data_kws = (; Ix = :, It = :)
 #------------------------------------------------------#
 # Gaussian
 #------------------------------------------------------#
-data_kws = (; Ix = LinRange(1, 8192, 64), It = :)
+# data_kws = (; Ix = LinRange(1, 8192, 64), It = :)
+#
+# train_params  = (; E = 100, Ng = 1, Nf = 1, train_freq = false)
+# evolve_params  = (; scheme = :GalerkinCollocation)
+# # evolve_params = (; timealg = RungeKutta4(), Δt = 1e-4, adaptive = false)
+# # evolve_params = (; timealg = EulerForward(), Δt = 1e-4, adaptive = false)
+#
+# makemodel = makemodelGaussian
+# modelfilename = "model_05.jld2"
+# modeldir  = joinpath(@__DIR__, "dump_gaussian")
+#
+#------------------------------------------------------#
+# Tanh with adaptive training
+#------------------------------------------------------#
+train_params = (;)
+evolve_params = (;)
 
-train_params  = (; E = 100, Ng = 1, Nf = 1, train_freq = false)
-evolve_params  = (; scheme = :GalerkinCollocation)
-# evolve_params = (; timealg = RungeKutta4(), Δt = 1e-4, adaptive = false)
-# evolve_params = (; timealg = EulerForward(), Δt = 1e-4, adaptive = false)
-
-makemodel = makemodelGaussian
-modelfilename = "model_05.jld2"
-modeldir  = joinpath(@__DIR__, "dump_gaussian")
+makemodel = makemodelKernel
+modelfilename = "model.jld2"
+modeldir  = joinpath(@__DIR__, "dump")
 
 #------------------------------------------------------#
 # Tanh kernels

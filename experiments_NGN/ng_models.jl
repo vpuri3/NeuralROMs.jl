@@ -1,5 +1,93 @@
 #
 #======================================================#
+# Any Kernelized implementation
+#======================================================#
+function makemodelKernel(
+    data::NTuple{2,Any},
+    train_params::NamedTuple,
+    periods,
+    metadata::NamedTuple,
+    modeldir::String;
+    rng::Random.AbstractRNG = Random.default_rng(),
+    verbose::Bool = true,
+    device = Lux.gpu_device()
+)
+	periodic = true
+    in_dim  = size(data[1], 1)
+    out_dim = size(data[2], 1)
+
+    #--------------------------------------------#
+    # get train params
+    #--------------------------------------------#
+
+    n = haskey(train_params, :n) ? train_params.N : 1
+    N = haskey(train_params, :N) ? train_params.N : 10
+    E = haskey(train_params, :E) ? train_params.E : 200
+    T = haskey(train_params, :T) ? train_params.T : Float32
+
+    #-------------------------------------------#
+	# set up training
+    #-------------------------------------------#
+	NN = TK1D(n, N; T)
+
+	_batchsize = 32
+    train_args = (; E, _batchsize)
+	metadata   = (; metadata..., train_args)
+
+	opt = Optimisers.Adam(1f-4)
+
+	function cb_epoch(trainer, state, epoch)
+		# learning rate
+		state, false
+	end
+
+	function cb_batch(trainer, state)
+		# prune, clone, split, move
+		state, false
+	end
+
+	trainer = Trainer(
+		NN, data; nepochs = E, _batchsize, opt, make_ca = true,
+		print_batch = false, print_config = false, fullbatch_freq = 10,
+		# cb_batch, cb_epoch,
+	)
+
+	state, ST = train!(trainer)
+
+    # #-------------------------------------------#
+    # # Training with progressive splitting
+    # #-------------------------------------------#
+    # p, st = Lux.setup(rng, NN)
+    # p = ComponentArray(p) .|> T
+    # ST = nothing
+    #
+    # for isplit in 0:Nsplits
+    #     display(NN)
+    #     dir = if iszero(Nsplits)
+    #         modeldir
+    #     else
+    #         joinpath(modeldir, "split$(isplit)")
+    #     end
+    #
+    #     @time (NN, p, st), ST = train_model(
+    #         NN, data; rng, p, st, _batchsize, batchsize_,
+    #         opts, nepochs, schedules, early_stoppings,
+    #         device, dir, metadata, lossfun,
+    #     )
+    #
+    #     @show p
+    #     @show length(p)
+    #     plot_training!(ST...) |> display
+    #
+    #     if isplit != Nsplits
+    #         NN, p, st = split_TanhKernel1D(NN, p, st; debug = true)
+    #     end
+    # end
+
+    (state.NN, state.p, state.st), ST, metadata
+end
+
+#======================================================#
 # Tanh kernels
 #======================================================#
 function makemodelTanh(

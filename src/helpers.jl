@@ -108,7 +108,7 @@ function eval_model(
     p = p |> device
     model = model |> device
 
-    if device isa Lux.LuxCUDADevice
+    if device isa CUDADevice
         loader = CuIterator(loader)
     end
 

@@ -29,8 +29,7 @@ end
 
 #======================================================#
 # 1D Tanh kernel layer
-#======================================================#
-
+#
 # Q. parameterize (x̄, w) or (x0, x1) directly?
 # - x̄ ,  w: compact support, fixed orientation 
 # - x0, x1: orientation switches if x0 < x1. Why is that a problem?
@@ -46,6 +45,8 @@ end
 #
 # - parameterize x0, x1 and force them to be in [-1, 1]
 # - try gradient boosting type approach
+
+#======================================================#
 
 export TanhKernel1D
 
@@ -123,9 +124,6 @@ function (l::TanhKernel1D)(x::AbstractMatrix{T}, ps, st::NamedTuple) where{T}
     x0 = @. ps.x̄ - ps.w
     x1 = @. ps.x̄ + ps.w
 
-    # if l.periodic
-    # end
-
     # make kernels
     y0 = @. tanh_fast(ps.ω0 * (x - x0))
     y1 = @. tanh_fast(ps.ω1 * (x - x1))
@@ -140,6 +138,7 @@ function (l::TanhKernel1D)(x::AbstractMatrix{T}, ps, st::NamedTuple) where{T}
     y, st
 end
 
+#======================================================#
 export split_TanhKernel1D
 
 function split_TanhKernel1D(
@@ -193,6 +192,7 @@ function split_TanhKernel1D(
     NN_, p_, st_
 end
 
+#======================================================#
 export merge_TanhKernel1D
 
 """

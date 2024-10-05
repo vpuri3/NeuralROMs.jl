@@ -98,6 +98,7 @@ export
     PermutedBatchNorm, PermuteLayer, SplitRows
 
 include("layers/mfn.jl")
+include("layers/kernels.jl")
 include("layers/gaussian.jl")
 include("layers/experimental.jl")
 
