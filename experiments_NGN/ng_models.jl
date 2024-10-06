@@ -21,70 +21,134 @@ function makemodelKernel(
     #--------------------------------------------#
 
     n = haskey(train_params, :n) ? train_params.N : 1
-    N = haskey(train_params, :N) ? train_params.N : 10
-    E = haskey(train_params, :E) ? train_params.E : 200
+    N = haskey(train_params, :N) ? train_params.N : 5
+    E = haskey(train_params, :E) ? train_params.E : 4000
     T = haskey(train_params, :T) ? train_params.T : Float32
 
     #-------------------------------------------#
 	# set up training
     #-------------------------------------------#
+
 	NN = TK1D(n, N; T)
 
+	# _batchsize = 8
 	_batchsize = 32
-    train_args = (; E, _batchsize)
-	metadata   = (; metadata..., train_args)
+	# _batchsize = numobs(data)
 
 	opt = Optimisers.Adam(1f-4)
 
-	function cb_epoch(trainer, state, epoch)
-		# learning rate
+	# heuristics
+	cb_start = 200
+	cb_interval = 200 # Int(E // 1)
+	cb_end = 3000
+
+	cmin = 1f-4
+	emax = 1f-4
+
+	function per_point_error(NN, p, st, data)
+		# per point L1 loss [1, Nx]
+		x, yt = data
+		yp = NN(x, p, st)[1]
+		ex = yp - yt
+
+		Nx = size(x, 2)
+
+		# contribution of each kernal at every point [Nk, Nx]
+		yk = NeuralROMs.evaluate_kernels(NN, p, st, x)
+		yk = vcat(yk...)
+
+		# per kernel error [Nk]
+		E = sum(abs, (yk .* ex); dims = 2) / Nx |> vec
+	end
+
+	function cb_epoch(trainer, state, epoch) # loaders
+		@unpack NN, p, st, opt_st = state
+		@unpack fullbatch_freq = trainer.opt_args
+
+		if ((epoch % cb_interval) == 0) & (epoch ≥ cb_start) & (epoch ≤ cb_end)
+			#======================#
+			# prune if
+			#======================#
+			# |c| < cmin
+			# expanse (x̄ ± w) out of domain
+
+			# mask_rm = @. st.mask * (abs(p.c) < cmin)
+			# println("Pruning $(sum(mask_rm)) kernels.")
+			# NN, p, st = NeuralROMs.prune_kernels(NN, p, st, mask_rm)
+
+			#======================#
+			# split based on pointwise error metric
+			#======================#
+			# E = per_point_error(NN, p, st, trainer.data._data)
+			# @show E
+			#
+			# mask_split = 0
+			# idx_split = findall(mask_split)
+
+			# split
+			NN, p, st, id1 = NeuralROMs.split_kernels(NN, p, st, NN.n:NN.n)
+
+			#======================#
+			# additional kernels in problem areas
+			#======================#
+
+			#======================#
+			# print
+			#======================#
+			println("Number of Kernels: $(NN.n)")
+		end
+
+		if (epoch % fullbatch_freq) == 0
+		end
+
+		# return
+		state = NeuralROMs.TrainState(NN, p, st, opt_st)
 		state, false
 	end
 
-	function cb_batch(trainer, state)
-		# prune, clone, split, move
+	function cb_batch(trainer, state, batch, loss, grad, epoch, ibatch)
 		state, false
 	end
 
-	trainer = Trainer(
+	@time trainer = Trainer(
 		NN, data; nepochs = E, _batchsize, opt, make_ca = true,
-		print_batch = false, print_config = false, fullbatch_freq = 10,
-		# cb_batch, cb_epoch,
+		print_stats = false, print_batch = false, print_config = false,
+		fullbatch_freq = 50, cb_batch, cb_epoch,
+		device,
 	)
 
 	state, ST = train!(trainer)
 
-    # #-------------------------------------------#
-    # # Training with progressive splitting
-    # #-------------------------------------------#
-    # p, st = Lux.setup(rng, NN)
-    # p = ComponentArray(p) .|> T
-    # ST = nothing
-    #
-    # for isplit in 0:Nsplits
-    #     display(NN)
-    #     dir = if iszero(Nsplits)
-    #         modeldir
-    #     else
-    #         joinpath(modeldir, "split$(isplit)")
-    #     end
-    #
-    #     @time (NN, p, st), ST = train_model(
-    #         NN, data; rng, p, st, _batchsize, batchsize_,
-    #         opts, nepochs, schedules, early_stoppings,
-    #         device, dir, metadata, lossfun,
-    #     )
-    #
-    #     @show p
-    #     @show length(p)
-    #     plot_training!(ST...) |> display
-    #
-    #     if isplit != Nsplits
-    #         NN, p, st = split_TanhKernel1D(NN, p, st; debug = true)
-    #     end
-    # end
+	#----------------------------------#
+	# analyssi
+	#----------------------------------#
+	NN = state.NN
+	p  = state.p
+	st = state.st
 
-    (state.NN, state.p, state.st), ST, metadata
+	x, y = data
+
+	yy = NN(data[1], p, st)[1]
+	ys = NeuralROMs.evaluate_kernels(NN, p, st, data[1])
+	ys = vcat(ys...)'
+
+	plt = plot(; xlabel = "x", ylabel = "y", legend = false)
+	plot!(plt, vec(x), ys; c = :black, w = 4)
+	plot!(plt, vec(x), vec(yy); c = :red  , w = 4)
+
+	imagefile = joinpath(modeldir, "img.png")
+	display(plt)
+	png(plt, imagefile)
+
+	save_trainer(trainer, modeldir; metadata)
+
+	#----------------------------------#
+	# return
+	#----------------------------------#
+    train_args = (; E, _batchsize)
+	metadata   = (; metadata..., train_args)
+
+    (NN, p, st), ST, metadata
 end
 
 #======================================================#

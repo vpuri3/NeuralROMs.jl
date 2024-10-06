@@ -1,5 +1,6 @@
 #
 #======================================================#
+using SciMLBase: FunctionArgumentsError
 # Tanh Kernels 1D
 #
 # Q. parameterize (x̄, w) or (x0, x1) directly?
@@ -68,7 +69,8 @@ function Lux.initialparameters(rng::Random.AbstractRNG, l::TK1D)
     (; x̄, w, ω0, ω1, b, c)
 end
 
-function (l::TK1D)(x::AbstractMatrix{T}, ps, st::NamedTuple) where{T}
+#======================================================#
+function (l::TK1D)(x::AbstractMatrix, ps, st::NamedTuple)
 	mask = st.mask
 	x̄  = ps.x̄[mask]
 	w  = ps.w[mask]
@@ -79,7 +81,6 @@ function (l::TK1D)(x::AbstractMatrix{T}, ps, st::NamedTuple) where{T}
 
 	tanh_kernel1d(x, x̄, w, ω0, ω1, b, c, st)
 end
-#======================================================#
 
 function tanh_kernel1d(x, x̄, w, ω0, ω1, b, c, st)
 	# kernal expanse
@@ -100,6 +101,22 @@ function tanh_kernel1d(x, x̄, w, ω0, ω1, b, c, st)
     y, st
 end
 
+#======================================================#
+# evaluate kernels separately
+
+function evaluate_kernels(NN::TK1D, p, st, x::AbstractMatrix)
+	ys = []
+	for k in 1:NN.n
+		NN_ = @set NN.n = 1
+		st_ = @set st.mask = zeros(Bool, NN.N)
+		st_.mask[k] = true
+		y = NN_(x, p, st_)[1]
+		push!(ys, y)
+	end
+	ys
+end
+
+#======================================================#
 function _movetoend(x::AbstractVector, mask::AbstractVector{Bool})
 	@assert length(mask) == size(x, 1)
 	return vcat(x[.!mask], x[mask])
@@ -132,6 +149,27 @@ function prune_kernels(NN::TK1D, p, st, mask::AbstractVector{Bool})
 	# end
 
 	return NN, p, st
+end
+
+function activate_kernels(NN::TK1D, p, st, n::Integer)
+	if (NN.n + n) > NN.N
+		n = NN.N - NN.n
+	end
+	id1 = (NN.n+1):(NN.n+n)
+
+	@assert all(iszero, st.mask[id1]) "$(id1), $(st.mask[id1])"
+
+	# update NN
+	@set! NN.n = NN.n + n
+
+	# update mask
+	st = deepcopy(st)
+	st.mask[id1] .= true
+
+	# update params
+	p = deepcopy(p)
+
+	return NN, p, st, id1
 end
 
 function clone_kernels(NN::TK1D, p, st, id0)

@@ -392,31 +392,22 @@ function save_trainer(
 	metadata::NamedTuple = (;),
 	verbose::Union{Bool, Nothing} = nothing,
 )
-	@unpack state, STATS = trainer
+	@unpack state, STATS, io_args = trainer
 
-	name = isempty(name) ? trainer.name : name
-	if isnothing(verbose)
-		verbose = trainer.verbose
-	end
+	name    = isempty(name)      ? io_args.name    : name
+	verbose = isnothing(verbose) ? io_args.verbose : verbose
 
-	statsfile = joinpath(dir, "stats_$(name).txt")
 	imagefile = joinpath(dir, "image_$(name).png")
 	modelfile = joinpath(dir, "model_$(name).jld2")
 	chkptfile = joinpath(dir, "chkpt_$(name).jld2")
+	statsfile = joinpath(dir, "stats_$(name).txt")
 
 	mkpath(dir)
-
-	# STATISTICS
-	touch(statsfile)
-	statsio = open(statsfile, "a")
-	printstatistics(trainer, statsio, true)
-	close(statsio)
-	verbose && @info "Saving statistics at $(statsfile)"
 
 	# IMAGE
 	plt = plot_training!(deepcopy(trainer.STATS)...)
     png(plt, imagefile)
-    trainer.verbose && display(plt)
+    verbose && display(plt)
 	verbose && @info "Saving plot at $(imagefile)"
 
 	# MODEL
@@ -425,9 +416,17 @@ function save_trainer(
 	verbose && @info "Saving model at $(modelfile)"
 
 	# CHECKPOINT
-	opt_st = opt_st |> cpu_device()
+	opt_st = state.opt_st
     jldsave(chkptfile; opt_st, STATS)
 	verbose && @info "Saving model at $(chkptfile)"
+
+	# STATISTICS
+	touch(statsfile)
+	statsio = open(statsfile, "a")
+	loaders = make_dataloaders(trainer) |> cpu_device()
+	printstatistics(trainer, trainer.state, loaders, statsio)
+	close(statsio)
+	verbose && @info "Saving statistics at $(statsfile)"
 
 	return
 end

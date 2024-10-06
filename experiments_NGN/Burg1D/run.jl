@@ -43,10 +43,10 @@ data_kws = (; Ix = :, It = :)
 # Tanh with adaptive training
 #------------------------------------------------------#
 train_params = (;)
-evolve_params = (;)
+evolve_params  = (; scheme = :GalerkinCollocation,)
 
 makemodel = makemodelKernel
-modelfilename = "model.jld2"
+modelfilename = "model_model.jld2"
 modeldir  = joinpath(@__DIR__, "dump")
 
 #------------------------------------------------------#
@@ -103,8 +103,8 @@ for case in (2,)
     prob = BurgersViscous1D(1f-4)
     modelfile = joinpath(modeldir, "project$(case)", modelfilename)
 
-    global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
-    # (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
+    # global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
+    (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
 
     # global XD = (XD..., Xd)
     # global TD = (TD..., Td)
@@ -113,31 +113,5 @@ for case in (2,)
     # global PS = (PS..., ps)
     # sleep(2)
 end
-
-#======================================================#
-#
-# ARCHITECTURE
-# - Check out multiplicative feature networks.
-#   Maybe they can speed-up SDF type problems.
-#
-# GAUSSIAN REFINEMENT/CULLING
-# - 
-#
-# TANH KERNELS
-# - intead of/ along with a global shift, have a localized shift by forming
-#   a plateau with tanh.
-#   The plateau can degrade to 0, or produce sharper features
-#
-#
-# HYPER-REDUCTION
-# - Each Gaussian needs ~5 points to be evolved properly. This should be
-#   helpful in hyper-reduction. We should do local sampling around each
-#   Gaussian. That is: uniformly pick 5 x ∈ [x̄ - 2σ, x̄ + 2σ]
-#
-# LITERATURE
-# - Check out Gaussian process literature
-#
-# NEW CONTRIB
-# - Make parameterization probabilistic. Then you get UQ for free.
 #======================================================#
 nothing

@@ -5,7 +5,7 @@ using LinearAlgebra, ComponentArrays              # arrays
 using Random, Lux, MLUtils, ParameterSchedulers   # ML
 using OptimizationOptimJL, OptimizationOptimisers # opt
 using LinearSolve, NonlinearSolve, LineSearches   # num
-using Plots, JLD2, Setfield, LaTeXStrings         # vis / save
+using Plots, JLD2, UnPack, Setfield, LaTeXStrings # vis / save
 using CUDA, LuxCUDA, KernelAbstractions           # GPU
 using BenchmarkTools
 import Logging
@@ -30,7 +30,7 @@ function ngProject(
     data_kws = (; Ix = :, It = :,),
     verbose::Bool = true,
     makeplot::Bool = true,
-    device = Lux.gpu_device(),
+    device = gpu_device(),
 )
 
     projectdir = joinpath(modeldir, "project$(case)")
@@ -94,10 +94,12 @@ function ngProject(
             println("[ngProject] out_dim: $out_dim \t Error $(er).")
 
             if in_dim == 1
+				imagefile = joinpath(projectdir, "plt$od.png")
                 plt = plot(; xlabel = "x", ylabel = "y", legend = false)
                 plot!(plt, vec(Xdata), ud; c = :black, w = 4)
                 plot!(plt, vec(Xdata), up; c = :red  , w = 2)
-                png(plt, joinpath(projectdir, "plt$od.png"))
+                png(plt, imagefile)
+				@info "saving plot at $(imagefile)"
             elseif in_dim == 2
             end
         end
@@ -119,7 +121,7 @@ function ngEvolve(
 
     verbose::Bool = true,
     benchmark::Bool = false,
-    device = Lux.gpu_device(),
+    device = gpu_device(),
 )
     mkpath(modeldir)
 
@@ -193,7 +195,7 @@ function ngEvolve(
     scheme = if scheme ∈ (:GalerkinProjection, :LSPG)
         autodiff = AutoForwardDiff()
         linsolve = QRFactorization(ColumnNorm())
-        linesearch = LineSearch()
+        linesearch = LineSearchesJL()
         nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
         nlsmaxiters = 20
 
@@ -248,22 +250,24 @@ function ngEvolve(
         tspan = extrema(data[3])
         saveat = data[3]
 
-        # dt = 1f-2
-        # odecb = begin
-        #     function affect!(int)
-        #         if int.iter % 1 == 0
-        #             println("[$(int.iter)] \t Time $(round(int.t; digits=8))s")
-        #         end
-        #     end
-        #     DiscreteCallback((u,t,int) -> true, affect!, save_positions=(false,false))
-        # end
+        dt = 1f-2
+        callback = begin
+            function affect!(int)
+                if int.iter % 1 == 0
+                    println("[$(int.iter)] \t Time $(round(int.t; digits=8))s")
+                end
+            end
+            DiscreteCallback((u,t,int) -> true, affect!, save_positions=(false,false))
+        end
+
+		@show timealg
 
         odefunc = ODEFunction{iip}(scheme)# ; jac)
         odeprob = ODEProblem(odefunc, getdata(p0), tspan; saveat)
-        integrator = SciMLBase.init(odeprob, timealg)#; dt, callback = odecb)
+        integrator = SciMLBase.init(odeprob, timealg; dt, callback)
 
         if benchmark
-            if device isa LuxDeviceUtils.AbstractLuxGPUDevice
+            if device isa MLDataDevices.AbstractGPUDevice
                 timeROM  = @belapsed CUDA.@sync $solve!($integrator)
                 statsROM = CUDA.@timed solve!(integrator)
             else
@@ -310,7 +314,7 @@ function ngEvolve(
             timeROM = @belapsed CUDA.@sync $evolve_model($args...; $kwargs...)
         end
     
-        statsROM = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
+        statsROM = if device isa MLDataDevices.AbstractGPUDevice
             CUDA.@timed _, ps, _ = evolve_model(args...; kwargs...)
         else
             @timed _, ps, _ = evolve_model(args...; kwargs...)
@@ -350,6 +354,7 @@ function ngEvolve(
     # save files
     filename = joinpath(modeldir, "evolve$(case).jld2")
     jldsave(filename; Xdata, Tdata, Udata = Ud, Upred = Up, Ppred = ps)
+	@info "saving file $(filename)."
     
     # return
     (Xdata, Tdata, Ud, Up, ps), statsROM

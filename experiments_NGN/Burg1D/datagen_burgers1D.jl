@@ -2,7 +2,7 @@
 using FourierSpaces
 using NeuralROMs
 
-using CUDA, LuxCUDA, LuxDeviceUtils
+using CUDA, LuxCUDA, MLDataDevices
 using OrdinaryDiffEq, LinearSolve, LinearAlgebra, Random
 using Plots, JLD2
 using BenchmarkTools
@@ -27,6 +27,7 @@ function uic(x, mu)
     mu = reshape(mu, 1, :)
 
     u = @. 1 + mu/2 * (sin(2_pi * x - _pi/2) + 1)
+    u[x .< 0f0, :] .= 1
     u[x .> 1f0, :] .= 1
 
     reshape(u, length(x), length(mu))
@@ -42,7 +43,7 @@ function burgers_inviscid(N, mu, tspan;
 )
 
     """ space discr """
-    domain = IntervalDomain(0, 2; periodic = true)
+    domain = IntervalDomain(-0.25, 2; periodic = true)
     V = FourierSpace(N; domain) |> Float32
     discr = Collocation()
 
