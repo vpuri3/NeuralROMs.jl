@@ -45,7 +45,6 @@ end
 #
 # - parameterize x0, x1 and force them to be in [-1, 1]
 # - try gradient boosting type approach
-
 #======================================================#
 
 export TanhKernel1D

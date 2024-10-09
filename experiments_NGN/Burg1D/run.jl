@@ -66,16 +66,6 @@ modeldir  = joinpath(@__DIR__, "dump")
 # modeldir  = joinpath(@__DIR__, "dump_tanh_orig")
 
 #------------------------------------------------------#
-# Tanh kernels (with boosting)
-#------------------------------------------------------#
-# train_params  = (; N = 1, Nsplits = 0, Nboosts = 5)
-# evolve_params  = (; scheme = :GalerkinCollocation)
-#
-# makemodel = makemodelTanh
-# modelfilename = joinpath("boost$(train_params.Nboosts)","model_05.jld2")
-# modeldir  = joinpath(@__DIR__, "dump_tanh_boost")
-
-#------------------------------------------------------#
 # Tanh kernels (with splitting)
 #------------------------------------------------------#
 # IX = Colon()
@@ -103,8 +93,8 @@ for case in (2,)
     prob = BurgersViscous1D(1f-4)
     modelfile = joinpath(modeldir, "project$(case)", modelfilename)
 
-    # global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
-    (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
+    global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
+    # (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
 
     # global XD = (XD..., Xd)
     # global TD = (TD..., Td)

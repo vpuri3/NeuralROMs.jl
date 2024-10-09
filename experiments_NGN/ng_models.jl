@@ -22,25 +22,23 @@ function makemodelKernel(
 
     n = haskey(train_params, :n) ? train_params.N : 1
     N = haskey(train_params, :N) ? train_params.N : 5
-    E = haskey(train_params, :E) ? train_params.E : 4000
+    E = haskey(train_params, :E) ? train_params.E : 5000
     T = haskey(train_params, :T) ? train_params.T : Float32
+
+	NN = TK1D(n, N; T)
 
     #-------------------------------------------#
 	# set up training
     #-------------------------------------------#
 
-	NN = TK1D(n, N; T)
-
-	# _batchsize = 8
 	_batchsize = 32
-	# _batchsize = numobs(data)
-
 	opt = Optimisers.Adam(1f-4)
+	# sch = SinExp(1)
 
 	# heuristics
-	cb_start = 200
-	cb_interval = 200 # Int(E // 1)
-	cb_end = 3000
+	cb_start = 500
+	cb_interval = 300 # Int(E // 1)
+	cb_end = 4000
 
 	cmin = 1f-4
 	emax = 1f-4
@@ -93,8 +91,6 @@ function makemodelKernel(
 			#======================#
 
 			#======================#
-			# print
-			#======================#
 			println("Number of Kernels: $(NN.n)")
 		end
 
@@ -113,7 +109,7 @@ function makemodelKernel(
 	@time trainer = Trainer(
 		NN, data; nepochs = E, _batchsize, opt, make_ca = true,
 		print_stats = false, print_batch = false, print_config = false,
-		fullbatch_freq = 50, cb_batch, cb_epoch,
+		fullbatch_freq = 100, cb_batch, cb_epoch,
 		device,
 	)
 

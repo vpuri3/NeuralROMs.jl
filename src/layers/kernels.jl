@@ -1,24 +1,15 @@
 #
 #======================================================#
-using SciMLBase: FunctionArgumentsError
 # Tanh Kernels 1D
 #
-# Q. parameterize (x̄, w) or (x0, x1) directly?
-# - x̄ ,  w: compact support, fixed orientation 
-# - x0, x1: orientation switches if x0 < x1. Why is that a problem?
-#   potentially gives more flexibility with gradient descent ??
-#
-# Q. Adding Tanh kernel with x1=x0 (resultant zero func) and fitting
+#  - Adding Tanh kernel with x1=x0 (resultant zero func) and fitting
 #    with GD as a form of mesh refinement.
 #    Test this idea out with initializing w as [1, 0, ..., 0]
 #    and seeing if the last zeros change.
 #    How does it compare with setting c = [1, 0, ..., 0]
 #
-# Q. We can also switch between the two during training/ online solve
+#  - We can also switch between the two during training/ online solve
 #
-# - parameterize x0, x1 and force them to be in [-1, 1]
-# - try gradient boosting type approach
-
 #======================================================#
 export TK1D
 
@@ -50,11 +41,13 @@ function Lux.initialparameters(rng::Random.AbstractRNG, l::TK1D)
 	middle = (left + right) / 2
 	width  = (right - left) / 2
 
-	# initialize kernels to cover the entire domain ± 10% noise
-	# if this doesn't work. try splitting em up in the domain later
-	# but i think global initialization + splitting during training should work
-	x̄ = randn(rng, l.T, l.N) * (width / 10) .+ middle
-	w = randn(rng, l.T, l.N) * (width / 10) .+ width
+	# cover the entire domain ± 20% noise
+	x̄ = randn(rng, l.T, l.N) * (width / 5) .+ middle
+	w = randn(rng, l.T, l.N) * (width / 5) .+ width
+
+	# # split the first n kernels around ± 20% noise
+	# x̄[1:l.n]  = LinRange(left, right, l.n + 2)[2:end-1]
+	# w[1:l.n] .= width / (l.n + 1)
 
 	# steepness ω ∈ [5w, 15w]
 	ω0 = rand(rng, l.T, l.N) * (width * 10) .+ (width * 5)
