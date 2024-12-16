@@ -11,8 +11,7 @@ Random.seed!(rng, 199)
 
 datafile  = joinpath(@__DIR__, "data_burg1D", "data.jld2")
 device = gpu_device()
-device = cpu_device()
-
+# device = cpu_device()
 data_kws = (; Ix = :, It = :)
 
 #------------------------------------------------------#
