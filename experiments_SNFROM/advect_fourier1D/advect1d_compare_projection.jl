@@ -137,7 +137,7 @@ function plot_compare_advect1d_l()
 
     fig = Makie.Figure(; size = (600, 400), backgroundcolor = :white, grid = :off)
     ax  = Makie.Axis( fig[1,1]; xlabel, ylabel, xlabelsize, ylabelsize,
-        # xscale = log2,
+        # xscale = log10,
         yscale = log10,
     )
 

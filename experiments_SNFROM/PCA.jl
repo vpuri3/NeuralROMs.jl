@@ -19,7 +19,6 @@ begin
 end
 
 #======================================================#
-
 function pca_basis(
     R::Integer,
     u::AbstractMatrix;
