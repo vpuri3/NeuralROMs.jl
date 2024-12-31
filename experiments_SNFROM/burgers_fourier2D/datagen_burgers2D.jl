@@ -9,7 +9,7 @@ let
     !(tstpath in LOAD_PATH) && push!(LOAD_PATH, tstpath)
 end
 
-using CUDA, LuxCUDA, LuxDeviceUtils, ComponentArrays
+using CUDA, LuxCUDA, MLDataDevices, ComponentArrays
 using OrdinaryDiffEq, LinearSolve, LinearAlgebra, Random
 using Plots, JLD2, LaTeXStrings
 

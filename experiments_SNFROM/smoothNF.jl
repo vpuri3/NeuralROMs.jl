@@ -550,7 +550,7 @@ function evolve_SNF(
         timeROM = @belapsed CUDA.@sync $evolve_model($args...; $kwargs...)
     end
 
-    statsROM = if device isa LuxDeviceUtils.AbstractLuxGPUDevice
+    statsROM = if device isa MLDataDevices.AbstractGPUDevice
         CUDA.@timed _, ps, _ = evolve_model(args...; kwargs...)
     else
         @timed _, ps, _ = evolve_model(args...; kwargs...)

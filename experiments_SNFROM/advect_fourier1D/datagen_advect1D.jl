@@ -3,13 +3,13 @@ using FourierSpaces
 using NeuralROMs
 
 let
-    # add test dependencies to env stack
-    pkgpath = dirname(dirname(pathof(NeuralROMs)))
-    tstpath = joinpath(pkgpath, "test")
-    !(tstpath in LOAD_PATH) && push!(LOAD_PATH, tstpath)
+	# add test dependencies to env stack
+	pkgpath = dirname(dirname(pathof(NeuralROMs)))
+	tstpath = joinpath(pkgpath, "test")
+	!(tstpath in LOAD_PATH) && push!(LOAD_PATH, tstpath)
 end
 
-using CUDA, LuxCUDA, LuxDeviceUtils
+using CUDA, LuxCUDA, MLDataDevices
 using OrdinaryDiffEq, LinearSolve, LinearAlgebra
 using Plots, JLD2
 

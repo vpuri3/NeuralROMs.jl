@@ -1,20 +1,88 @@
 #
 using NeuralROMs
+using MLDataDevices
 using LinearAlgebra, Plots, LaTeXStrings
 using JLD2, HDF5
 
 import CairoMakie
 import CairoMakie: Makie
 
-joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "PCA.jl")      |> include
-joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "convAE.jl")   |> include
-joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "convINR.jl")  |> include
-joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "smoothNF.jl") |> include
-joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "cases.jl")    |> include
+BASEDIR = joinpath(pkgdir(NeuralROMs), "experiments_SNFROM",)
 
-# joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "autodecode.jl")  |> include
+joinpath(BASEDIR, "PCA.jl")      |> include
+joinpath(BASEDIR, "convAE.jl")   |> include
+joinpath(BASEDIR, "convINR.jl")  |> include
+joinpath(BASEDIR, "smoothNF.jl") |> include
+joinpath(BASEDIR, "cases.jl")    |> include
+
+# joinpath(BASEDIR, "autodecode.jl")  |> include
+
+CASES = (
+	advection1D = (; name = "Advection 1D", dim = 1, dir = "advect_fourier1D" , datadir = "data_advect"   , datafile = "data.jld2"),
+	advection2D = (; name = "Advection 2D", dim = 2, dir = "advect_fourier2D" , datadir = "data_advect"   , datafile = "data.jld2"),
+	burgers1D   = (; name = "Burgers 1D"  , dim = 1, dir = "burgers_fourier1D", datadir = "data_burg1D"   , datafile = "data.jld2"),
+	burgers2D   = (; name = "Burgers 2D"  , dim = 2, dir = "burgers_fourier2D", datadir = "data_burgers2D", datafile = "data.jld2"),
+	ks1D        = (; name = "KS 1D"       , dim = 1, dir = "ks_fourier1D"     , datadir = "data_ks"       , datafile = "data.jld2"),
+)
 
 #======================================================#
+# SVD Compression
+#======================================================#
+
+function compare_compression(; device = gpu_device(), compute_svd::Bool = false)
+
+	svdfile = joinpath(BASEDIR, "svd.jld2")
+	imgfile = joinpath(BASEDIR, "svd.png")
+
+	if isfile(svdfile) & !(compute_svd)
+		singular_values = jldopen(svdfile)["singular_values"]
+	else
+		singular_values = (;)
+		for (case, data) in pairs(CASES)
+			casefile = joinpath(BASEDIR, data.dir, data.datadir, data.datafile)
+
+			_, _, _, u, _ = loaddata(casefile, verbose = false)
+			u = reshape(u, size(u, 1) * size(u, 2), :)
+			S = svd(u).S
+
+			singular_values = merge(singular_values, NamedTuple{(case,)}((S,)))
+		end
+
+		jldsave(svdfile; singular_values,)
+	end
+
+	fig = Makie.Figure(; size = (600, 400), backgroundcolor = :white, grid = :off)
+	ax  = Makie.Axis(fig[1,1];
+		xlabel = L"Number of POD modes$$",
+		ylabel = L"1 - Energy content$$",
+		xscale = log2, yscale = log10,
+		xlabelsize = 16, ylabelsize = 16,
+	)
+
+	for (case, data) in pairs(CASES)
+		S  = getproperty(singular_values, case)
+		S2 = S .^ 2
+		E  = S2 / sum(S2)
+		EC = 1 .- cumsum(E)
+
+		Makie.lines!(ax, EC; label = LaTeXString(data.name))
+
+	end
+
+	Makie.axislegend(ax)
+	Makie.xlims!(ax, 1e+0, 1e+3)
+	Makie.ylims!(ax, 1e-8, 1e-0)
+	save(imgfile, fig)
+
+	return
+end
+
+compare_compression()
+
+#======================================================#
+# Training functions
+#======================================================#
+#
 function get_makedata_kws(train_params)
     if haskey(train_params, :makedata_kws)
         train_params.makedata_kws

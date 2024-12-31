@@ -10,7 +10,7 @@ let
     !(tstpath in LOAD_PATH) && push!(LOAD_PATH, tstpath)
 end
 
-using CUDA, LuxCUDA, LuxDeviceUtils
+using CUDA, LuxCUDA, MLDataDevices
 using OrdinaryDiffEq, LinearSolve, LinearAlgebra
 using Plots, JLD2, Setfield
 
