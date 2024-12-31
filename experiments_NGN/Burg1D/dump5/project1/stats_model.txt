@@ -1,0 +1,12 @@
+#----------------------#
+TRAIN DATA STATISTICS
+#----------------------#
+MSE (mean SQR error): 1.6820161e-6
+RMSE (Root MSE):      0.0012969256
+MAE (mean ABS error): 0.00081243897
+maxAE (max ABS error) 0.0066935334
+mean RELATIVE error:  4.1200807e-6
+max  RELATIVE error:  0.01639574
+R² score:             0.99998567
+Lipschitz bound:      1.0
+#----------------------#

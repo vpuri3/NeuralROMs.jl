@@ -22,8 +22,9 @@ export TK1D
 end
 
 function TK1D(n, N; domain = (-1f0, 1f0), periodic = true, T = Float32)
-    @assert length(domain) == 2
 	@assert 0 ≤ n ≤ N
+    @assert length(domain) == 2
+    @assert T ∈ (Float32, Float64)
     TK1D(n, N, T.(domain), periodic, T)
 end
 
@@ -37,32 +38,31 @@ function Lux.initialstates(::Random.AbstractRNG, l::TK1D)
 end
 
 function Lux.initialparameters(rng::Random.AbstractRNG, l::TK1D)
+	@unpack n, N, T = l
 	left, right = l.domain
-	middle = (left + right) / 2
-	width  = (right - left) / 2
+	middle = (left + right) / T(2)
+	width  = (right - left) / T(2)
 
-	# cover the entire domain ± 20% noise
-	x̄ = randn(rng, l.T, l.N) * (width / 5) .+ middle
-	w = randn(rng, l.T, l.N) * (width / 5) .+ width
+	# split the first n kernels around ± 20% noise
+	x̄ = randn(rng, T, N) * (width / T(5))
+	w = randn(rng, T, N) * (width / T(5))
 
-	# # split the first n kernels around ± 20% noise
-	# x̄[1:l.n]  = LinRange(left, right, l.n + 2)[2:end-1]
-	# w[1:l.n] .= width / (l.n + 1)
+	x̄[1:n]  += LinRange(left, right, n + 2)[2:end-1]
+	w[1:n] .+= width / T(n + 1)
 
 	# steepness ω ∈ [5w, 15w]
-	ω0 = rand(rng, l.T, l.N) * (width * 10) .+ (width * 5)
-	ω1 = rand(rng, l.T, l.N) * (width * 10) .+ (width * 5)
+	ω0 = rand(rng, T, N) * (width * 10) .+ (width * 5)
+	ω1 = rand(rng, T, N) * (width * 10) .+ (width * 5)
 
 	# magnitude ~1 after summing
-	c = (rand(rng, l.T, l.N) .+ l.T(0.5)) / l.n
+	c = (rand(rng, T, N) .+ T(0.5)) / n
 
     # global shift
-    b = zeros(l.T, 1)
+    b = zeros(T, 1)
 
     (; x̄, w, ω0, ω1, b, c)
 end
 
-#======================================================#
 function (l::TK1D)(x::AbstractMatrix, ps, st::NamedTuple)
 	mask = st.mask
 	x̄  = ps.x̄[mask]
@@ -95,9 +95,103 @@ function tanh_kernel1d(x, x̄, w, ω0, ω1, b, c, st)
 end
 
 #======================================================#
-# evaluate kernels separately
+# Gaussian Kernel 1D
+#======================================================#
+export GK1D
 
-function evaluate_kernels(NN::TK1D, p, st, x::AbstractMatrix)
+@concrete struct GK1D{T, I <: Integer} <: AbstractLuxLayer
+	n::I   # active kernels
+	N::I   # total kernels
+	domain # (xmin, xmax)
+	periodic::Bool
+	split::Bool
+	σmin::T
+end
+
+function GK1D(n, N; domain = (-1f0, 1f0), periodic = true, T = Float32,
+	split::Bool = false, σmin::Real = 1f-4,
+)
+	@assert 0 ≤ n ≤ N
+    @assert length(domain) == 2
+    @assert T ∈ (Float32, Float64)
+	GK1D(n, N, T.(domain), periodic, split, T(σmin))
+end
+
+function Lux.initialstates(::Random.AbstractRNG, l::GK1D{T}) where{T}
+	σmin = T[l.σmin]
+	mask = zeros(Bool, l.N)
+	mask[1:l.n] .= true
+	minushalf = T[-0.5]
+
+	(; minushalf, mask, σmin)
+end
+
+function Lux.initialparameters(rng::Random.AbstractRNG, l::GK1D{T}) where{T}
+	@unpack n, N = l
+	left, right = l.domain
+	middle = (left + right) / 2
+	width  = (right - left) / 2
+
+	# split the first n kernels around ± 20% noise
+	x̄ = randn(rng, T, N) * (width / T(5))
+	σ = randn(rng, T, N) * (width / T(5))
+
+	x̄[1:n]  += LinRange(left, right, n + 2)[2:end-1]
+	σ[1:n] .+= width / T(n + 1)
+
+	# magnitude ~1 after summing
+	c = (rand(rng, T, N) .+ T(0.5)) / n
+
+    # global shift
+    b = zeros(T, 1)
+
+	if l.split
+		(; x̄, b, c, σ0 = σ, σ1 = σ)
+	else
+		(; x̄, b, c, σ)
+	end
+end
+
+function (l::GK1D{T})(x::AbstractMatrix, ps, st::NamedTuple) where{T}
+	mask = st.mask
+	x̄ = ps.x̄[mask] # [n,]
+	c = ps.c[mask]
+	b = ps.b
+	σ = if l.split
+		σ0 = ps.σ0[mask]
+		σ1 = ps.σ1[mask]
+		scaled_tanh(x, σ0, σ1, T(50), T(0)) # [n, K]
+	else
+		ps.σ[mask] # [n,]
+	end
+	σ = @. softplus(σ) + st.σmin
+
+	gaussian_kernel1d(x, x̄, σ, b, c, st)
+end
+
+function gaussian_kernel1d(x, x̄, σ, b, c, st)
+	z = @. (x - x̄) / σ
+    y = @. exp(st.minushalf * z^2)
+	y = @. y * c
+	y = sum(y; dims = 1)
+    y = @. y + b
+
+    y, st
+end
+
+function scaled_tanh(x, a, b, w, x̄)
+    u = @. tanh_fast(w * (x - x̄)) # [-1, 1]
+    scale = @. (b - a) / 2
+    shift = @. (b + a) / 2
+    @. scale * u + shift
+end
+
+#======================================================#
+# interface
+#======================================================#
+const Kernel1DLayer = Union{TK1D, GK1D,}
+
+function evaluate_kernels(NN::Kernel1DLayer, p, st, x::AbstractMatrix)
 	ys = []
 	for k in 1:NN.n
 		NN_ = @set NN.n = 1
@@ -109,13 +203,12 @@ function evaluate_kernels(NN::TK1D, p, st, x::AbstractMatrix)
 	ys
 end
 
-#======================================================#
-function _movetoend(x::AbstractVector, mask::AbstractVector{Bool})
-	@assert length(mask) == size(x, 1)
-	return vcat(x[.!mask], x[mask])
+function _movetoend(param::AbstractVector, mask::AbstractVector{Bool})
+	@assert length(mask) == size(param, 1)
+	return vcat(param[.!mask], param[mask])
 end
 
-function prune_kernels(NN::TK1D, p, st, mask::AbstractVector{Bool})
+function prune_kernels(NN::Kernel1DLayer, p, st, mask::AbstractVector{Bool})
 	# handle trivial case
 	n = sum(mask)
 	if n == 0
@@ -132,19 +225,20 @@ function prune_kernels(NN::TK1D, p, st, mask::AbstractVector{Bool})
 	# move dead kernels to the end
 	@set! st.mask = _movetoend(st.mask, mask)
 
-	@set! p.x̄  = _movetoend(p.x̄ , mask)
-	@set! p.w  = _movetoend(p.w , mask)
-	@set! p.ω0 = _movetoend(p.ω0, mask)
-	@set! p.ω1 = _movetoend(p.ω1, mask)
-	@set! p.c  = _movetoend(p.c , mask)
-	# for k in (:x̄, :w, :ω0, :ω1, :c)
-	# 	@eval @set! p.$(k) = _movetoend(p.$(k), mask)
-	# end
+	@show keys(p)
+
+	# update params
+	p = deepcopy(p)
+	for k in keys(p) # (:x̄, :w, :ω0, :ω1, :c)
+		k == :b && continue
+		param = getproperty(p, k)
+		param .= _movetoend(param, mask)
+	end
 
 	return NN, p, st
 end
 
-function activate_kernels(NN::TK1D, p, st, n::Integer)
+function activate_kernels(NN::Kernel1DLayer, p, st, n::Integer)
 	if (NN.n + n) > NN.N
 		n = NN.N - NN.n
 	end

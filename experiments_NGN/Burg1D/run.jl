@@ -15,7 +15,7 @@ device = gpu_device()
 data_kws = (; Ix = :, It = :)
 
 #------------------------------------------------------#
-# DNN
+# DNN (baseline)
 #------------------------------------------------------#
 # train_params = (; E = 140)
 # evolve_params = (;)
@@ -41,41 +41,43 @@ data_kws = (; Ix = :, It = :)
 #------------------------------------------------------#
 # Tanh with adaptive training
 #------------------------------------------------------#
-train_params = (;)
-evolve_params  = (; scheme = :GalerkinCollocation,)
-
-makemodel = makemodelKernel
-modelfilename = "model_model.jld2"
-modeldir  = joinpath(@__DIR__, "dump")
-
-#------------------------------------------------------#
-# Tanh kernels
-#------------------------------------------------------#
-# # data_kws = (; Ix = LinRange(1, 512, 64), It = LinRange(1, 500, 500))
-# # data_kws = map(x -> round.(Int, x), data_kws)
+# N = 1
+# train_params = (; batchsize = 4, E = 2000)
+# evolve_params  = (; scheme = :GalerkinCollocation,)
 #
-# train_params  = (; N = 1, Nsplits = 0)
-# evolve_params  = (; scheme = :GalerkinCollocation)
+# makemodel = makemodelTanh
+# modelfilename = "model_model.jld2"
+# modeldir  = joinpath(@__DIR__, "dump$N")
+
+#------------------------------------------------------#
+# Tanh with adaptive training
+#------------------------------------------------------#
+# N = 5
+# train_params = (; batchsize = 32)
+# evolve_params  = (; scheme = :GalerkinCollocation,)
+#
+# makemodel = makemodelTanh
+# modelfilename = "model_model.jld2"
+# modeldir  = joinpath(@__DIR__, "dump$N")
+#
 # # evolve_params  = (; scheme = :GalerkinCollocation, timealg = Tsit5())
 # # evolve_params = (; timealg = EulerForward())#, Δt = 1e-3, adaptive = false)
 # # evolve_params = (; timealg = RungeKutta4())#, Δt = 1e-3, adaptive = false)
-#
-# makemodel = makemodelTanh
-# modelfilename = "model_05.jld2"
-# modeldir  = joinpath(@__DIR__, "dump_tanh_orig")
 
 #------------------------------------------------------#
-# Tanh kernels (with splitting)
+# Gauss with adaptive training
 #------------------------------------------------------#
-# IX = Colon()
-# # IX = LinRange(1, 8192, 1024) .|> Base.Fix1(round, Int)
-#
-# train_params  = (; N = 1, Nsplits = 2)
-# evolve_params  = (; scheme = :GalerkinCollocation, IX)
-#
-# makemodel = makemodelTanh
-# modelfilename = joinpath("split$(train_params.Nsplits)","model_05.jld2")
-# modeldir  = joinpath(@__DIR__, "dump_tanh_split")
+n, N = 1, 5
+train_params = (; n, N, split = true, batchsize = 8, E = 500)
+evolve_params  = (; scheme = :GalerkinCollocation,)
+
+makemodel = makemodelGauss
+modelfilename = "model_model.jld2"
+modeldir  = joinpath(@__DIR__, "dump_gauss_$N")
+
+# evolve_params  = (; scheme = :GalerkinCollocation, timealg = Tsit5())
+# evolve_params = (; timealg = EulerForward())#, Δt = 1e-3, adaptive = false)
+# evolve_params = (; timealg = RungeKutta4())#, Δt = 1e-3, adaptive = false)
 
 #------------------------------------------------------#
 # Evolve
@@ -85,15 +87,14 @@ modeldir  = joinpath(@__DIR__, "dump")
 XD = TD = UD = UP = PS = ()
 NN, p, st = repeat([nothing], 3)
 
-# for case in (1, 2, 3,)
-# for case in (1,)
-for case in (2,)
+# for case in (1, 2, 3, 4, 5, 6)
+for case in (1,)
     cc = mod1(case, 4)
     prob = BurgersViscous1D(1f-4)
     modelfile = joinpath(modeldir, "project$(case)", modelfilename)
 
     global (NN, p, st), _, _ = ngProject(prob, datafile, modeldir, makemodel, case; rng, train_params, device)
-    # (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
+    (Xd, Td, Ud, Up, ps), _ = ngEvolve(prob, datafile, modelfile, case; rng, data_kws, evolve_params, device)
 
     # global XD = (XD..., Xd)
     # global TD = (TD..., Td)

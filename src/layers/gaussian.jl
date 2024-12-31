@@ -222,12 +222,12 @@ function (l::Gaussian1D)(x::AbstractMatrix{T}, ps, st::NamedTuple) where{T}
     return y, st
 end
 
-function scaled_tanh(x, a, b, w, x̄)
-    u = @. tanh_fast(w * (x - x̄)) # [-1, 1]
-    scale = @. (b - a) / 2
-    shift = @. (b + a) / 2
-    @. scale * u + shift
-end
+# function scaled_tanh(x, a, b, w, x̄)
+#     u = @. tanh_fast(w * (x - x̄)) # [-1, 1]
+#     scale = @. (b - a) / 2
+#     shift = @. (b + a) / 2
+#     @. scale * u + shift
+# end
 
 # @inline _rbf(x) = @. exp(-x^2)
 # function ChainRulesCore.rrule(::typeof(_rbf), x)
