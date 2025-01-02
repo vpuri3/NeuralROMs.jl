@@ -32,13 +32,15 @@ CASES = (
 function compare_compression(; device = gpu_device(), compute_svd::Bool = false)
 
 	svdfile = joinpath(BASEDIR, "svd.jld2")
-	imgfile = joinpath(BASEDIR, "svd.png")
+	imgfile = joinpath(BASEDIR, "svd.pdf") # png, pdf
 
 	if isfile(svdfile) & !(compute_svd)
+		println("Loading singular values from $svdfile.")
 		singular_values = jldopen(svdfile)["singular_values"]
 	else
 		singular_values = (;)
 		for (case, data) in pairs(CASES)
+			println("Computing singular values for case $(data.name)")
 			casefile = joinpath(BASEDIR, data.dir, data.datadir, data.datafile)
 
 			_, _, _, u, _ = loaddata(casefile, verbose = false)
@@ -48,13 +50,15 @@ function compare_compression(; device = gpu_device(), compute_svd::Bool = false)
 			singular_values = merge(singular_values, NamedTuple{(case,)}((S,)))
 		end
 
+		println("Saving singular values to $svdfile.")
 		jldsave(svdfile; singular_values,)
 	end
 
 	fig = Makie.Figure(; size = (600, 400), backgroundcolor = :white, grid = :off)
-	ax  = Makie.Axis(fig[1,1];
+	ax  = Makie.Axis(
+		fig[1,1];
 		xlabel = L"Number of POD modes$$",
-		ylabel = L"1 - Energy content$$",
+		ylabel = L"Projection error ($e_\text{proj}$)",
 		xscale = log2, yscale = log10,
 		xlabelsize = 16, ylabelsize = 16,
 	)
@@ -63,21 +67,21 @@ function compare_compression(; device = gpu_device(), compute_svd::Bool = false)
 		S  = getproperty(singular_values, case)
 		S2 = S .^ 2
 		E  = S2 / sum(S2)
-		EC = 1 .- cumsum(E)
+		EC = 1 .- cumsum(E) .+ eps(eltype(S))
+		EC = sqrt.(EC)
 
 		Makie.lines!(ax, EC; label = LaTeXString(data.name))
-
 	end
 
 	Makie.axislegend(ax)
 	Makie.xlims!(ax, 1e+0, 1e+3)
-	Makie.ylims!(ax, 1e-8, 1e-0)
+	Makie.ylims!(ax, 1e-4, 1e-0)
 	save(imgfile, fig)
 
 	return
 end
 
-compare_compression()
+# compare_compression()
 
 #======================================================#
 # Training functions
@@ -246,8 +250,6 @@ function compare_plots(
         Ue = ev["Ulrnd"]
         Pe = isone(i) ? Pp : ev["Plrnd"]
 
-        @show size(Pp), size(Pp)
-
         in_dim  = size(Xd, 1)
         out_dim = size(Ud, 1)
         Nx, Nt = size(Xd, 2), length(Td)
@@ -326,7 +328,7 @@ function compare_plots(
         ud = reshape(Ud, out_dim, grid..., Nt)
         up = reshape(Up, out_dim, grid..., Nt)
         ue = reshape(Ue, out_dim, grid..., Nt)
-        
+
         if i == 1
             h5dict = Dict(h5dict...,
                 "xFOM" => xd, "tFOM" => td, "uFOM" => ud,
@@ -364,6 +366,7 @@ function compare_plots(
         end
     end
 
+	println("Saving to $(outdir)/compare_**_case$(case).png")
     png(p1, joinpath(outdir, "compare_t0_case$(case)"))
     png(p2, joinpath(outdir, "compare_t1_case$(case)"))
     png(p3, joinpath(outdir, "compare_er_case$(case)"))

@@ -17,7 +17,7 @@ makedata_kws = (; Ix = :, _Ib, Ib_, _It = :, It_ = :)
 
 # latent 
 latent = 2
-l_pca  = 8
+l_pca  = 48 # 32, 48, 64, 96, 128
 
 #==================#
 # train
@@ -33,7 +33,7 @@ modeldir_SNW = joinpath(@__DIR__, "model_SNW$(l0)") # us (Weight decay)
 
 # # train PCA
 # train_PCA(datafile, modeldir_PCA, l_pca; rng, makedata_kws, device)
-
+#
 # # train_CAE
 # train_params_CAE = (; E = 350, w = 64, act = elu, makedata_kws, _batchsize = 4, batchsize_ = 300)
 # train_CAE_compare(prob, latent, datafile, modeldir_CAE, train_params_CAE; rng, device)
@@ -65,7 +65,7 @@ modelfile_SNW = joinpath(modeldir_SNW, "model_07.jld2")
 # postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
 
 cases = 1:7
-cases = [4,]
+# cases = [4,]
 
 # for case in cases
 #     evolve_CAE(prob, datafile, modelfile_CAE, case; rng)
@@ -97,13 +97,14 @@ cases = [4,]
 # make figures
 #==================#
 
-# casename = "burgers2d"
-# modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
-# labels = ("POD ($(2*l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
-#
-# for case in cases
-#     _casename = casename * "case$case"
-#     @show _casename
-#     compare_plots(modeldirs, labels, @__DIR__, _casename, case, grid; ifdt = true)
-# end
+casename = "burgers2d"
+modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
+labels = ("POD ($(1*l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
+
+for case in cases[[1,4,7]]
+    _casename = casename * "case$case"
+    @show _casename
+    compare_plots(modeldirs, labels, @__DIR__, _casename, case, grid; ifdt = false)
+end
 #======================================================#
+#

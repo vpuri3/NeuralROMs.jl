@@ -1,6 +1,7 @@
 #
 #===========================================================#
 abstract type AbstractNeuralGridModel <: AbstractNeuralModel end
+export PCAModel, INRModel, CAEModel
 #===========================================================#
 
 function dudx1_1D(
@@ -148,7 +149,6 @@ function apply_matrix(u, grid, Dx, Dy)
 end
 
 #===========================================================#
-export PCAModel
 @concrete mutable struct PCAModel{Tu} <: AbstractNeuralGridModel
     P
     Dx
@@ -215,7 +215,6 @@ end
 
 #===========================================================#
 
-export INRModel
 @concrete mutable struct INRModel{Tx, Tu} <: AbstractNeuralGridModel
     NN
     st
@@ -275,7 +274,6 @@ function (model::INRModel)(
 end
 
 #===========================================================#
-export CAEModel
 @concrete mutable struct CAEModel{Tu} <: AbstractNeuralGridModel
     NN
     p

@@ -22,7 +22,7 @@ makedata_kws = (; Ix = :, _Ib = [1,], Ib_ = [1,], _It = :, It_ = :)
 
 # latent 
 latent = 2
-l_pca  = 8
+l_pca  = 16
 
 #==================#
 # train
@@ -71,21 +71,21 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 # small DT
 #==================#
 
-evolve_kw = (;)
-
-T  = 4.0f0
-Nt = 500
-It = LinRange(1, Nt, 100) .|> Base.Fix1(round, Int)
-data_kws = (; Ix = :, It)
-evolve_kw = (; Δt = T, data_kws, adaptive = false)
-
-outdir_CAE = joinpath(modeldir_CAE, "dt")
-outdir_SNL = joinpath(modeldir_SNL, "dt")
-outdir_SNW = joinpath(modeldir_SNW, "dt")
-
-evolve_CAE(prob, datafile, modelfile_CAE, 1; rng, outdir = outdir_CAE, evolve_kw...,)
-evolve_SNF(prob, datafile, modelfile_SNL, 1; rng, outdir = outdir_SNL, evolve_kw..., device)
-evolve_SNF(prob, datafile, modelfile_SNW, 1; rng, outdir = outdir_SNW, evolve_kw..., device)
+# evolve_kw = (;)
+#
+# T  = 4.0f0
+# Nt = 500
+# It = LinRange(1, Nt, 100) .|> Base.Fix1(round, Int)
+# data_kws = (; Ix = :, It)
+# evolve_kw = (; Δt = T, data_kws, adaptive = false)
+#
+# outdir_CAE = joinpath(modeldir_CAE, "dt")
+# outdir_SNL = joinpath(modeldir_SNL, "dt")
+# outdir_SNW = joinpath(modeldir_SNW, "dt")
+#
+# evolve_CAE(prob, datafile, modelfile_CAE, 1; rng, outdir = outdir_CAE, evolve_kw...,)
+# evolve_SNF(prob, datafile, modelfile_SNL, 1; rng, outdir = outdir_SNL, evolve_kw..., device)
+# evolve_SNF(prob, datafile, modelfile_SNW, 1; rng, outdir = outdir_SNW, evolve_kw..., device)
 
 #==================#
 # make figures
@@ -95,5 +95,6 @@ casename = "advect2d"
 modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
 labels = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
 
-p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid; ifdt = true)
+# p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid; ifdt = true)
+p1, p2, p3 = compare_plots(modeldirs, labels, @__DIR__, casename, 1, grid; ifdt = false)
 #======================================================#

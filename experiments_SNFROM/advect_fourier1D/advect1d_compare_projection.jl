@@ -118,7 +118,7 @@ function plot_compare_advect1d_l()
     end
 
     xlabel = L"N_{ROM}"
-    ylabel = L"$e_\text{proj}$"
+	ylabel = L"Projection error ($e_\text{proj}$)",
     xlabelsize = ylabelsize = 16
 
     colors = (:orange, :green, :blue, :red, :brown,)

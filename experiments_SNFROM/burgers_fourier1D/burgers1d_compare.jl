@@ -19,7 +19,7 @@ makedata_kws = (; Ix, _Ib, Ib_, _It, It_ = :)
 
 # latent 
 latent = 2
-l_pca  = 8
+l_pca  = 16
 
 #==================#
 # train
@@ -86,17 +86,17 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 # make figures
 #==================#
 
-# grid = (1024,)
-# casename = "burgers1d"
-# modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
-# label = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
-#
-# _, p1, e1 = compare_plots(modeldirs, label, @__DIR__, casename * "case1", 1, grid; ifdt = true)
-# _, p2, e2 = compare_plots(modeldirs, label, @__DIR__, casename * "case2", 2, grid; ifdt = true)
-# _, p3, e3 = compare_plots(modeldirs, label, @__DIR__, casename * "case3", 3, grid; ifdt = true)
-# _, p4, e4 = compare_plots(modeldirs, label, @__DIR__, casename * "case4", 4, grid; ifdt = true)
-# _, p5, e5 = compare_plots(modeldirs, label, @__DIR__, casename * "case5", 5, grid; ifdt = true)
-# _, p6, e6 = compare_plots(modeldirs, label, @__DIR__, casename * "case6", 6, grid; ifdt = true)
+grid = (1024,)
+casename = "burgers1d"
+modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
+label = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
+
+_, p1, e1 = compare_plots(modeldirs, label, @__DIR__, casename * "case1", 1, grid; ifdt = false)
+_, p2, e2 = compare_plots(modeldirs, label, @__DIR__, casename * "case2", 2, grid; ifdt = false)
+_, p3, e3 = compare_plots(modeldirs, label, @__DIR__, casename * "case3", 3, grid; ifdt = false)
+_, p4, e4 = compare_plots(modeldirs, label, @__DIR__, casename * "case4", 4, grid; ifdt = false)
+_, p5, e5 = compare_plots(modeldirs, label, @__DIR__, casename * "case5", 5, grid; ifdt = false)
+_, p6, e6 = compare_plots(modeldirs, label, @__DIR__, casename * "case6", 6, grid; ifdt = false)
 
 #======================================================#
 nothing

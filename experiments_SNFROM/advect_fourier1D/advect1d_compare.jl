@@ -16,7 +16,7 @@ makedata_kws = (; Ix = :, _Ib = [1,], Ib_ = [1,], _It = :, It_ = :)
 
 # latent 
 latent = 2
-l_pca  = 8
+l_pca  = 16
 
 #==================#
 # train
@@ -98,5 +98,5 @@ casename = "advect1d"
 modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW)
 label = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
 
-p1, p2, p3 = compare_plots(modeldirs, label, @__DIR__, casename, 1, grid; ifdt = true)
+p1, p2, p3 = compare_plots(modeldirs, label, @__DIR__, casename, 1, grid; ifdt = false)
 #======================================================#

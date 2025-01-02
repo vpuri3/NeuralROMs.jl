@@ -266,12 +266,12 @@ function evolve_PCA(
 
     # only out_dim == 1 supported
     pl, Ul = begin
-        Ud_norm = normalizedata(Ud[1, :, :], md.ū, md.σu)
-        pl = P' * Ud_norm
-
-        Ul = unnormalizedata(P * pl, md.ū, md.σu)
-        Ul = reshape(Ul, 1, size(Ul)...)
-        Ul = repeat(Ul, out_dim, 1)
+		Ud_norm = normalizedata(Ud, md.ū, md.σu)
+		pl = P' * Ud_norm[1, :, :]
+		Ul_norm = P * pl
+		Ul_norm = reshape(Ul_norm, 1, size(Ul_norm)...)
+		Ul_norm = repeat(Ul_norm, out_dim)
+		Ul = unnormalizedata(Ul_norm, md.ū, md.σu)
 
         pl, Ul
     end
@@ -289,7 +289,7 @@ function evolve_PCA(
     #==============#
     linsolve = QRFactorization()
     autodiff = AutoForwardDiff()
-    linesearch = LineSearch()
+    linesearch = NoLineSearch()
     nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
     nlsmaxiters = 10
 
