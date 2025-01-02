@@ -153,7 +153,7 @@ function train_loop!(
 
 	stats_global = nothing
 
-	batch = if __loader isa MLDataDevices.DeviceIterator
+	batch = if __loader isa DeviceIterator
 		__loader.iterator.data |> device
 	else
 		__loader.data

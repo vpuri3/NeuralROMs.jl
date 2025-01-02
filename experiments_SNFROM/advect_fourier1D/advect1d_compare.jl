@@ -45,7 +45,6 @@ modeldir_INR = joinpath(@__DIR__, "model_INR$(l0)") # C-ROM
 # # train_SNL
 # train_params_SNL = (; E = 1400, wd = 64, α = 1f-4, γ = 0f-0, makedata_kws,)
 # train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
-#
 
 ### CROM
 # # train conv INR
@@ -53,7 +52,6 @@ modeldir_INR = joinpath(@__DIR__, "model_INR$(l0)") # C-ROM
 # train_CINR_compare(prob, latent, datafile, modeldir_INR, train_params_INR; rng, device,)
 # evolve_kw = (; autodiff_xyz = AutoFiniteDiff(), ϵ_xyz = 0.05f0,)
 # postprocess_CINR(prob, datafile, modelfile_INR; rng, device, evolve_kw,)
-
 
 #==================#
 # postprocess
@@ -67,8 +65,8 @@ modelfile_INR = joinpath(modeldir_INR, "model_07.jld2")
 
 # postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
 # postprocess_CAE(prob, datafile, modelfile_CAE; rng)
-# postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
-# postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
+postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
+postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 
 #==================#
 # small DT

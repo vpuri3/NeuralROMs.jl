@@ -108,8 +108,8 @@ function eval_model(
     p = p |> device
     model = model |> device
 
-    if device isa CUDADevice
-        loader = CuIterator(loader)
+    if device isa AbstractGPUDevice
+        loader = DeviceIterator(device, loader)
     end
 
     y = ()
@@ -133,8 +133,8 @@ function eval_model(
     p, st = (p, st) |> device
     st = Lux.testmode(st)
 
-    if device isa Lux.LuxCUDADevice
-        loader = CuIterator(loader)
+    if device isa AbstractGPUDevice
+        loader = DeviceIterator(device, loader)
     end
 
     y = ()

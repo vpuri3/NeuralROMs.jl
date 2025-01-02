@@ -336,6 +336,12 @@ function make_dataloaders(trainer::Trainer)
 	_loader  = DataLoader(_data; batchsize = _batchsize , rng, shuffle = true)
 	loader_  = DataLoader(data_; batchsize = batchsize_ , rng, shuffle = false)
 	__loader = DataLoader(_data; batchsize = __batchsize, rng, shuffle = false)
+
+    if trainer.device isa AbstractGPUDevice
+		_loader  = DeviceIterator(device, _loader )
+		loader_  = DeviceIterator(device, loader_ )
+		__loader = DeviceIterator(device, __loader)
+    end
 	
 	(; _loader, loader_, __loader)
 end

@@ -190,10 +190,10 @@ function train_model(
     loader_  = DataLoader(data_; batchsize = batchsize_ , rng, shuffle = true)
     __loader = DataLoader(_data; batchsize = __batchsize, rng, shuffle = true)
 
-    if device isa Lux.LuxCUDADevice
-        _loader  = _loader  |> CuIterator
-        loader_  = loader_  |> CuIterator
-        __loader = __loader |> CuIterator
+    if device isa AbstractGPUDevice
+		_loader  = DeviceIterator(device, _loader )
+		loader_  = DeviceIterator(device, loader_ )
+		__loader = DeviceIterator(device, __loader)
     end
 
     # callback functions
@@ -256,8 +256,8 @@ function train_model(
         patience_frac = patience_fracs[iopt]
         patience = isnothing(patience_frac) ? nothing : round(Int, patience_frac * nepoch)
 
-        if _loader isa CuIterator
-			_loader = DataLoader(_data, batchsize = _batchsize[iopt], shuffle = true)
+        if _loader isa DeviceIterator
+			@set! _loader.iterator.batchsize = _batchsize[iopt]
         else
             @set! _loader.batchsize = _batchsize[iopt]
         end
@@ -337,8 +337,8 @@ $SIGNATURES
 """
 function makecallback(
     NN::AbstractLuxLayer,
-    _loader::Union{CuIterator, MLUtils.DataLoader},
-    loader_::Union{CuIterator, MLUtils.DataLoader},
+    _loader::Union{DeviceIterator, MLUtils.DataLoader},
+    loader_::Union{DeviceIterator, MLUtils.DataLoader},
     lossfun;
     STATS::Union{Nothing, NTuple{8, Vector}} = nothing,
     stats::Bool = false,
@@ -514,9 +514,9 @@ function optimize(
     p::Union{NamedTuple, AbstractVector},
     st::NamedTuple,
     nepoch::Integer,
-    _loader::Union{CuIterator, MLUtils.DataLoader},
-    loader_::Union{CuIterator, MLUtils.DataLoader},
-    __loader::Union{CuIterator, MLUtils.DataLoader} = _loader;
+    _loader::Union{DeviceIterator, MLUtils.DataLoader},
+    loader_::Union{DeviceIterator, MLUtils.DataLoader},
+    __loader::Union{DeviceIterator, MLUtils.DataLoader} = _loader;
     lossfun = mse,
     opt_st = nothing,
     cb = nothing,
@@ -613,9 +613,9 @@ function optimize(
     p::Union{NamedTuple, AbstractVector},
     st::NamedTuple,
     nepoch::Integer,
-    _loader::Union{CuIterator, MLUtils.DataLoader},
-    loader_::Union{CuIterator, MLUtils.DataLoader},
-    __loader::Union{CuIterator, MLUtils.DataLoader} = _loader;
+    _loader::Union{DeviceIterator, MLUtils.DataLoader},
+    loader_::Union{DeviceIterator, MLUtils.DataLoader},
+    __loader::Union{DeviceIterator, MLUtils.DataLoader} = _loader;
     lossfun = mse,
     opt_st = nothing,
     cb = nothing,
@@ -662,9 +662,9 @@ function optimize(
     # optimizer functions
     #======================#
 
-	batch = if __loader isa CuIterator
+	batch = if __loader isa DeviceIterator
 		# Adapt.adapt(__loader, __loader.batches.data)
-		__loader.batches.data |> cu
+		__loader.iterator.data |> __loader.dev
 	else
 		__loader.data
 	end

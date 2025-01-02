@@ -25,6 +25,10 @@ CASES = (
 	ks1D        = (; name = "KS 1D"       , dim = 1, dir = "ks_fourier1D"     , datadir = "data_ks"       , datafile = "data.jld2"),
 )
 
+# https://github.com/SciML/NonlinearSolve.jl/issues/524
+using NonlinearSolve, ComponentArrays
+NonlinearSolveBase.L2_NORM(u::ComponentArray) = NonlinearSolveBase.L2_NORM(getdata(u))
+
 #======================================================#
 # SVD Compression
 #======================================================#
@@ -70,7 +74,7 @@ function compare_compression(; device = gpu_device(), compute_svd::Bool = false)
 		EC = 1 .- cumsum(E) .+ eps(eltype(S))
 		EC = sqrt.(EC)
 
-		Makie.lines!(ax, EC; label = LaTeXString(data.name))
+		Makie.lines!(ax, EC; label = LaTeXString(data.name), linewidth = 2)
 	end
 
 	Makie.axislegend(ax)
@@ -381,10 +385,11 @@ function compare_plots(
 end
 
 #======================================================#
-# hyper-reduction experiments
+# hyper-reduction timing experiments
+# with uniform sampling
 #======================================================#
 
-function hyper_timings(
+function run_hyper_timings(
     prob::NeuralROMs.AbstractPDEProblem,
     datafile::String,
     modelfile::String,
@@ -448,8 +453,7 @@ function hyper_timings(
     statsROM, statsFOM, statsfile
 end
 
-
-function hyper_plots(
+function plot_hyper_timings(
     datafile::String,
     modeldir::String,
     outdir::String,

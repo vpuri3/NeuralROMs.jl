@@ -492,7 +492,7 @@ function evolve_SNF(
     #==============#
     autodiff = AutoForwardDiff()
     linsolve = QRFactorization()
-    linesearch = LineSearch()
+    linesearch = NoLineSearch()
     nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
     nlsmaxiters = 20
 
@@ -508,14 +508,12 @@ function evolve_SNF(
     #==============#
 
     if !isnothing(hyper_reduction_path)
-        if !isnothing(hyper_indices)
-            IX = hyper_indices
-        elseif ispath(hyper_reduction_path)
+        if ispath(hyper_reduction_path)
             hypfile = jldopen(hyppath)
             IX = hypfile["IX"]
             close(hypfile)
 
-            println("Grabbing collocation indices from $hypfile with $(length(IX)) points.")
+			println("Grabbing $(length(IX)) collocation points from $hypfile.")
         else
             IX = hyperreduction_idx(
                 Xdata, Udata, Tdata, vec(p0), getaxes(p0),
@@ -526,6 +524,8 @@ function evolve_SNF(
 
             jldsave(hyper_reduction_path; IX)
         end
+	elseif !isnothing(hyper_indices)
+		IX = hyper_indices
     else
         IX = Colon()
     end
@@ -560,7 +560,9 @@ function evolve_SNF(
     if benchmark
         @set! statsROM.time  = timeROM
     end
-    @show statsROM.time
+	if verbose
+		@show statsROM.time
+	end
 
     #==============#
     # analysis

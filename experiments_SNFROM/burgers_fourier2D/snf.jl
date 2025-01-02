@@ -27,7 +27,7 @@ device = Lux.gpu_device()
 # postprocess_SNF(prob, datafile, modelfile; rng, device)
 
 # fomfile = joinpath(@__DIR__, "FOM_timings.jl")
-# sROM, sFOM, sfile = hyper_timings(prob, datafile, modelfile, "exp4", 4, fomfile)
+# sROM, sFOM, sfile = run_hyper_timings(prob, datafile, modelfile, "exp4", 4, fomfile)
 outdir = joinpath(pkgdir(NeuralROMs), "figs", "method")
-hyper_plots(datafile, modeldir, outdir, "exp4", 4; makefigs = true)
+plot_hyper_timings(datafile, modeldir, outdir, "exp4", 4; makefigs = true)
 #======================================================#
