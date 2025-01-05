@@ -346,7 +346,8 @@ end
 function make_optimizer(
     E::Integer,
     warmup::Bool,
-    weightdecay = nothing,
+    weightdecay = nothing;
+	early_stopping::Bool = true,
 )
     lrs = (1f-3, 5f-4, 2f-4, 1f-4, 5f-5, 2f-5, 1f-5,)
     Nlrs = length(lrs)
@@ -388,6 +389,10 @@ function make_optimizer(
         schedules = (schedule_warmup, schedules...,)
         early_stoppings = (early_stopping_warmup, early_stoppings...,)
     end
+
+	if !early_stopping
+		early_stoppings = early_stoppings .* false
+	end
 
     opts, nepochs, schedules, early_stoppings
 end

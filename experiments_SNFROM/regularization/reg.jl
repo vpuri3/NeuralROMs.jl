@@ -8,6 +8,9 @@ using JLD2, Plots                                 # vis/ save
 using CUDA, LuxCUDA, KernelAbstractions           # GPU
 using LaTeXStrings
 
+import CairoMakie
+import CairoMakie: Makie
+
 CUDA.allowscalar(false)
 
 begin
@@ -65,8 +68,10 @@ function train_reg(
     λ2::Real = 0f0,
     α::Real = 0f0,
     weight_decays::Union{Real,NTuple{M,<:Real}} = 0f0,
+	_batchsize = nothing,
+	warmup::Bool = true,
+	early_stopping::Bool = true,
     rng::Random.AbstractRNG = Random.default_rng(),
-    _batchsize = nothing,
     device = Lux.cpu_device(),
 ) where{M}
 
@@ -129,10 +134,9 @@ function train_reg(
 
     idx = ps_W_indices(NN; rng)
     weightdecay = IdxWeightDecay(0f0, idx)
-    opts, nepochs, schedules, early_stoppings = make_optimizer(E, true, weightdecay)
+    opts, nepochs, schedules, early_stoppings = make_optimizer(E, warmup, weightdecay; early_stopping)
 
     #--------------------------------------------#
-    display(NN)
 
     train_args = (; l, h, w, E, _batchsize, λ1, λ2, weight_decays, α)
     metadata = (; metadata..., train_args)
@@ -151,89 +155,15 @@ function train_reg(
 end
 
 #======================================================#
-function post_reg(
-    datafile::String,
-    modelfile::String,
-    outdir::String,
-)
-    mkpath(outdir)
-
-    data = jldopen(datafile)
-    x, _ = data["data_"]
-    close(data)
-
+# post process
+#======================================================#
+function makemodel(modelfile::String)
     model = jldopen(modelfile)
     NN, p, st = model["model"]
     md = model["metadata"]
+    ST = model["STATS"]
     close(model)
-
-    @show Lux.parameterlength(NN)
-    @show md
-
-    xbatch = reshape(x, 1, :)
-    model = NeuralModel(NN, st, md)
-
-    autodiff = AutoForwardDiff()
-    ϵ = nothing
-
-    u, ud1x, ud2x, ud3x, ud4x = dudx4_1D(model, xbatch, p; autodiff, ϵ) .|> vec
-    ũ, ũd1x, ũd2x, ũd3x, ũd4x = forwarddiff_deriv4(uData, x)
-
-    # print errors
-    begin
-        ud0_den = mse(u   , 0*u) |> sqrt
-        ud1_den = mse(ũd1x, 0*u) |> sqrt
-        ud2_den = mse(ũd2x, 0*u) |> sqrt
-        ud3_den = mse(ũd3x, 0*u) |> sqrt
-        ud4_den = mse(ũd4x, 0*u) |> sqrt
-
-        ud0x_relrmse_er = sqrt(mse(u   , ũ   )) / ud0_den
-        ud1x_relrmse_er = sqrt(mse(ud1x, ũd1x)) / ud1_den
-        ud2x_relrmse_er = sqrt(mse(ud2x, ũd2x)) / ud2_den
-        ud3x_relrmse_er = sqrt(mse(ud3x, ũd3x)) / ud3_den
-        ud4x_relrmse_er = sqrt(mse(ud4x, ũd4x)) / ud4_den
-
-        ud0x_relinf_er = norm(u    - ũ   , Inf) / ud0_den
-        ud1x_relinf_er = norm(ud1x - ũd1x, Inf) / ud1_den
-        ud2x_relinf_er = norm(ud2x - ũd2x, Inf) / ud2_den
-        ud3x_relinf_er = norm(ud3x - ũd3x, Inf) / ud3_den
-        ud4x_relinf_er = norm(ud4x - ũd4x, Inf) / ud4_den
-
-        @show round.((ud0x_relrmse_er, ud0x_relinf_er), sigdigits = 8)
-        @show round.((ud1x_relrmse_er, ud1x_relinf_er), sigdigits = 8)
-        @show round.((ud2x_relrmse_er, ud2x_relinf_er), sigdigits = 8)
-        @show round.((ud3x_relrmse_er, ud3x_relinf_er), sigdigits = 8)
-        @show round.((ud4x_relrmse_er, ud4x_relinf_er), sigdigits = 8)
-    end
-
-    p0 = plot(xabel = "x", title = "u(x,t)")
-    p1 = plot(xabel = "x", title = "u'(x,t)")
-    p2 = plot(xabel = "x", title = "u''(x,t)")
-    p3 = plot(xabel = "x", title = "u'''(x,t)")
-    p4 = plot(xabel = "x", title = "u''''(x,t)")
-
-    plot!(p0, x, ũ, label = "Ground Truth"  , w = 4, c = :black)
-    plot!(p0, x, u, label = "Prediction"  , w = 2, c = :red)
-
-    plot!(p1, x, ũd1x, label = "Ground Truth", w = 4, c = :black)
-    plot!(p1, x, ud1x, label = "Prediction", w = 2, c = :red)
-
-    plot!(p2, x, ũd2x, label = "Ground Truth", w = 4, c = :black)
-    plot!(p2, x, ud2x, label = "Prediction", w = 2, c = :red)
-
-    plot!(p3, x, ũd3x, label = "Ground Truth", w = 4, c = :black)
-    plot!(p3, x, ud3x, label = "Prediction", w = 2, c = :red)
-
-    plot!(p4, x, ũd4x, label = "Ground Truth", w = 4, c = :black)
-    plot!(p4, x, ud4x, label = "Prediction", w = 2, c = :red)
-
-    png(p0, joinpath(outdir, "derv0"))
-    png(p1, joinpath(outdir, "derv1"))
-    png(p2, joinpath(outdir, "derv2"))
-    png(p3, joinpath(outdir, "derv3"))
-    png(p4, joinpath(outdir, "derv4"))
-
-    p0, p1, p2, p3, p4
+    NeuralModel(NN, st, md), p, ST
 end
 
 #======================================================#
@@ -249,56 +179,238 @@ device = Lux.gpu_device()
 E = 1400
 _N, N_ = 1024, 8192 # 512, 32768
 _batchsize = 32
+early_stopping = false
 
 ## weight norm experiment
 l, h, w = 1, 5, 64
 
-datagen_reg(datafile; _N, N_) |> display
+datagen_reg(datafile; _N, N_)
 
-#############
 modeldir1 = joinpath(@__DIR__, "model1") # vanilla
 modeldir2 = joinpath(@__DIR__, "model2") # L2
 modeldir3 = joinpath(@__DIR__, "model3") # lipschitz
 modeldir4 = joinpath(@__DIR__, "model4") # weight
 
+#############
+# TRAIN
+#############
+
 # α, weight_decays, λ2 = 0f-5, 0f-2, 0f-2 # vanilla
 # isdir(modeldir1) && rm(modeldir1, recursive = true)
-# _, ST1 = train_reg(datafile, modeldir1, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
+# _, ST1 = train_reg(datafile, modeldir1, E, l, h, w; rng, λ2, α, weight_decays, _batchsize, early_stopping, device,)
 #
-# α, weight_decays, λ2 = 0f-5, 0f-2, 1f-1 # L2
+# α, weight_decays, λ2 = 0f-5, 0f-2, 5f-2 # L2
 # isdir(modeldir2) && rm(modeldir2, recursive = true)
-# train_reg(datafile, modeldir2, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
+# train_reg(datafile, modeldir2, E, l, h, w; rng, λ2, α, weight_decays, _batchsize, early_stopping, device,)
 #
 # α, weight_decays, λ2 = 5f-5, 0f-2, 0f-2 # Lipschitz
 # isdir(modeldir3) && rm(modeldir3, recursive = true)
-# train_reg(datafile, modeldir3, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
+# train_reg(datafile, modeldir3, E, l, h, w; rng, λ2, α, weight_decays, _batchsize, early_stopping, device,)
 #
-# α, weight_decays, λ2 = 0f-5, 5f-2, 0f-0 # Weight # 2f-2
+# α, weight_decays, λ2 = 0f-5, 5f-2, 0f-0 # Weight
 # isdir(modeldir4) && rm(modeldir4, recursive = true)
-# train_reg(datafile, modeldir4, E, l, h, w; λ2, α, weight_decays, _batchsize, device,)
+# train_reg(datafile, modeldir4, E, l, h, w; rng, λ2, α, weight_decays, _batchsize, early_stopping, device,)
 
-# #############
+#======================================================#
+# Tabulate errors
+#======================================================#
 
-# α, weight_decays, λ2 = 1f-5, 0f-2, 0f-2
+modelfile1 = joinpath(@__DIR__, "model1", "model_08.jld2") # vanilla
+modelfile2 = joinpath(@__DIR__, "model2", "model_08.jld2") # L2
+modelfile3 = joinpath(@__DIR__, "model3", "model_08.jld2") # lipschitz
+modelfile4 = joinpath(@__DIR__, "model4", "model_08.jld2") # weight
+
+data = jldopen(datafile)
+x, _ = data["data_"]
+close(data)
+
+# x = x[1:16:end]
+x = x[1:1:end]
+
+model1, p1, ST1 = makemodel(modelfile1)
+model2, p2, ST2 = makemodel(modelfile2)
+model3, p3, ST3 = makemodel(modelfile3)
+model4, p4, ST4 = makemodel(modelfile4)
+
+xbatch = reshape(x, 1, :)
+autodiff = AutoForwardDiff()
+ϵ = nothing
+
+u , ud1 , ud2  = forwarddiff_deriv2(uData, x)
+u1, u1d1, u1d2 = dudx2_1D(model1, xbatch, p1; autodiff, ϵ) .|> vec
+u2, u2d1, u2d2 = dudx2_1D(model2, xbatch, p2; autodiff, ϵ) .|> vec
+u3, u3d1, u3d2 = dudx2_1D(model3, xbatch, p3; autodiff, ϵ) .|> vec
+u4, u4d1, u4d2 = dudx2_1D(model4, xbatch, p4; autodiff, ϵ) .|> vec
+
+N = length(u)
+n   = sum(abs2, u)   / N |> sqrt
+nd1 = sum(abs2, ud1) / N |> sqrt
+nd2 = sum(abs2, ud2) / N |> sqrt
+
+e1 = abs.(u1 - u) ./ n .+ 1f-12
+e2 = abs.(u2 - u) ./ n .+ 1f-12
+e3 = abs.(u3 - u) ./ n .+ 1f-12
+e4 = abs.(u4 - u) ./ n .+ 1f-12
+
+e1d1 = abs.(u1d1 - ud1) ./ n .+ 1f-12
+e2d1 = abs.(u2d1 - ud1) ./ n .+ 1f-12
+e3d1 = abs.(u3d1 - ud1) ./ n .+ 1f-12
+e4d1 = abs.(u4d1 - ud1) ./ n .+ 1f-12
+
+e1d2 = abs.(u1d2 - ud2) ./ n .+ 1f-12
+e2d2 = abs.(u2d2 - ud2) ./ n .+ 1f-12
+e3d2 = abs.(u3d2 - ud2) ./ n .+ 1f-12
+e4d2 = abs.(u4d2 - ud2) ./ n .+ 1f-12
+
+e1_s = e1' * e1 / N # |> sqrt
+e2_s = e2' * e2 / N # |> sqrt
+e3_s = e3' * e3 / N # |> sqrt
+e4_s = e4' * e4 / N # |> sqrt
+
+e1d1_s = e1d1' * e1d1 / N # |> sqrt
+e2d1_s = e2d1' * e2d1 / N # |> sqrt
+e3d1_s = e3d1' * e3d1 / N # |> sqrt
+e4d1_s = e4d1' * e4d1 / N # |> sqrt
+
+e1d2_s = e1d2' * e1d2 / N # |> sqrt
+e2d2_s = e2d2' * e2d2 / N # |> sqrt
+e3d2_s = e3d2' * e3d2 / N # |> sqrt
+e4d2_s = e4d2' * e4d2 / N # |> sqrt
+
+println()
+println("0th derivative")
+
+println("Zero: $e1_s")
+println("L2  : $e2_s")
+println("SNFL: $e3_s")
+println("SNFW: $e4_s")
+
+println()
+println("1st derivative")
+
+println("Zero: $e1d1_s")
+println("L2  : $e2d1_s")
+println("SNFL: $e3d1_s")
+println("SNFW: $e4d1_s")
+
+println()
+println("2nd derivative")
+
+println("Zero: $e1d2_s")
+println("L2  : $e2d2_s")
+println("SNFL: $e3d2_s")
+println("SNFW: $e4d2_s")
+
+#======================================================#
+# Paper figure
+#======================================================#
+
+xlabel = L"x"
+xlabelsize = ylabelsize = 16
+
+fig = Makie.Figure(; size = (600, 500), backgroundcolor = :white, grid = :off)
+
+ax1 = Makie.Axis(fig[1,1]; xlabel, ylabel = L"u(x)"  , xlabelsize, ylabelsize)
+ax2 = Makie.Axis(fig[2,1]; xlabel, ylabel = L"u'(x)" , xlabelsize, ylabelsize)
+ax3 = Makie.Axis(fig[3,1]; xlabel, ylabel = L"u''(x)", xlabelsize, ylabelsize)
+
+colors = [:black, :orange, :green, :blue, :red,]
+styles = [:solid, :solid, :dash, :dashdot, :dashdotdot,]
+labels = [L"Ground truth$$", L"No regularization$$", L"$L_2$ regularization $(γ=5\cdot10^{-2})$", L"Lipschitz regularization $(α=5⋅10^{-5})$", L"Weight regularization $(γ=5⋅10^{-2})$",]
+
+kws = Tuple(
+    (; color = colors[i], linestyle = styles[i], label = labels[i], linewidth = 2)
+    for i in 1:5
+)
+
+Makie.lines!(ax1, x,  u; kws[1]...)
+Makie.lines!(ax1, x, u1; kws[2]...)
+Makie.lines!(ax1, x, u2; kws[3]...)
+Makie.lines!(ax1, x, u3; kws[4]...)
+Makie.lines!(ax1, x, u4; kws[5]...)
+
+Makie.lines!(ax2, x,  ud1; kws[1]...)
+Makie.lines!(ax2, x, u1d1; kws[2]...)
+Makie.lines!(ax2, x, u2d1; kws[3]...)
+Makie.lines!(ax2, x, u3d1; kws[4]...)
+Makie.lines!(ax2, x, u4d1; kws[5]...)
+
+Makie.lines!(ax3, x,  ud2; kws[1]...)
+Makie.lines!(ax3, x, u1d2; kws[2]...)
+Makie.lines!(ax3, x, u2d2; kws[3]...)
+Makie.lines!(ax3, x, u3d2; kws[4]...)
+Makie.lines!(ax3, x, u4d2; kws[5]...)
+
+Makie.Legend(fig[0,:], ax1; orientation = :horizontal, framevisible = false, nbanks = 3, patchsize = (30, 25))
+
+# y axes
+Makie.hideydecorations!(ax1; label = false, grid = false)
+Makie.hideydecorations!(ax2; label = false, grid = false)
+Makie.hideydecorations!(ax3; label = false, grid = false)
+
+Makie.ylims!(ax3, -5, 5)
+
+# x axes
+Makie.linkxaxes!(ax1, ax2, ax3)
+Makie.hidexdecorations!(ax1)
+Makie.hidexdecorations!(ax2)
+
+display(fig)
+save(joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_reg.pdf"), fig)
+save(joinpath(@__DIR__, "exp_reg.pdf"), fig)
+
+#======================================================#
+# Presentation figure
+#======================================================#
+# xlabel = L"x"
+# xlabelsize = ylabelsize = 16
 #
-# modeldir  = joinpath(@__DIR__, "dump")
-# modelfile = joinpath(modeldir, "model_08.jld2")
-# outdir    = joinpath(modeldir, "results")
+# fig = Makie.Figure(; size = (1000, 600), backgroundcolor = :white, grid = :off)
 #
-# isdir(modeldir) && rm(modeldir, recursive = true)
-# model, STATS = train_reg(datafile, modeldir,
-#     E, l, h, w; λ2, α, weight_decays,
-#     _batchsize, device,
+# ax1 = Makie.Axis(fig[1,1]; xlabel, ylabel = L"u(x)"  , xlabelsize, ylabelsize)
+# ax2 = Makie.Axis(fig[2,1]; xlabel, ylabel = L"u(x)"  , xlabelsize, ylabelsize)
+# ax3 = Makie.Axis(fig[3,1]; xlabel, ylabel = L"u(x)"  , xlabelsize, ylabelsize)
+#
+# colors = [:black, :orange, :green, :blue, :red,]
+# styles = [:solid, :solid, :dash, :dashdot, :dashdotdot,]
+# labels = [L"Ground truth$$", L"No regularization$$", L"$L_2$ regularization $(γ=10^{-1})$", L"Lipschitz regularization $(α=5⋅10^{-5})$", L"Weight regularization $(γ=5⋅10^{-2})$",]
+#
+# kws = Tuple(
+#     (; color = colors[i], linestyle = styles[i], label = labels[i], linewidth = 12)
+#     for i in 1:5
 # )
 #
-# p0, p1, p2, p3, p4 = post_reg(datafile, modelfile, outdir)
+# # Fig 1
+# Makie.lines!(ax1, x,  u; kws[1]..., linewidth = 20)
+# Makie.lines!(ax1, x, u1; kws[2]...)
+# Makie.lines!(ax1, x, u3; kws[4]...)
+# Makie.lines!(ax1, x, u4; kws[5]...)
 #
-# ptrain = plot_training(STATS...)
-# plt = plot(ptrain, p0, p1, p2, p3, p4; size = (1300, 800))
-# png(plt, joinpath(modeldir, "result"))
-# display(plt)
+# # Fig 2
+# Makie.lines!(ax2, x,  ud1; kws[1]..., linewidth = 20)
+# Makie.lines!(ax2, x, u1d1; kws[2]...)
+# Makie.lines!(ax2, x, u3d1; kws[4]...)
+# Makie.lines!(ax2, x, u4d1; kws[5]...)
 #
-# #############
+# # Fig 3
+# Makie.lines!(ax3, x,  ud2; kws[1]..., linewidth = 20)
+# Makie.lines!(ax3, x, u1d2; kws[2]...)
+# Makie.lines!(ax3, x, u3d2; kws[4]...)
+# Makie.lines!(ax3, x, u4d2; kws[5]...)
+#
+# Makie.hidedecorations!(ax1)
+# Makie.hidedecorations!(ax2)
+# Makie.hidedecorations!(ax3)
+#
+# Makie.xlims!(ax1, -1, 1)
+# Makie.xlims!(ax2, -1, 1)
+# Makie.xlims!(ax3, -1, 1)
+#
+# Makie.ylims!(ax3, -6, 7)
+#
+# display(fig)
+# regpath = joinpath(pkgdir(NeuralROMs), "figs", "presentation", "method", "exp_reg_full.svg")
+# save(regpath, fig)
 
 #======================================================#
 nothing
