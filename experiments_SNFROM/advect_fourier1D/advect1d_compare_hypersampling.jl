@@ -102,8 +102,8 @@ function compare_advect1d_s(
         fig = Makie.Figure(; size = (600, 400), backgroundcolor = :white, grid = :off)
         ax  = Makie.Axis(
 			fig[1,1];
-		    xlabel = L"Number of hyper-reduction points ($| X_\text{proj} |$)",
-		    ylabel = L"($\varepsilon(T)$)",
+		    xlabel = L"Number of hyper-reduction points ($|X_\text{proj}|$)",
+		    ylabel = L"$\varepsilon(T)$",
 			xlabelsize = 16,
 			ylabelsize = 16,
             xscale = log2,

@@ -126,6 +126,7 @@ function train_SNF(
     wd::Int, # hidden layer width
     E::Int; # num epochs
     rng::Random.AbstractRNG = Random.default_rng(),
+	periodic_layer::Bool = false,
     warmup::Bool = true,
     _batchsize = nothing,
     batchsize_ = nothing,
@@ -177,7 +178,7 @@ function train_SNF(
 
         act = sin
 
-        wi = l + in_dim
+        wi = periodic_layer ? l + in_dim * wd : l + in_dim
         wo = out_dim
 
         in_layer = Dense(wi, wd, act; init_weight = init_wt_in, init_bias)
@@ -187,11 +188,27 @@ function train_SNF(
         Chain(in_layer, fill(hd_layer, hd)..., fn_layer)
     end
 
+	periodic = if periodic_layer
+		# dom = get_prob_domain(prob)
+		# periods = if get_prob_dim(prob) == 1
+		# 	[-(-(dom...)),]
+		# else:
+		# 	[-(-(dom[1]...)), -(-(dom[2]...)),]
+		# end
+		periods = [2.0f0,]
+		PeriodicLayer(1:in_dim, periods, wd)
+		# NoOpLayer()
+	else
+		NoOpLayer()
+	end
+
+	warmup = true
+
     #-------------------------------------------#
     # training hyper-params
     #-------------------------------------------#
 
-    NN = FlatDecoder(hyper, decoder)
+    NN = FlatDecoder(hyper, decoder, periodic)
 
     _batchsize = isnothing(_batchsize) ? numobs(_data) ÷ 100 : _batchsize
     batchsize_ = isnothing(batchsize_) ? numobs(_data) ÷ 1   : batchsize_

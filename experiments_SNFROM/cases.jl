@@ -5,6 +5,12 @@ using Plots, ColorSchemes, LaTeXStrings
 
 #======================================================#
 
+get_prob_dim(::Advection1D) = 1
+get_prob_dim(::Advection2D) = 2
+get_prob_dim(::BurgersViscous1D) = 1
+get_prob_dim(::BurgersViscous2D) = 2
+get_prob_dim(::KuramotoSivashinsky1D) = 1
+
 get_prob_domain(::Advection1D) = (-1f0, 1f0)
 get_prob_domain(::Advection2D) = (-1f0, 1f0), (-1f0, 1f0)
 get_prob_domain(::BurgersViscous1D) = (0f0, 2f0)

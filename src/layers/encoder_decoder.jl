@@ -126,12 +126,14 @@ Output: solution field `u` of size `[out_dim, K]`.
 function FlatDecoder(
     hyper::AbstractLuxLayer,
     decoder::AbstractLuxLayer,
+	periodic::AbstractLuxLayer = NoOpLayer(),
 )
-    noop = NoOpLayer()
+    noop  = NoOpLayer()
+	assem = Parallel(vcat; periodic, hyper)
 
     Chain(;
-        assem   = Parallel(vcat; noop, hyper), # [D+L, K] (x, code)
-        decoder = decoder,                     # [out, K] (out)
+        assem,   # [D+L, B] (x, code)
+        decoder, # [out, B] (out)
     )
 end
 
@@ -144,28 +146,6 @@ function get_flatdecoder(
     decoder = (NN.layers.decoder, p.decoder, st.decoder)
 
     remake_ca_in_model(hyper...), remake_ca_in_model(decoder...)
-end
-
-#======================================================#
-# OneEmbedding, freeze_decoder
-#======================================================#
-
-struct OneEmbedding{F} <: AbstractLuxLayer
-    len::Int
-    init::F
-end
-
-OneEmbedding(len::Int; init_weight = zeros32) = OneEmbedding(len, init_weight)
-
-function Lux.initialparameters(rng::AbstractRNG, e::OneEmbedding)
-    return (; weight = e.init(rng, e.len),)
-end
-
-Lux.initialstates(::Random.AbstractRNG, ::OneEmbedding) = (;)
-
-function (e::OneEmbedding)(x::AbstractVecOrMat, ps, st)
-    code = repeat(ps.weight, 1, size(x, 2)) # [x_in, K]
-    return code, st
 end
 
 function freeze_decoder(
@@ -195,6 +175,28 @@ function freeze_decoder(
     end
 
     NN, p, st
+end
+
+#======================================================#
+# OneEmbedding
+#======================================================#
+
+struct OneEmbedding{F} <: AbstractLuxLayer
+    len::Int
+    init::F
+end
+
+OneEmbedding(len::Int; init_weight = zeros32) = OneEmbedding(len, init_weight)
+
+function Lux.initialparameters(rng::AbstractRNG, e::OneEmbedding)
+    return (; weight = e.init(rng, e.len),)
+end
+
+Lux.initialstates(::Random.AbstractRNG, ::OneEmbedding) = (;)
+
+function (e::OneEmbedding)(x::AbstractVecOrMat, ps, st)
+    code = repeat(ps.weight, 1, size(x, 2)) # [x_in, K]
+    return code, st
 end
 
 #======================================================#

@@ -151,6 +151,7 @@ function train_CINR_compare(
     datafile::String,
     modeldir::String,
     train_params = (;);
+	periodic_padding::Bool = false,
     rng::Random.AbstractRNG = Random.default_rng(),
     device = Lux.gpu_device(),
 )
@@ -184,6 +185,7 @@ function train_SNF_compare(
     datafile::String,
     modeldir::String,
     train_params = (;);
+	periodic_layer::Bool = false,
     rng::Random.AbstractRNG = Random.default_rng(),
     device = Lux.gpu_device(),
 )
@@ -213,7 +215,7 @@ function train_SNF_compare(
     isdir(modeldir) && rm(modeldir, recursive = true)
     train_SNF(datafile, modeldir, l, hh, hd, wh, wd, E;
         rng, makedata_kws, λ2, α, weight_decays = γ, device,
-        batchsizes...,
+        batchsizes..., periodic_layer,
     )
 end
 
@@ -598,7 +600,7 @@ function plot_hyper_timings(
     # styles = (:solid, :solid, :solid, :solid, :solid)
     # labels = (L"Δt=Δt₀", L"Δt=2Δt₀", L"Δt=5Δt₀", L"Δt=10Δt₀",)
     #
-    # xlabel = L"Number of hyper‐reduction points $(X_\text{proj})$"
+    # xlabel = L"Number of hyper‐reduction points $(|X_\text{proj}|)$"
     #
     # kw_e1 = (;
     #     xlabel,
