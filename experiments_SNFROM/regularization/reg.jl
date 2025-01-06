@@ -356,8 +356,8 @@ Makie.hidexdecorations!(ax1)
 Makie.hidexdecorations!(ax2)
 
 display(fig)
+save(joinpath(@__DIR__, "exp_reg.png"), fig)
 save(joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_reg.pdf"), fig)
-save(joinpath(@__DIR__, "exp_reg.pdf"), fig)
 
 #======================================================#
 # Presentation figure
