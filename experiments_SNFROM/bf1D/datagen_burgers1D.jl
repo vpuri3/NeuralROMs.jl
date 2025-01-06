@@ -38,7 +38,7 @@ function uic(x, mu)
     reshape(u, length(x), length(mu))
 end
 
-function burgers_inviscid(N, mu, tspan;
+function burgers_inviscid(N, mu, ν, tspan;
     p = nothing,
     ntsave=500,
     odealg=SSPRK43(),
@@ -48,7 +48,8 @@ function burgers_inviscid(N, mu, tspan;
 )
 
     """ space discr """
-    domain = IntervalDomain(0, 2; periodic = true)
+    # domain = IntervalDomain(0, 2; periodic = true)
+    domain = IntervalDomain(0, 2.25; periodic = true)
     V = FourierSpace(N; domain) |> Float32
     discr = Collocation()
 
@@ -74,13 +75,11 @@ function burgers_inviscid(N, mu, tspan;
     end
 
     # model setup
-    ν = 1f-4
     A = -diffusionOp(ν, V, discr)
-    # C = advectionOp((zero(u0),), V, discr; vel_update_funcs! = (burgers!,), truncation_fracs = (2//3,))
     C = advectionOp(
 		(zero(u0),), V, discr;
 		vel_update_funcs! = (burgers!,),
-		truncation_fracs = (0.2f0,)
+		truncation_fracs = (2//3,)
 	)
     F = forcingOp(zero(u0), V, discr; f_update_func! = forcing!)
 
@@ -131,20 +130,9 @@ function burgers_inviscid(N, mu, tspan;
         jldsave(filename; x, u, udx, ud2x, t, mu, metadata)
 
         for k in 1:size(u, 2)
-            # It = LinRange(1, ntsave, 100) .|> Base.Fix1(round, Int)
-			It = Colon()
-            _u = @view u[:, k, It]
-            _udx = @view udx[:, k, It]
-            _ud2x = @view ud2x[:, k, It]
-
-            # anim = animate1D(_u, x, t; linewidth=2, xlabel="x", ylabel="u(x,t)", title = "μ = $(round(mu[k]; digits = 2)), ")
-            # gif(anim, joinpath(dir, "traj_$(k).gif"), fps=30)
-            #
-            # anim = animate1D(_udx, x, t; linewidth=2, xlabel="x", ylabel="u(x,t)", title = "μ = $(round(mu[k]; digits = 2)), ")
-            # gif(anim, joinpath(dir, "traj_dx_$(k).gif"), fps=30)
-            #
-            # anim = animate1D(_ud2x, x, t; linewidth=2, xlabel="x", ylabel="u(x,t)", title = "μ = $(round(mu[k]; digits = 2)), ")
-            # gif(anim, joinpath(dir, "traj_d2x_$(k).gif"), fps=30)
+            _u = @view u[:, k, :]
+            _udx = @view udx[:, k, :]
+            _ud2x = @view ud2x[:, k, :]
 
 			idx = LinRange(1f0, ntsave, 11) .|> Base.Fix1(round, Int)
 
@@ -167,11 +155,12 @@ end
 
 N = 1024
 # N = 8192
+ν = 1e-3
+tspan = (0.f0, 0.9f0)
 mu = [0.500, 0.525, 0.550, 0.575, 0.600, 0.625]
-tspan = (0.f0, 0.6f0)
 dir = joinpath(@__DIR__, "data_burg1D")
 device = gpu_device()
-(sol, V), (x, u, t, mu) = burgers_inviscid(N, mu, tspan; device, dir)
+(sol, V), (x, u, t, mu) = burgers_inviscid(N, mu, ν, tspan; device, dir)
 
 nothing
 #
