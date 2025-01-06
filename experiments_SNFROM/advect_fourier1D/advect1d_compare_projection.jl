@@ -17,11 +17,15 @@ makedata_kws = (; Ix = :, _Ib = [1,], Ib_ = [1,], _It = :, It_ = :)
 
 case = 1
 latents = [1, 2, 4, 8, 16]
-latents = [1, 4, 8, 16]
 
 function compare_advect1d_l()
 
     for latent in latents
+
+		if latent == 2
+			continue
+		end
+
         ll = lpad(latent, 2, "0")
 
         #==================#
@@ -39,14 +43,14 @@ function compare_advect1d_l()
         # # train_CAE
         # train_params_CAE = (; E = 1400, w = 32, makedata_kws, act = elu)
         # train_CAE_compare(prob, latent, datafile, modeldir_CAE, train_params_CAE; rng, device)
-        #
-        # # train_SNL
-        # train_params_SNL = (; E = 1400, wd = 64, α = 1f-4, γ = 0f-0, makedata_kws,)
-        # train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
-        #
-        # # train_SNW
-        # train_params_SNW = (; E = 1400, wd = 64, α = 0f-0, γ = 1f-2, makedata_kws,)
-        # train_SNF_compare(latent, datafile, modeldir_SNW, train_params_SNW; rng, device)
+        
+        # train_SNL
+        train_params_SNL = (; E = 1400, wd = 64, α = 1f-4, γ = 0f-0, makedata_kws,)
+        train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
+        
+        # train_SNW
+        train_params_SNW = (; E = 1400, wd = 64, α = 0f-0, γ = 1f-2, makedata_kws,)
+        train_SNF_compare(latent, datafile, modeldir_SNW, train_params_SNW; rng, device)
 
         #==================#
         # postprocess
@@ -75,8 +79,6 @@ function plot_compare_advect1d_l()
     e_SNW = []
 
     for latent in latents
-
-        @show latent
 
         ll = lpad(latent, 2, "0")
 
@@ -137,21 +139,21 @@ function plot_compare_advect1d_l()
 
     fig = Makie.Figure(; size = (600, 400), backgroundcolor = :white, grid = :off)
     ax  = Makie.Axis( fig[1,1]; xlabel, ylabel, xlabelsize, ylabelsize,
-        # xscale = log10,
+        xscale = log2,
         yscale = log10,
     )
 
-    # Makie.lines!(ax, latents, e_PCA; kwl[1]...)
+    Makie.lines!(ax, latents, e_PCA; kwl[1]...)
     Makie.lines!(ax, latents, e_CAE; kwl[2]...)
     Makie.lines!(ax, latents, e_SNL; kwl[3]...)
     Makie.lines!(ax, latents, e_SNW; kwl[4]...)
 
-    # Makie.scatter!(ax, latents, e_PCA; kws[1]...)
+    Makie.scatter!(ax, latents, e_PCA; kws[1]...)
     Makie.scatter!(ax, latents, e_CAE; kws[2]...)
     Makie.scatter!(ax, latents, e_SNL; kws[3]...)
     Makie.scatter!(ax, latents, e_SNW; kws[4]...)
 
-    Makie.Legend(fig[0,1], ax; orientation = :horizontal, framevisible = false, unique = true)
+	Makie.Legend(fig[0,1], ax; orientation = :horizontal, framevisible = false, unique = true)
 
 	save(joinpath(@__DIR__, "proj.png"), fig)
     save(joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_nrom.pdf"), fig)
