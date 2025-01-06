@@ -119,15 +119,15 @@ function compare_advect1d_s(
 		# fig[1,2] = Makie.Legend(fig, ax)
 
 	    # Makie.xlims!(ax, 2^4, 2^7)
-	    # Makie.ylims!(ax, 1e-4, 1e-0)
+	    # Makie.ylims!(ax, 1e-4, 1e-1)
 		save(joinpath(@__DIR__, "sampling.png"), fig)
-		save(joinpath(@__DIR__, "sampling.pdf"), fig)
+		save(joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_samp.pdf"), fig)
 	end
 
     nothing
 end
 
 #======================================================#
-compare_advect1d_s(prob, datafile; rng, device)
+compare_advect1d_s(prob, datafile; rng, device) #, evolve = true)
 #======================================================#
 nothing

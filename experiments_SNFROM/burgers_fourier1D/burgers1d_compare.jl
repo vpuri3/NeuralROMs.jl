@@ -65,24 +65,6 @@ modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 # postprocess_SNF(prob, datafile, modelfile_SNL; rng, evolve_kw, device)
 
 #==================#
-# small DT
-#==================#
-
-# T  = 0.5f0
-# Nt = 500
-# It = LinRange(1, Nt, 100) .|> Base.Fix1(round, Int)
-# data_kws = (; Ix = :, It)
-# evolve_kw = (; Δt = T, data_kws, adaptive = false)
-#
-# outdir_SNW = joinpath(modeldir_SNW, "dt")
-# outdir_SNL = joinpath(modeldir_SNL, "dt")
-# outdir_CAE = joinpath(modeldir_CAE, "dt")
-#
-# postprocess_CAE(prob, datafile, modelfile_CAE; rng, outdir = outdir_CAE, evolve_kw,)
-# postprocess_SNF(prob, datafile, modelfile_SNL; rng, outdir = outdir_SNL, evolve_kw, device)
-# postprocess_SNF(prob, datafile, modelfile_SNW; rng, outdir = outdir_SNW, evolve_kw, device)
-
-#==================#
 # make figures
 #==================#
 

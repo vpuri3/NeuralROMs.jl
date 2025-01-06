@@ -36,7 +36,6 @@ NonlinearSolveBase.L2_NORM(u::ComponentArray) = NonlinearSolveBase.L2_NORM(getda
 function compare_compression(; device = gpu_device(), compute_svd::Bool = false)
 
 	svdfile = joinpath(BASEDIR, "svd.jld2")
-	imgfile = joinpath(BASEDIR, "svd.pdf") # png, pdf
 
 	if isfile(svdfile) & !(compute_svd)
 		println("Loading singular values from $svdfile.")
@@ -80,7 +79,8 @@ function compare_compression(; device = gpu_device(), compute_svd::Bool = false)
 	Makie.axislegend(ax)
 	Makie.xlims!(ax, 1e+0, 1e+3)
 	Makie.ylims!(ax, 1e-4, 1e-0)
-	save(imgfile, fig)
+	save(joinpath(BASEDIR, "svd.png"), fig)
+	save(joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_svd.pdf"), fig)
 
 	return
 end
@@ -246,6 +246,7 @@ function compare_plots(
     h5path = joinpath(outdir, "$(casename).h5")
 
     for (i, modeldir) in enumerate(modeldirs)
+
         ev = jldopen(joinpath(modeldir, "results", "evolve$(case).jld2"))
 
         Xd = ev["Xdata"]
@@ -253,7 +254,7 @@ function compare_plots(
         Ud = ev["Udata"]
         Up = ev["Upred"]
         Pp = ev["Ppred"]
-        Ue = ev["Ulrnd"]
+        Ue = ev["Ulrnd"] # 0 * Ud
         Pe = isone(i) ? Pp : ev["Plrnd"]
 
         in_dim  = size(Xd, 1)

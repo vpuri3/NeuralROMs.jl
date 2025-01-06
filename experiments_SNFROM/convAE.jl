@@ -463,7 +463,7 @@ function evolve_CAE(
     #==============#
     linsolve = QRFactorization()
     autodiff = AutoForwardDiff()
-    linesearch = LineSearch()
+    linesearch = NoLineSearch()
     nlssolve = GaussNewton(;autodiff, linsolve, linesearch)
     nlsmaxiters = 10
 

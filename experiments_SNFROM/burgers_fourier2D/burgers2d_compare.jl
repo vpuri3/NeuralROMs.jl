@@ -65,33 +65,6 @@ modelfile_SNW = joinpath(modeldir_SNW, "model_07.jld2")
 # postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
 
 cases = 1:7
-# cases = [4,]
-
-# for case in cases
-#     evolve_CAE(prob, datafile, modelfile_CAE, case; rng)
-#     evolve_SNF(prob, datafile, modelfile_SNL, case; rng, device)
-#     evolve_SNF(prob, datafile, modelfile_SNW, case; rng, device)
-# end
-
-#==================#
-# small DT
-#==================#
-
-# T  = 0.5f0
-# Nt = 500
-# It = LinRange(1, Nt, 50) .|> Base.Fix1(round, Int)
-# data_kws = (; Ix = :, It)
-# evolve_kw = (; Δt = T, data_kws, adaptive = false)
-#
-# outdir_SNW = joinpath(modeldir_SNW, "dt")
-# outdir_SNL = joinpath(modeldir_SNL, "dt")
-# outdir_CAE = joinpath(modeldir_CAE, "dt")
-#
-# for case in cases
-#     evolve_CAE(prob, datafile, modelfile_CAE, case; rng, outdir = outdir_CAE, evolve_kw...,)
-#     evolve_SNF(prob, datafile, modelfile_SNL, case; rng, outdir = outdir_SNL, evolve_kw..., device)
-#     evolve_SNF(prob, datafile, modelfile_SNW, case; rng, outdir = outdir_SNW, evolve_kw..., device)
-# end
 
 #==================#
 # make figures
@@ -101,10 +74,11 @@ casename = "burgers2d"
 modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW,)
 labels = ("POD ($(1*l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
 
-for case in cases[[1,4,7]]
+for case in cases
     _casename = casename * "case$case"
     @show _casename
     compare_plots(modeldirs, labels, @__DIR__, _casename, case, grid; ifdt = false)
 end
+
 #======================================================#
-#
+nothing
