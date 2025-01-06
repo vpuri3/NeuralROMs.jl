@@ -15,8 +15,11 @@ device = Lux.gpu_device()
 
 makedata_kws = (; Ix = :, _Ib = [1,], Ib_ = [1,], _It = :, It_ = :)
 
+case = 1
+latents = [1, 2, 4, 8, 16]
+latents = [1, 4, 8, 16]
+
 function compare_advect1d_l()
-    latents = [1, 2, 3, 4, 8, 12, 16, 20]#, 24]
 
     for latent in latents
         ll = lpad(latent, 2, "0")
@@ -65,9 +68,6 @@ end
 
 #======================================================#
 function plot_compare_advect1d_l()
-    latents = [1, 2, 3, 4, 8, 12, 16, 20]#, 24]
-
-    case = 1
 
     e_PCA = []
     e_CAE = []
@@ -141,23 +141,20 @@ function plot_compare_advect1d_l()
         yscale = log10,
     )
 
-    Makie.lines!(ax, latents, e_PCA; kwl[1]...)
+    # Makie.lines!(ax, latents, e_PCA; kwl[1]...)
     Makie.lines!(ax, latents, e_CAE; kwl[2]...)
     Makie.lines!(ax, latents, e_SNL; kwl[3]...)
     Makie.lines!(ax, latents, e_SNW; kwl[4]...)
 
-    Makie.scatter!(ax, latents, e_PCA; kws[1]...)
+    # Makie.scatter!(ax, latents, e_PCA; kws[1]...)
     Makie.scatter!(ax, latents, e_CAE; kws[2]...)
     Makie.scatter!(ax, latents, e_SNL; kws[3]...)
     Makie.scatter!(ax, latents, e_SNW; kws[4]...)
 
     Makie.Legend(fig[0,1], ax; orientation = :horizontal, framevisible = false, unique = true)
 
-    path1 = joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_nrom.pdf")
-    path2 = joinpath(@__DIR__, "compare_ll_case1.pdf")
-
-    save(path1, fig)
-    save(path2, fig)
+	save(joinpath(@__DIR__, "proj.png"), fig)
+    save(joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_nrom.pdf"), fig)
 
     fig
 end

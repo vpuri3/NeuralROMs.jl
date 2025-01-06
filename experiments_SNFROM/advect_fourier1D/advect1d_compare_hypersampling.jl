@@ -15,7 +15,7 @@ device = Lux.gpu_device()
 
 makedata_kws = (; Ix = :, _Ib = [1,], Ib_ = [1,], _It = :, It_ = :)
 
-function compare_advect1d_s(
+function compare_advect1d_samp(
     prob::NeuralROMs.AbstractPDEProblem,
     datafile::String;
 	evolve::Bool = false,
@@ -26,7 +26,7 @@ function compare_advect1d_s(
 	Nx = 128
 	casenum = 1
 
-	npoints = [16, 32, 64, 128]
+	npoints = [2, 4, 8, 16, 32, 64, 128]
 	latents = [2,] # [1, 2, 4]
 	models = ["SNL", "SNW"]
 
@@ -51,7 +51,7 @@ function compare_advect1d_s(
 			for sample_type in (:uniform, :random)
 				key   = Symbol("$(model)-$(ll)-$(sample_type)")
 				error = zeros(Float32, length(npoints))
-				name  = LaTeXString("$(modelname) ($(sample_type) sampling)")
+				name  = latexstring(modelname, " ($(sample_type) sampling)", L"$$")
 
 				case = (; error, name)
 				cases = merge(cases, NamedTuple{(key,)}((case,)))
@@ -61,7 +61,8 @@ function compare_advect1d_s(
 					hyper_indices = if sample_type == :random
 						idx_rand[1:N]
 					elseif sample_type == :uniform
-						indices = map(x -> round(Int, x), LinRange(1, Nx, N))
+						idx = (1:N) ./ N * Nx
+						map(x -> round(Int, x), idx)
 					else
 						@assert false
 					end
@@ -84,11 +85,8 @@ function compare_advect1d_s(
 						up = ev["Upred"]
 						er = @. (up - ud) / nr
 						# er = sqrt(sum(abs2, er) / length(er))
-						er = sum(abs2, up[:,:,end] - ud[:, :, end]) / sum(abs2, ud[:, :, end]) |> sqrt
-						error[i] = er
-
-						# case  = Symbol("$(model)-$(ll)-$(sample_type)-$(N)")
-						# cases = merge(cases, NamedTuple{(case,)}((up,)))
+						er = sum(abs2, up[:,:,end] - ud[:,:,end]) / sum(abs2, ud[:,:,end])
+						error[i] = sqrt(er)
 					end
 
 				end # N points
@@ -98,11 +96,10 @@ function compare_advect1d_s(
 	end # latent
 
 	if makeplot
-
         fig = Makie.Figure(; size = (600, 400), backgroundcolor = :white, grid = :off)
         ax  = Makie.Axis(
 			fig[1,1];
-		    xlabel = L"Number of hyper-reduction points ($|X_\text{proj}|$)",
+			xlabel = L"Number of hyper-reduction points ($|X_\text{proj}|$)",
 		    ylabel = L"$\varepsilon(T)$",
 			xlabelsize = 16,
 			ylabelsize = 16,
@@ -111,7 +108,7 @@ function compare_advect1d_s(
         )
 
 		for (k, (v, n)) in pairs(cases)
-			println(k, v)
+			println(k, " ", v)
 			Makie.scatterlines!(npoints, v; label = n, linewidth = 2)
 		end
 
@@ -128,6 +125,6 @@ function compare_advect1d_s(
 end
 
 #======================================================#
-compare_advect1d_s(prob, datafile; rng, device) #, evolve = true)
+compare_advect1d_samp(prob, datafile; rng, device) # evolve = true)
 #======================================================#
 nothing
