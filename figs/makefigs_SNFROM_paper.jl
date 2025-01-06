@@ -831,6 +831,8 @@ function ptplot!(ax, t, p, q, pdt = nothing;
 end
 
 #======================================================#
+# main
+#======================================================#
 outdir = joinpath(@__DIR__, "results")
 datadir = joinpath(@__DIR__, "datafiles")
 
@@ -859,6 +861,8 @@ e4file7 = joinpath(datadir, "burgers2dcase7.h5")
 e4files = (e4file1, e4file2, e4file3, e4file4, e4file5, e4file6, e4file7)
 
 #======================================================#
+# make plots
+#======================================================#
 
 # EXP 1, 2, 5
 makeplots(e1file, outdir, "exp1"; ifdt = true)
@@ -866,7 +870,7 @@ makeplots(e2file, outdir, "exp2"; ifdt = false)
 makeplots(e5file, outdir, "exp5"; ifdt = true)
 
 # EXP 3
-makeplots(e3file4, outdir, "exp3case4")
+makeplots(e3file4, outdir, "exp3case4"; ifdt = false)
 makeplots_parametric(e3files, outdir, "exp3"; ifdt = false)
 
 # EXP 4
