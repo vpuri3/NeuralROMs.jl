@@ -316,7 +316,7 @@ ax3 = Makie.Axis(fig[3,1]; xlabel, ylabel = L"u''(x)", xlabelsize, ylabelsize)
 
 colors = [:black, :orange, :green, :blue, :red,]
 styles = [:solid, :solid, :dash, :dashdot, :dashdotdot,]
-labels = [L"Ground truth$$", L"No regularization$$", L"$L_2$ regularization $(γ=5\cdot10^{-2})$", L"Lipschitz regularization $(α=5⋅10^{-5})$", L"Weight regularization $(γ=5⋅10^{-2})$",]
+labels = [L"Ground truth$$", L"No regularization$$", L"$L_2$ regularization $(γ=5\times10^{-2})$", L"Lipschitz regularization $(α=5\times10^{-5})$", L"Weight regularization $(γ=5\times10^{-2})$",]
 
 kws = Tuple(
     (; color = colors[i], linestyle = styles[i], label = labels[i], linewidth = 2)
