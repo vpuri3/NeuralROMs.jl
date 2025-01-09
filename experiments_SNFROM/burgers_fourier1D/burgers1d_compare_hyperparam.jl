@@ -151,7 +151,7 @@ function compare_burg1d_param(
 		# Makie.axislegend(axL; orientation = :horizontal, nbanks = 2)
 		# Makie.axislegend(axW; orientation = :horizontal, nbanks = 2)
 
-		kwl = (;orientation = :horizontal, nbanks = 3, fontsize = 16, frame = false)
+		kwl = (;orientation = :horizontal, nbanks = 3, fontsize = 16, framevisible = false)
 		fig[0, 1] = Makie.Legend(fig, axL; kwl...)
 		fig[0, 2] = Makie.Legend(fig, axW; kwl...)
 
