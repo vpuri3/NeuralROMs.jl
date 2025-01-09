@@ -26,8 +26,8 @@ CASES = (
 )
 
 # https://github.com/SciML/NonlinearSolve.jl/issues/524
-using NonlinearSolve, ComponentArrays
-NonlinearSolveBase.L2_NORM(u::ComponentArray) = NonlinearSolveBase.L2_NORM(getdata(u))
+import NonlinearSolve, ComponentArrays
+NonlinearSolve.NonlinearSolveBase.L2_NORM(u::ComponentArrays.ComponentArray) = NonlinearSolve.NonlinearSolveBase.L2_NORM(ComponentArrays.getdata(u))
 
 #======================================================#
 # SVD Compression
@@ -85,6 +85,7 @@ function compare_compression(; device = gpu_device(), compute_svd::Bool = false)
 	return
 end
 
+# compare_compression(; compute_svd = true)
 # compare_compression()
 
 #======================================================#

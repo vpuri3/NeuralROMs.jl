@@ -61,16 +61,16 @@ modelfile_INR = joinpath(modeldir_INR, "model_07.jld2")
 
 # postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
 # postprocess_CAE(prob, datafile, modelfile_CAE; rng)
-# postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
+postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
 # postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 
-# #==================#
-# # make figures
-# #==================#
-# grid = (128,)
-# casename = "advect1d"
-# modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW)
-# label = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
-#
-# p1, p2, p3 = compare_plots(modeldirs, label, @__DIR__, casename, 1, grid; ifdt = false)
+#==================#
+# make figures
+#==================#
+grid = (128,)
+casename = "advect1d"
+modeldirs = (; modeldir_PCA, modeldir_CAE, modeldir_SNL, modeldir_SNW)
+label = ("POD ($(l_pca) modes)", "CAE", "SNFL (ours)", "SNFW (ours)")
+
+p1, p2, p3 = compare_plots(modeldirs, label, @__DIR__, casename, 1, grid; ifdt = false)
 #======================================================#

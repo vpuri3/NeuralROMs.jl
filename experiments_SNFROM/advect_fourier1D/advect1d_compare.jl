@@ -37,11 +37,11 @@ modeldir_INR = joinpath(@__DIR__, "model_INR$(l0)") # C-ROM
 # # train_CAE
 # train_params_CAE = (; E = 1400, w = 32, makedata_kws, act = elu)
 # train_CAE_compare(prob, latent, datafile, modeldir_CAE, train_params_CAE; rng, device)
-#
-# # train_SNW
-# train_params_SNW = (; E = 1400, wd = 64, α = 0f-0, γ = 1f-2, makedata_kws,)
-# train_SNF_compare(latent, datafile, modeldir_SNW, train_params_SNW; rng, device)
-#
+
+# train_SNW
+train_params_SNW = (; E = 1400, wd = 64, α = 0f-0, γ = 1f-2, makedata_kws,)
+train_SNF_compare(latent, datafile, modeldir_SNW, train_params_SNW; rng, device)
+
 # # train_SNL
 # train_params_SNL = (; E = 1400, wd = 64, α = 1f-4, γ = 0f-0, makedata_kws,)
 # train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
@@ -65,28 +65,28 @@ modelfile_INR = joinpath(modeldir_INR, "model_07.jld2")
 
 # postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
 # postprocess_CAE(prob, datafile, modelfile_CAE; rng)
-# postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
+postprocess_SNF(prob, datafile, modelfile_SNW; rng, device)
 # postprocess_SNF(prob, datafile, modelfile_SNL; rng, device)
 
 #==================#
-# small DT
+# large DT
 #==================#
 
-# evolve_kw = (;)
-#
-# T  = 4.0f0
-# Nt = 500
-# It = LinRange(1, Nt, 50) .|> Base.Fix1(round, Int)
-# data_kws = (; Ix = :, It)
-# evolve_kw = (; Δt = T, data_kws, adaptive = false)
-#
-# outdir_SNW = joinpath(modeldir_SNW, "dt")
-# outdir_SNL = joinpath(modeldir_SNL, "dt")
-# outdir_CAE = joinpath(modeldir_CAE, "dt")
-#
+evolve_kw = (;)
+
+T  = 4.0f0
+Nt = 500
+It = LinRange(1, Nt, 50) .|> Base.Fix1(round, Int)
+data_kws = (; Ix = :, It)
+evolve_kw = (; Δt = T, data_kws, adaptive = false)
+
+outdir_SNW = joinpath(modeldir_SNW, "dt")
+outdir_SNL = joinpath(modeldir_SNL, "dt")
+outdir_CAE = joinpath(modeldir_CAE, "dt")
+
 # evolve_CAE(prob, datafile, modelfile_CAE, 1; rng, outdir = outdir_CAE, evolve_kw...,)
+evolve_SNF(prob, datafile, modelfile_SNW, 1; rng, outdir = outdir_SNW, evolve_kw..., device)
 # evolve_SNF(prob, datafile, modelfile_SNL, 1; rng, outdir = outdir_SNL, evolve_kw..., device)
-# evolve_SNF(prob, datafile, modelfile_SNW, 1; rng, outdir = outdir_SNW, evolve_kw..., device)
 
 #==================#
 # make figures

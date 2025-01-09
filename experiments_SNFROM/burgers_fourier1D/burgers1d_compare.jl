@@ -8,7 +8,7 @@ joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "compare.jl") |> include
 rng = Random.default_rng()
 Random.seed!(rng, 199)
 
-prob = BurgersViscous1D(1f-4)
+prob = BurgersViscous1D(1f-3)
 datafile = joinpath(@__DIR__, "data_burg1D", "data.jld2")
 device = Lux.gpu_device()
 
@@ -19,7 +19,7 @@ makedata_kws = (; Ix, _Ib, Ib_, _It, It_ = :)
 
 # latent 
 latent = 2
-l_pca  = 16
+l_pca  = 24
 
 #==================#
 # train
@@ -40,12 +40,12 @@ modeldir_SNL = joinpath(@__DIR__, "model_SNL$(l0)") # us (Lipschitz)
 # train_params_CAE = (; E = 1400, w = 64, makedata_kws,)
 # train_CAE_compare(prob, latent, datafile, modeldir_CAE, train_params_CAE; rng, device)
 #
-# # train_SNW
-# train_params_SNW = (; E = 1400, wd = 128, α = 0f-0, γ = 1f-2, makedata_kws)#, batchsize_)
+# # train_SNW (gamma = 1f-2)
+# train_params_SNW = (; E = 1400, wd = 128, α = 0f-0, γ = 5f-2, makedata_kws)#, batchsize_)
 # train_SNF_compare(latent, datafile, modeldir_SNW, train_params_SNW; rng, device)
 #
-# # train_SNL
-# train_params_SNL = (; E = 1400, wd = 128, α = 1f-4, γ = 0f-0, makedata_kws)#, batchsize_)
+# # train_SNL # (alpha = 1e-6)
+# train_params_SNL = (; E = 1400, wd = 128, α = 1f-6, γ = 0f-0, makedata_kws)#, batchsize_)
 # train_SNF_compare(latent, datafile, modeldir_SNL, train_params_SNL; rng, device)
 
 #==================#
@@ -57,8 +57,8 @@ modelfile_CAE = joinpath(modeldir_CAE, "model_07.jld2")
 modelfile_SNW = joinpath(modeldir_SNW, "model_08.jld2")
 modelfile_SNL = joinpath(modeldir_SNL, "model_08.jld2")
 
-# evolve_kw = (;)
-#
+evolve_kw = (;)
+
 # postprocess_PCA(prob, datafile, modelfile_PCA; rng, device)
 # postprocess_CAE(prob, datafile, modelfile_CAE; rng, evolve_kw)
 # postprocess_SNF(prob, datafile, modelfile_SNW; rng, evolve_kw, device)

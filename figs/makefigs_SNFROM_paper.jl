@@ -252,6 +252,8 @@ function makeplots(
         LineElement(; linestyle = :dash , linewidth = 4.0, color = :black,),
     ]
 
+	l0 = L"Learned prediction $$"
+
     if ifdt
         labels = [L"\text{Dynamics evaluation }(Δt = Δt_0)", L"\text{Dynamics evaluation }(Δt = 10Δt_0)"]
     else
@@ -259,21 +261,19 @@ function makeplots(
         labels = [L"\text{Dynamics evaluation}",]
     end
 
-    if occursin("exp3", casename)
-        l1 = L"Learned prediction $e_{θ_e}(ū(t; \mathbf{\mu}))$"
-        l2 = L"Learned prediction $\Xi_\varrho(t, \mathbf{\mu})$"
-    else
-        l1 = L"Learned prediction $e_{θ_e}(ū(t))$"
-        l2 = L"Learned prediction $\Xi_\varrho(t)$"
-    end
+    # if occursin("exp3", casename)
+    #     l1 = L"Learned prediction $e_{θ_e}(ū(t; \mathbf{\mu}))$"
+    #     l2 = L"Learned prediction $\Xi_\varrho(t, \mathbf{\mu})$"
+    # else
+    #     l1 = L"Learned prediction $e_{θ_e}(ū(t))$"
+    #     l2 = L"Learned prediction $\Xi_\varrho(t)$"
+    # end
+    #
+    # axislegend(axp1, elems, [l1, labels...]; position = :lt, patchsize = (40, 10))
+    # axislegend(axp2, elems, [l2, labels...]; position = :lb, patchsize = (40, 10))
+    # axislegend(axp3, elems, [l2, labels...]; position = :lb, patchsize = (40, 10))
 
-    axislegend(axp1, elems, [l1, labels...]; position = :lt, patchsize = (40, 10))
-    axislegend(axp2, elems, [l2, labels...]; position = :lb, patchsize = (40, 10))
-    axislegend(axp3, elems, [l2, labels...]; position = :lb, patchsize = (40, 10))
-
-    if casename == "exp1" # hack to make legend fit
-        ylims!(axp1, -30, 35)
-    end
+	Legend(figq[0,:], elems, [l0, labels...]; orientation = :horizontal, patchsize = (50, 10), framevisible = false)
 
     #===============================#
     # FIGT, FIGE, FIGC
@@ -443,6 +443,11 @@ function makeplots(
         colsize!(figc.layout, 4, Relative(0.25))
     end
 
+	if occursin("exp3", casename)
+		ylims!(axt0, 0.75, 1.75)
+		ylims!(axt1, 0.75, 1.75)
+	end
+
     linkaxes!(axt0, axt1)
     hideydecorations!(axt1; grid = false)
 
@@ -610,12 +615,13 @@ function makeplots_parametric(
         [L"Learned prediction $\Xi_\varrho(t, \mathbf{\mu})$", L"Dynamics evaluation$$"]
     end
 
-    axislegend(axp1, elems, lCAE; position = :lt, patchsize = (40, 10))
-    axislegend(axp2, elems, lSNF; position = :rb, patchsize = (40, 10))
-    axislegend(axp3, elems, lSNF; position = :lb, patchsize = (40, 10))
+	# move these to bottom
+    axislegend(axp1, elems, lCAE; position = :rt, patchsize = (40, 10))
+    axislegend(axp2, elems, lSNF; position = :lb, patchsize = (40, 10))
+    axislegend(axp3, elems, lSNF; position = :lt, patchsize = (40, 10))
 
-    xlims!(axp1, -8, -1)
-    ylims!(axp1, -8, 13)
+    # xlims!(axp1, -8, -1)
+    # ylims!(axp1, -8, 13)
 
     for ext in (".pdf", ".svg")
         save(joinpath(outdir, "$(casename)p" * ext), figp)
@@ -864,16 +870,16 @@ e4files = (e4file1, e4file2, e4file3, e4file4, e4file5, e4file6, e4file7)
 # make plots
 #======================================================#
 
-# EXP 1, 2, 5
-makeplots(e1file, outdir, "exp1"; ifdt = true)
-makeplots(e2file, outdir, "exp2"; ifdt = false)
-makeplots(e5file, outdir, "exp5"; ifdt = true)
+# # EXP 1, 2, 5
+# makeplots(e1file, outdir, "exp1"; ifdt = true)
+# makeplots(e2file, outdir, "exp2"; ifdt = false)
+# makeplots(e5file, outdir, "exp5"; ifdt = true)
 
-# EXP 3
-makeplots(e3file4, outdir, "exp3case4"; ifdt = false)
-makeplots_parametric(e3files, outdir, "exp3"; ifdt = false)
+# # EXP 4
+# makeplots(e4file4, outdir, "exp4case4")
 
-# EXP 4
-makeplots(e4file4, outdir, "exp4case4")
+# # EXP 3
+# makeplots(e3file4, outdir, "exp3case4"; ifdt = false)
+# makeplots_parametric(e3files, outdir, "exp3"; ifdt = false)
 
 #======================================================#
