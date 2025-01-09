@@ -134,25 +134,26 @@ function compare_burg1d_param(
 	#==================#
 
 	if makeplot
-		fig = Makie.Figure(; size = (900, 600), backgroundcolor = :white, grid = :off)
+		fig = Makie.Figure(; size = (900, 500), backgroundcolor = :white, grid = :off)
 		kwa = (; xlabel = L"t", ylabel = L"ε(t)", xlabelsize = 16, ylabelsize = 16, yscale = log10,)
 		kwl = (; linewidth = 3,)
 		axL = Makie.Axis(fig[1,1]; kwa...)
 		axW = Makie.Axis(fig[1,2]; kwa...)
 
 		for (k, (n, er, ep)) in pairs(casesL)
-			Makie.lines!(axL, t, er; label = n, linewidth = 2)
+			Makie.lines!(axL, t, er; label = n, linewidth = 3)
 		end
 
 		for (k, (n, er, ep)) in pairs(casesW)
-			Makie.lines!(axW, t, er; label = n, linewidth = 2)
+			Makie.lines!(axW, t, er; label = n, linewidth = 3)
 		end
 
 		# Makie.axislegend(axL; orientation = :horizontal, nbanks = 2)
 		# Makie.axislegend(axW; orientation = :horizontal, nbanks = 2)
 
-		fig[0, 1] = Makie.Legend(fig, axL; orientation = :horizontal, nbanks = 3, fontsize = 16)
-		fig[0, 2] = Makie.Legend(fig, axW; orientation = :horizontal, nbanks = 3, fontsize = 16)
+		kwl = (;orientation = :horizontal, nbanks = 3, fontsize = 16, frame = false)
+		fig[0, 1] = Makie.Legend(fig, axL; kwl...)
+		fig[0, 2] = Makie.Legend(fig, axW; kwl...)
 
         Makie.Label(fig[2,1], L"(a) SNFL‐ROM$$", fontsize = 16)
         Makie.Label(fig[2,2], L"(b) SNFW‐ROM$$", fontsize = 16)
