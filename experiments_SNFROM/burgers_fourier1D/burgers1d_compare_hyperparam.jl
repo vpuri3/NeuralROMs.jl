@@ -1,6 +1,6 @@
 #
 using NeuralROMs
-using LaTeXStrings
+using LaTeXStrings, Printf
 import CairoMakie
 import CairoMakie.Makie
 
@@ -33,13 +33,14 @@ function compare_burg1d_param(
 	alphas = (1f-4, 5f-5, 1f-5, 5f-6, 1f-6, 5f-7, 1f-7)
 	gammas = (5f-1, 1f-1, 5f-2, 1f-2, 5f-3, 1f-3, 5f-4)
 
-	k = 3
+	icase = 3
 
 	if makeplot
-		cases = (;)
-		_, t, _, ud, _ = loaddata(datafile)[4]
-		ud = ud[:,:,k,:] # [out_dim, Nx, Nb, Nt]
-        nr = sqrt(sum(abs2, ud; dims=2) / size(ud, 2))
+		casesL = (;)
+		casesW = (;)
+		_, t, _, ud, _ = loaddata(datafile; verbose = false) # [Nt], [out_dim, Nx, Nb, Nt]
+		ud = ud[:,:,icase,:] # [1, Nx, Nt]
+		nr = sqrt.(sum(abs2, ud; dims=2) / size(ud, 2)) # [1, 1, Nt]
 	end
 
 	for (i, (a, g)) in enumerate(zip(alphas, gammas))
@@ -80,26 +81,52 @@ function compare_burg1d_param(
 			nameL = L"SNFL-ROM ($\alpha = %$(alphas[i])$)"
 			nameW = L"SNFL-ROM ($\gamma = %$(gammas[i])$)"
 
-			epL = 0
-			erL = 0
-
-			fileL = joinpath(modelfile_SNL, "evolve$(k).jld2")
-			fileW = joinpath(modelfile_SNW, "evolve$(k).jld2")
+			fileL = joinpath(modeldir_SNL, "results", "evolve$(icase).jld2")
+			fileW = joinpath(modeldir_SNW, "results", "evolve$(icase).jld2")
 
 			evL = jldopen(fileL)
 			evW = jldopen(fileW)
 
+			# projection error
+			ulL = evL["Ulrnd"]
+			ulW = evW["Ulrnd"]
+
+			epL = (ulL - ud) ./ nr
+			epW = (ulW - ud) ./ nr
+
+			# prediction error
 			upL = evL["Upred"]
 			upW = evW["Upred"]
 
-			epL = (up - ud)
+			erL = (upL - ud) ./ nr
+			erW = (upW - ud) ./ nr
 
-			er = (up - ud) ./ nr
-			er = sum(abs2, er; dims=2) / size(ud, 2) |> vec
-			er = sqrt.(er) + 1f-12
-			er = sqrt(sum(abs2, er) / length(er)) # error vs time
+			erL = sum(abs2, erL; dims=2) / size(ud, 2) .|> sqrt |> vec
+			erW = sum(abs2, erW; dims=2) / size(ud, 2) .|> sqrt |> vec
+
+			# merge
+			kL = Symbol("SNFL-$(i)")
+			kW = Symbol("SNFW-$(i)")
+
+			aa = @sprintf("%.1e", a) # Produces "5.0e-04"
+			gg = @sprintf("%.1e", g)
+
+			aa = replace(aa, ".0" => "") # Removes trailing ".0"
+			gg = replace(gg, ".0" => "") # "5e-04"
+
+			aa = replace(aa, "-0" => "-") # "5e-4"
+			gg = replace(gg, "-0" => "-")
+
+			nL = L"$\alpha = %$(aa)$"
+			nW = L"$\gamma = %$(gg)$"
+
+			cL = (; name = nL, er = erL, ep = epL)
+			cW = (; name = nW, er = erW, ep = epW)
+
+			# _cases = NamedTuple{(kL, kW,)}((cL, cW,))
+			casesL = merge(casesL, NamedTuple{(kL,)}((cL,)))
+			casesW = merge(casesW, NamedTuple{(kW,)}((cW,)))
 		end
-
 	end
 
 	#==================#
@@ -107,28 +134,36 @@ function compare_burg1d_param(
 	#==================#
 
 	if makeplot
-		fig = Makie.Figure(; size = (600, 400), backgroundcolor = :white, grid = :off)
-		ax  = Makie.Axis(
-			fig[1,1];
-			xlabel = L"t",
-			ylabel = L"ε(t)",
-			xlabelsize = 16,
-			ylabelsize = 16,
-		)
+		fig = Makie.Figure(; size = (900, 600), backgroundcolor = :white, grid = :off)
+		kwa = (; xlabel = L"t", ylabel = L"ε(t)", xlabelsize = 16, ylabelsize = 16, yscale = log10,)
+		kwl = (; linewidth = 3,)
+		axL = Makie.Axis(fig[1,1]; kwa...)
+		axW = Makie.Axis(fig[1,2]; kwa...)
 
-		for (k, (v, n)) in pairs(cases)
-			println(k, " ", v)
-			Makie.scatterlines!(npoints, v; label = n, linewidth = 2)
+		for (k, (n, er, ep)) in pairs(casesL)
+			Makie.lines!(axL, t, er; label = n, linewidth = 2)
 		end
 
-		Makie.axislegend(ax)
-		# fig[1,2] = Makie.Legend(fig, ax)
+		for (k, (n, er, ep)) in pairs(casesW)
+			Makie.lines!(axW, t, er; label = n, linewidth = 2)
+		end
+
+		# Makie.axislegend(axL; orientation = :horizontal, nbanks = 2)
+		# Makie.axislegend(axW; orientation = :horizontal, nbanks = 2)
+
+		fig[0, 1] = Makie.Legend(fig, axL; orientation = :horizontal, nbanks = 3, fontsize = 16)
+		fig[0, 2] = Makie.Legend(fig, axW; orientation = :horizontal, nbanks = 3, fontsize = 16)
+
+        Makie.Label(fig[2,1], L"(a) SNFL‐ROM$$", fontsize = 16)
+        Makie.Label(fig[2,2], L"(b) SNFW‐ROM$$", fontsize = 16)
+
+        Makie.colsize!(fig.layout, 1, Makie.Relative(0.50))
+        Makie.colsize!(fig.layout, 2, Makie.Relative(0.50))
 
 		save(joinpath(@__DIR__, "param.png"), fig)
-		# save(joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_param.pdf"), fig)
+		save(joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_param.pdf"), fig)
 	end
 end
-
 
 #======================================================#
 # compare_burg1d_param(prob, datafile; rng, device, train = true, evolve = true)

@@ -125,6 +125,6 @@ function compare_advect1d_samp(
 end
 
 #======================================================#
-compare_advect1d_samp(prob, datafile; rng, device) # evolve = true)
+compare_burg1d_param(prob, datafile; rng, device) # evolve = true)
 #======================================================#
 nothing
