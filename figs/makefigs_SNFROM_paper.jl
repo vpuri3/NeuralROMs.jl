@@ -618,7 +618,7 @@ function makeplots_parametric(
 	# move these to bottom
     axislegend(axp1, elems, lCAE; position = :rt, patchsize = (40, 10))
     axislegend(axp2, elems, lSNF; position = :lb, patchsize = (40, 10))
-    axislegend(axp3, elems, lSNF; position = :lt, patchsize = (40, 10))
+    axislegend(axp3, elems, lSNF; position = :lb, patchsize = (40, 10))
 
     # xlims!(axp1, -8, -1)
     # ylims!(axp1, -8, 13)
@@ -870,16 +870,16 @@ e4files = (e4file1, e4file2, e4file3, e4file4, e4file5, e4file6, e4file7)
 # make plots
 #======================================================#
 
-# # EXP 1, 2, 5
-# makeplots(e1file, outdir, "exp1"; ifdt = true)
-# makeplots(e2file, outdir, "exp2"; ifdt = false)
-# makeplots(e5file, outdir, "exp5"; ifdt = true)
+# EXP 1, 2, 5
+makeplots(e1file, outdir, "exp1"; ifdt = true)
+makeplots(e2file, outdir, "exp2"; ifdt = false)
+makeplots(e5file, outdir, "exp5"; ifdt = true)
 
-# # EXP 4
-# makeplots(e4file4, outdir, "exp4case4")
+# EXP 4
+makeplots(e4file4, outdir, "exp4case4")
 
-# # EXP 3
-# makeplots(e3file4, outdir, "exp3case4"; ifdt = false)
-# makeplots_parametric(e3files, outdir, "exp3"; ifdt = false)
+# EXP 3
+makeplots(e3file4, outdir, "exp3case4"; ifdt = false)
+makeplots_parametric(e3files, outdir, "exp3"; ifdt = false)
 
 #======================================================#

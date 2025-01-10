@@ -33,7 +33,7 @@ function compare_burg1d_param(
 	alphas = (1f-4, 5f-5, 1f-5, 5f-6, 1f-6, 5f-7, 1f-7)
 	gammas = (5f-1, 1f-1, 5f-2, 1f-2, 5f-3, 1f-3, 5f-4)
 
-	icase = 3
+	icase = 4
 
 	if makeplot
 		casesL = (;)
@@ -94,6 +94,9 @@ function compare_burg1d_param(
 			epL = (ulL - ud) ./ nr
 			epW = (ulW - ud) ./ nr
 
+			epL = sum(abs2, epL) / length(epL) |> sqrt
+			epW = sum(abs2, epW) / length(epL) |> sqrt
+
 			# prediction error
 			upL = evL["Upred"]
 			upW = evW["Upred"]
@@ -136,17 +139,28 @@ function compare_burg1d_param(
 	if makeplot
 		fig = Makie.Figure(; size = (900, 500), backgroundcolor = :white, grid = :off)
 		kwa = (; xlabel = L"t", ylabel = L"ε(t)", xlabelsize = 16, ylabelsize = 16, yscale = log10,)
-		kwl = (; linewidth = 3,)
 		axL = Makie.Axis(fig[1,1]; kwa...)
 		axW = Makie.Axis(fig[1,2]; kwa...)
 
+		# kwa2 = (; ylabel = L"Projection error $e_\text{proj}$", xlabelsize = 16, ylabelsize = 16, xscale = log10, yscale = log10,)
+		# axL2 = Makie.Axis(fig[3,1]; xlabel = L"\alpha", kwa2...)
+		# axW2 = Makie.Axis(fig[3,2]; xlabel = L"\gamma", kwa2...)
+
+		epL = []
+		epW = []
+
 		for (k, (n, er, ep)) in pairs(casesL)
 			Makie.lines!(axL, t, er; label = n, linewidth = 3)
+			push!(epL, ep)
 		end
 
 		for (k, (n, er, ep)) in pairs(casesW)
 			Makie.lines!(axW, t, er; label = n, linewidth = 3)
+			push!(epW, ep)
 		end
+
+		# Makie.lines!(axL2, [alphas...], epL; linewidth = 3)
+		# Makie.lines!(axW2, [gammas...], epW; linewidth = 3)
 
 		# Makie.axislegend(axL; orientation = :horizontal, nbanks = 2)
 		# Makie.axislegend(axW; orientation = :horizontal, nbanks = 2)

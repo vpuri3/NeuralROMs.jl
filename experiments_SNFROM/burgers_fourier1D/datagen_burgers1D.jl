@@ -156,7 +156,7 @@ end
 N = 1024
 # N = 8192
 ν = 1f-3
-tspan = (0.f0, 0.9f0)
+tspan = (0.f0, 1.0f0)
 mu = [0.500, 0.525, 0.550, 0.575, 0.600, 0.625]
 dir = joinpath(@__DIR__, "data_burg1D")
 device = gpu_device()
