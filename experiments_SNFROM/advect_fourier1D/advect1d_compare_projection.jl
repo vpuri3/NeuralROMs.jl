@@ -1,5 +1,6 @@
 #
-using NeuralROMs, LaTeXStrings
+using NeuralROMs
+using LaTeXStrings
 import CairoMakie
 import CairoMakie.Makie
 
@@ -108,10 +109,10 @@ function plot_compare_advect1d_l()
         N = length(Ud)
         Nr = sum(abs2, Ud) / N |> sqrt
 
-        er_PCA = sum(abs2, U_PCA - Ud) / N / Nr |> sqrt
-        er_CAE = sum(abs2, U_CAE - Ud) / N / Nr |> sqrt
-        er_SNL = sum(abs2, U_SNL - Ud) / N / Nr |> sqrt
-        er_SNW = sum(abs2, U_SNW - Ud) / N / Nr |> sqrt
+        er_PCA = sum(abs2, U_PCA - Ud) / N / Nr # |> sqrt
+        er_CAE = sum(abs2, U_CAE - Ud) / N / Nr # |> sqrt
+        er_SNL = sum(abs2, U_SNL - Ud) / N / Nr # |> sqrt
+        er_SNW = sum(abs2, U_SNW - Ud) / N / Nr # |> sqrt
 
         push!(e_PCA, er_PCA)
         push!(e_CAE, er_CAE)
@@ -120,7 +121,7 @@ function plot_compare_advect1d_l()
     end
 
     xlabel = L"N_{ROM}"
-	ylabel = L"Projection error ($e_\text{proj}$)"
+	ylabel = L"Squared projection error ($e_\text{proj}$)"
     xlabelsize = ylabelsize = 16
 
     colors = (:orange, :green, :blue, :red, :brown,)
@@ -154,6 +155,7 @@ function plot_compare_advect1d_l()
     Makie.scatter!(ax, latents, e_SNW; kws[4]...)
 
 	Makie.Legend(fig[0,1], ax; orientation = :horizontal, framevisible = false, unique = true)
+	Makie.ylims!(ax, 2*10^-9, 1e-0)
 
 	save(joinpath(@__DIR__, "proj.png"), fig)
     save(joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_nrom.pdf"), fig)

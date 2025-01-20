@@ -1,9 +1,10 @@
 #
 using NeuralROMs
 using MLDataDevices
-using LinearAlgebra, Plots, LaTeXStrings
+using LinearAlgebra, LaTeXStrings
 using JLD2, HDF5
 
+using Plots
 import CairoMakie
 import CairoMakie: Makie
 
@@ -61,7 +62,7 @@ function compare_compression(; device = gpu_device(), compute_svd::Bool = false)
 	ax  = Makie.Axis(
 		fig[1,1];
 		xlabel = L"Number of POD modes$$",
-		ylabel = L"Squared Projection error ($e^2_\text{proj}$)",
+		ylabel = L"Squared projection error ($e^2_\text{proj}$)",
 		xscale = log2, yscale = log10,
 		xlabelsize = 16, ylabelsize = 16,
 	)
@@ -90,7 +91,7 @@ function compare_compression(; device = gpu_device(), compute_svd::Bool = false)
 end
 
 # compare_compression(; compute_svd = true)
-# compare_compression()
+compare_compression()
 
 #======================================================#
 # Training functions
