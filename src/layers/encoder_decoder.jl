@@ -128,7 +128,6 @@ function FlatDecoder(
     decoder::AbstractLuxLayer,
 	periodic::AbstractLuxLayer = NoOpLayer(),
 )
-    noop  = NoOpLayer()
 	assem = Parallel(vcat; periodic, hyper)
 
     Chain(;
@@ -142,23 +141,30 @@ function get_flatdecoder(
     p::Union{NamedTuple, AbstractArray},
     st::NamedTuple,
 )
-    hyper   = (NN.layers.assem.layers.hyper, p.assem.hyper, st.assem.hyper)
-    decoder = (NN.layers.decoder, p.decoder, st.decoder)
+    hyper    = (NN.layers.assem.layers.hyper, p.assem.hyper, st.assem.hyper)
+    periodic = (NN.layers.assem.layers.periodic, p.assem.periodic, st.assem.periodic)
+    decoder  = (NN.layers.decoder, p.decoder, st.decoder)
 
-    remake_ca_in_model(hyper...), remake_ca_in_model(decoder...)
+    remake_ca_in_model(hyper...), remake_ca_in_model(periodic...), remake_ca_in_model(decoder...)
 end
 
 function freeze_decoder(
     decoder::NTuple{3, Any},
-    code_len::Integer;
+    code_len::Integer,
+	periodic = nothing;
     rng::Random.AbstractRNG = Random.default_rng(),
     p0::Union{AbstractVector, Nothing} = nothing,
 )
-    # freeze decoder
+	if isnothing(periodic)
+		periodic = NoOpLayer(), ComponentArray((;)), (;)
+	end
+
+    # freeze
     decoder_frozen = Lux.Experimental.freeze(decoder...)
+	periodic_frozen = Lux.Experimental.freeze(periodic...)
 
     # make NN
-    branch = BranchLayer(NoOpLayer(), OneEmbedding(code_len))
+	branch = BranchLayer(; periodic = periodic_frozen[1], embedding = OneEmbedding(code_len))
     parallel = Parallel(vcat, NoOpLayer(), NoOpLayer())
     NN = Chain(; branch, parallel, decoder = decoder_frozen[1])
 
@@ -168,6 +174,7 @@ function freeze_decoder(
     p = ComponentArray(p)
 
     @set! st.decoder.frozen_params = decoder[2]
+	@set! st.branch.periodic.frozen_params = periodic[2]
 
     if !isnothing(p0)
         @assert length(p0) == code_len

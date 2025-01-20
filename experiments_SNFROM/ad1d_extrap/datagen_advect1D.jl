@@ -21,7 +21,7 @@ function uIC(x; μ = -0.5f0, σ = 0.1f0)
 end
 
 function advect1D(N, ν, c, mu = nothing, p = nothing;
-    tspan=(0.f0, 3.0f0),
+    tspan=(0.f0, 2.0f0),
     ntsave=500,
     odealg=Tsit5(),
     odekw = (;),
@@ -95,8 +95,8 @@ function advect1D(N, ν, c, mu = nothing, p = nothing;
             ylabel = "u(x, t)"
             title = isnothing(mu[k]) ? "" : "μ = $(round(mu[k]; digits = 2)), "
 
-            anim = animate1D(_u, x, t; linewidth=2, xlabel, ylabel, title)
-            gif(anim, joinpath(dir, "traj_$(k).gif"), fps=30)
+            # anim = animate1D(_u, x, t; linewidth=2, xlabel, ylabel, title)
+            # gif(anim, joinpath(dir, "traj_$(k).gif"), fps=30)
 
             begin
                 idx = LinRange(1f0, ntsave, 11) .|> Base.Fix1(round, Int)
@@ -114,11 +114,13 @@ end
 N = 128
 ν = 0f0
 c = 1.00f0
-mu = nothing # parameters
-
 device = cpu_device()
+
+# no extrap
+tspan = (0.f0, 3f0)
+ntsave = 600
 dir = joinpath(@__DIR__, "data_advect")
-(sol, V), (x, u, t, mu) = advect1D(N, ν, c, mu; device, dir)
+(sol, V), (x, u, t, mu) = advect1D(N, ν, c; tspan, ntsave, device, dir)
 
 nothing
 #

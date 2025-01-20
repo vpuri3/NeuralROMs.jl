@@ -35,6 +35,7 @@ end
 # 	(;
 # 		a = ones32(rng, w, d),
 # 		b = rand32(rng, w, d) * 2 .- 1,
+#       b = T.(LinRange(0f0, 2f0, l.width)),
 # 		c = zeros32(rng, w, d),
 # 	)
 # end
@@ -48,12 +49,12 @@ function (l::PeriodicLayer)(x::AbstractMatrix, ps, st::NamedTuple)
 	w = l.width
 	d = length(l.periods)
 	k = reshape(st.k, (1, d))
-    b = reshape(st.b, (w, 1))
+    b = reshape(st.b, (w, 1)) # ps.b
 
 	xp = x[l.idxs, :]
 	xp = reshape(xp, 1, size(xp)...)
     yp = @. sinpi(k * xp + b)
-	# yp = @. ps.a * cospi(k * xp + ps.b) + ps.c
+	# yp = @. ps.a * xp + ps.c
 	# yp = dropdims(sum(yp; dims = 1); dims = 1) ./ d
 	yp = reshape(yp, w * d, :)
 

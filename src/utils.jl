@@ -98,7 +98,12 @@ function remake_ca_in_model(
     if p isa NamedTuple
         NN, p, st
     else
-        p = ComponentArray(getdata(p) |> copy, getaxes(p))
+		data = getdata(p) |> copy
+		ax = getaxes(p)
+		if isempty(ax)
+			ax = (ComponentArrays.FlatAxis(),)
+		end
+        p = ComponentArray(data, ax)
         NN, p, st
     end
 end

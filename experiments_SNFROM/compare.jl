@@ -48,7 +48,7 @@ function compare_compression(; device = gpu_device(), compute_svd::Bool = false)
 
 			_, _, _, u, _ = loaddata(casefile, verbose = false)
 			u = reshape(u, size(u, 1) * size(u, 2), :)
-			S = svd(u).S
+			@time S = svd(u).S
 
 			singular_values = merge(singular_values, NamedTuple{(case,)}((S,)))
 		end
@@ -61,24 +61,28 @@ function compare_compression(; device = gpu_device(), compute_svd::Bool = false)
 	ax  = Makie.Axis(
 		fig[1,1];
 		xlabel = L"Number of POD modes$$",
-		ylabel = L"Projection error ($e_\text{proj}$)",
+		ylabel = L"Squared Projection error ($e^2_\text{proj}$)",
 		xscale = log2, yscale = log10,
 		xlabelsize = 16, ylabelsize = 16,
 	)
+
+	epsT = eps(Float32)
 
 	for (case, data) in pairs(CASES)
 		S  = getproperty(singular_values, case)
 		S2 = S .^ 2
 		E  = S2 / sum(S2)
-		EC = 1 .- cumsum(E) .+ eps(eltype(S))
-		EC = sqrt.(EC)
+		EC = 1 .- cumsum(E) # .+ epsT
+
+		id = findall(Base.Fix2(isless, 0), EC)
+		EC[id] .= 0
 
 		Makie.lines!(ax, EC; label = LaTeXString(data.name), linewidth = 2)
 	end
 
 	Makie.axislegend(ax)
 	Makie.xlims!(ax, 1e+0, 1e+3)
-	Makie.ylims!(ax, 1e-4, 1e-0)
+	Makie.ylims!(ax, epsT, 1e-0)
 	save(joinpath(BASEDIR, "svd.png"), fig)
 	save(joinpath(pkgdir(NeuralROMs), "figs", "method", "exp_svd.pdf"), fig)
 
@@ -187,6 +191,7 @@ function train_SNF_compare(
     modeldir::String,
     train_params = (;);
 	periodic_layer::Bool = false,
+	fullbatch_freq::Int = 1, # evaluate full-batch loss every K epochs. (0 => never!)
     rng::Random.AbstractRNG = Random.default_rng(),
     device = Lux.gpu_device(),
 )
@@ -205,9 +210,11 @@ function train_SNF_compare(
     α = haskey(train_params, :α) ? train_params.α : 0f-0 # Lipschitz reg
     γ = haskey(train_params, :γ) ? train_params.γ : 0f-0 # Weight decay
 
-    if iszero(α) & iszero(γ)
-        @warn "Got γ = 0, α = 0"
-    end
+	if (α isa Number) & (γ isa Number)
+		if iszero(α) & iszero(γ)
+			@warn "Got γ = 0, α = 0"
+		end
+	end
 
     # batchsize
     batchsizes = get_batchsizes(train_params)
@@ -216,7 +223,7 @@ function train_SNF_compare(
     isdir(modeldir) && rm(modeldir, recursive = true)
     train_SNF(datafile, modeldir, l, hh, hd, wh, wd, E;
         rng, makedata_kws, λ2, α, weight_decays = γ, device,
-        batchsizes..., periodic_layer,
+        batchsizes..., periodic_layer, fullbatch_freq,
     )
 end
 
@@ -255,8 +262,9 @@ function compare_plots(
         Ud = ev["Udata"]
         Up = ev["Upred"]
         Pp = ev["Ppred"]
-        Ue = ev["Ulrnd"] # 0 * Ud
-        Pe = isone(i) ? Pp : ev["Plrnd"]
+		# Ue = ev["Ulrnd"] # BF2D/CAE02 data is corrupted
+		Ue = (i==2) & occursin("burgers2d", casename) ? Ud : ev["Ulrnd"]
+        Pe = ev["Plrnd"]
 
         in_dim  = size(Xd, 1)
         out_dim = size(Ud, 1)
@@ -417,10 +425,10 @@ function run_hyper_timings(
         for iskip in reverse(iskips)
 
             # hyper-indices
-            ids = zeros(Bool, grid...)
+            ids = zeros(Bool, grid...) # uniform points
             @views ids[1:iskip:end, 1:iskip:end] .= true
             hyper_indices = findall(isone, vec(ids))
-            hyper_reduction_path = joinpath(modeldir, "hyper.jld2")
+            hyper_reduction_path = nothing # joinpath(modeldir, "hyper.jld2")
 
             # time-step
             It = LinRange(1, 500, 500 ÷ dt_mult) .|> Base.Fix1(round, Int)
@@ -480,7 +488,7 @@ function plot_hyper_timings(
         512, 512
     end
 
-    xdata, _, _, udata, _ = loaddata(datafile)
+    xdata, _, _, udata, _ = loaddata(datafile; verbose = false)
     udata = udata[:, :, casenum, end]
 
     udata = if occursin("exp2", casename)
@@ -594,7 +602,7 @@ function plot_hyper_timings(
 
     # fontsize = 16
     #
-    # # FIGE, FIGM
+    # # FIGE
     # fige = Makie.Figure(; size = (900, 400), backgroundcolor = :white, grid = :off)
     #
     # # styles = (:solid, :dash, :dashdot, :dashdotdot, :dot)
@@ -640,6 +648,8 @@ function plot_hyper_timings(
     # Makie.scatterlines!(axe2, Ns, e4; kw_l[4]...)
     #
     # save(joinpath(outdir, "hyper_$(casename)_s.pdf"), fige)
+
+	################################################
     
     # # FIGE, FIGP
     #

@@ -94,8 +94,11 @@ function compare_burg1d_param(
 			epL = (ulL - ud) ./ nr
 			epW = (ulW - ud) ./ nr
 
-			epL = sum(abs2, epL) / length(epL) |> sqrt
-			epW = sum(abs2, epW) / length(epL) |> sqrt
+			# epL = sum(abs2, epL) / length(epL) |> sqrt
+			# epW = sum(abs2, epW) / length(epL) |> sqrt
+
+			epL = sum(abs2, epL; dims=2) / size(ud, 2) .|> sqrt |> vec
+			epW = sum(abs2, epW; dims=2) / size(ud, 2) .|> sqrt |> vec
 
 			# prediction error
 			upL = evL["Upred"]
@@ -138,6 +141,7 @@ function compare_burg1d_param(
 
 	if makeplot
 		fig = Makie.Figure(; size = (900, 500), backgroundcolor = :white, grid = :off)
+		# fig = Makie.Figure(; size = (900, 900), backgroundcolor = :white, grid = :off)
 		kwa = (; xlabel = L"t", ylabel = L"ε(t)", xlabelsize = 16, ylabelsize = 16, yscale = log10,)
 		axL = Makie.Axis(fig[1,1]; kwa...)
 		axW = Makie.Axis(fig[1,2]; kwa...)
@@ -146,17 +150,19 @@ function compare_burg1d_param(
 		# axL2 = Makie.Axis(fig[3,1]; xlabel = L"\alpha", kwa2...)
 		# axW2 = Makie.Axis(fig[3,2]; xlabel = L"\gamma", kwa2...)
 
-		epL = []
-		epW = []
+		# epL = []
+		# epW = []
 
 		for (k, (n, er, ep)) in pairs(casesL)
 			Makie.lines!(axL, t, er; label = n, linewidth = 3)
-			push!(epL, ep)
+			# Makie.lines!(axL, t, ep; linestyle = :dash)
+			# push!(epL, ep)
 		end
 
 		for (k, (n, er, ep)) in pairs(casesW)
 			Makie.lines!(axW, t, er; label = n, linewidth = 3)
-			push!(epW, ep)
+			# Makie.lines!(axW, t, ep; linestyle = :dash)
+			# push!(epW, ep)
 		end
 
 		# Makie.lines!(axL2, [alphas...], epL; linewidth = 3)

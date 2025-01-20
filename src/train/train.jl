@@ -154,6 +154,7 @@ function train_model(
     nepochs::NTuple{M, Int} = (100,),
     schedules::Union{Nothing, NTuple{M, ParameterSchedulers.AbstractSchedule}} = nothing,
 #
+	fullbatch_freq::Int = 1, # evaluate full-batch loss every K epochs. (0 => never!)
     early_stoppings::Union{Bool, NTuple{M, Bool}, Nothing} = nothing,
     patience_fracs::Union{Real, NTuple{M, Any}, Nothing} = nothing,
     weight_decays::Union{Real, NTuple{M, Real}} = 0f0,
@@ -297,7 +298,7 @@ function train_model(
         println(io, "#======================#")
 
         args = (opt, NN, p, st, nepoch, _loader, loader_, __loader)
-        kwargs = (;lossfun, opt_st, cb, io, early_stopping, patience, schedule)
+        kwargs = (;lossfun, opt_st, cb, io, fullbatch_freq, early_stopping, patience, schedule)
 
         @time p, st, opt_st = optimize(args...; kwargs...)
 
@@ -521,6 +522,7 @@ function optimize(
     opt_st = nothing,
     cb = nothing,
     io::Union{Nothing, IO} = stdout,
+	fullbatch_freq::Int = 1,
     early_stopping::Union{Bool, Nothing} = nothing,
     patience::Union{Int, Nothing} = nothing,
     schedule::Union{Nothing, ParameterSchedulers.AbstractSchedule} = nothing,
@@ -587,12 +589,17 @@ function optimize(
         ProgressMeter.finish!(prog)
 
         # callback, early stopping
-        _, l_, ifbreak_cb = cb(p, st; epoch, nepoch, io)
-        minconfig, ifbreak_mc = update_minconfig(minconfig, l_, p, st, opt_st; io)
-
-        if ifbreak_cb | ifbreak_mc
-            break
-        end
+		if !iszero(fullbatch_freq)
+			if ((epoch % fullbatch_freq) == 0) | (epoch == nepoch)
+				_, l_, ifbreak_cb = cb(p, st; epoch, nepoch, io)
+				minconfig, ifbreak_mc = update_minconfig(minconfig, l_, p, st, opt_st; io, fullbatch_freq)
+				(ifbreak_cb | ifbreak_mc) && break
+			end
+		else
+			@set! minconfig.p = p
+			@set! minconfig.st = st
+			@set! minconfig.out_st = opt_st
+		end
 
         println(io, "#=======================#")
     end
@@ -620,6 +627,7 @@ function optimize(
     opt_st = nothing,
     cb = nothing,
     io::Union{Nothing, IO} = stdout,
+	fullbatch_freq::Int = 1,
     early_stopping::Union{Bool, Nothing} = nothing,
     patience::Union{Int, Nothing} = nothing,
     kwargs...
@@ -688,7 +696,7 @@ function optimize(
             println(io, "#=======================#")
 
             _, l_ = cb(optx.u, st; epoch = epoch[], nepoch, io)
-            minconfig, ifbreak = update_minconfig(mincfg[], l_, optx.u, st, opt_st; io)
+            minconfig, ifbreak = update_minconfig(mincfg[], l_, optx.u, st, opt_st; io, fullbatch_freq)
             mincfg[] = minconfig
             epoch[] += 1
 
@@ -783,6 +791,7 @@ function update_minconfig(
     opt_st;
     io::IO = stdout,
 	verbose::Bool = true,
+	fullbatch_freq::Int = 1,
 )
     ifbreak = false
 
@@ -801,7 +810,7 @@ function update_minconfig(
 		    msg = "No improvement in loss found in the last $(minconfig.count) epochs. $(l) > $(minconfig.l)\n"
 	        printstyled(io, msg, color = :red)
 		end
-        @set! minconfig.count = minconfig.count + 1
+        @set! minconfig.count = minconfig.count + fullbatch_freq
     end
 
     if (minconfig.count >= minconfig.patience) & minconfig.early_stopping

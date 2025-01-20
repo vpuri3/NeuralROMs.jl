@@ -134,6 +134,7 @@ function train_SNF(
     σ2inv::Real = 0f0,
     α::Real = 0f0,
     weight_decays::Union{Real, NTuple{M, <:Real}} = 0f0,
+	fullbatch_freq::Int = 1, # evaluate full-batch loss every K epochs. (0 => never!)
     makedata_kws = (; Ix = :, _Ib = :, Ib_ = :, _It = :, It_ = :,),
     verbose::Bool = true,
     device = Lux.gpu_device(),
@@ -157,15 +158,26 @@ function train_SNF(
     end
 
     hyper = begin
-        wi = prm_dim
+		# wi = prm_dim
+		wp = 2
+		wi = periodic_layer ? wp + prm_dim - 1 : prm_dim
         wo = l
+
+		periodic = if periodic_layer
+			# WrappedFunction(x -> @. sinpi(2 * x / 2))
+			# PeriodicLayer(1:1, [2.0f0,], wp)
+			PeriodicLayer(1:1, [10.0f0,], wp)
+			# NoOpLayer()
+		else
+			NoOpLayer()
+		end
 
         act = tanh
         in_layer = Dense(wi, wh, act)
         hd_layer = Dense(wh, wh, act)
         fn_layer = Dense(wh, wo; use_bias = false)
 
-        Chain(in_layer, fill(hd_layer, hh)..., fn_layer)
+        Chain(periodic, in_layer, fill(hd_layer, hh)..., fn_layer)
     end
 
     decoder = begin
@@ -178,7 +190,8 @@ function train_SNF(
 
         act = sin
 
-        wi = periodic_layer ? l + in_dim * wd : l + in_dim
+		wi = l + in_dim
+        # wi = periodic_layer ? l + in_dim * wd : l + in_dim
         wo = out_dim
 
         in_layer = Dense(wi, wd, act; init_weight = init_wt_in, init_bias)
@@ -197,18 +210,17 @@ function train_SNF(
 		# end
 		periods = [2.0f0,]
 		PeriodicLayer(1:in_dim, periods, wd)
-		# NoOpLayer()
+
+		NoOpLayer()
 	else
 		NoOpLayer()
 	end
 
-	warmup = true
+    NN = FlatDecoder(hyper, decoder, periodic)
 
     #-------------------------------------------#
     # training hyper-params
     #-------------------------------------------#
-
-    NN = FlatDecoder(hyper, decoder, periodic)
 
     _batchsize = isnothing(_batchsize) ? numobs(_data) ÷ 100 : _batchsize
     batchsize_ = isnothing(batchsize_) ? numobs(_data) ÷ 1   : batchsize_
@@ -227,9 +239,17 @@ function train_SNF(
     display(NN)
     displaymetadata(metadata)
 
+	if E == 0
+		mkpath(dir)
+		p, st = Lux.setup(rng, NN)
+		model = (NN, p, st)
+		jldsave(joinpath(dir, "model.jld2"); model, metadata, STATS = nothing)
+		return model, nothing, metadata
+	end
+
     @time model, ST = train_model(NN, _data; rng,
         _batchsize, batchsize_, weight_decays,
-        opts, nepochs, schedules, early_stoppings,
+        opts, nepochs, schedules, fullbatch_freq, early_stoppings,
         device, dir, metadata, lossfun,
     )
 
@@ -282,23 +302,29 @@ function postprocess_SNF(
     #==============#
     # Get model
     #==============#
-    hyper, decoder = get_flatdecoder(model...)
+    hyper, periodic, decoder = get_flatdecoder(model...)
     model = NeuralModel(decoder[1], decoder[3], md)
-    
+
     #==============#
     # evaluate model
     #==============#
     _data, data_, _ = makedata_SNF(datafile; md.makedata_kws..., verbose)
-    
+
     in_dim  = size(Xdata, 1)
     out_dim, Nx, Nb, Nt = size(Udata)
-    
+
+	# apply hyper
     _code = eval_model(hyper, _data[1][2]; device)
     code_ = eval_model(hyper, data_[1][2]; device)
-    
-    _xc = vcat(_data[1][1], _code)
-    xc_ = vcat(data_[1][1], code_)
-    
+
+	# apply periodic
+	_xc = eval_model(periodic, _data[1][1]; device)
+	xc_ = eval_model(periodic, data_[1][1]; device)
+
+    _xc = vcat(_xc, _code)
+    xc_ = vcat(xc_, code_)
+
+	# apply decoder
     _upred = eval_model(decoder, _xc; device)
     upred_ = eval_model(decoder, xc_; device)
     
@@ -476,7 +502,7 @@ function evolve_SNF(
     #==============#
     # get hyper-decoer
     #==============#
-    hyper, decoder = get_flatdecoder(NN, p, st)
+    hyper, periodic, decoder = get_flatdecoder(NN, p, st)
 
     #==============#
     # get p0
@@ -501,7 +527,7 @@ function evolve_SNF(
     # make model
     #==============#
 
-    NN, p0, st = freeze_decoder(decoder, length(p0); rng, p0)
+    NN, p0, st = freeze_decoder(decoder, length(p0), periodic; rng, p0)
     model = NeuralModel(NN, st, md)
 
     #==============#
@@ -521,7 +547,6 @@ function evolve_SNF(
 
     #==============#
     # Hyper-reduction
-    # TODO: Modify time-evolution to include hypernetwork
     #==============#
 
     if !isnothing(hyper_reduction_path)

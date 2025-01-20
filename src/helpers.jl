@@ -131,7 +131,7 @@ function eval_model(
     loader = MLUtils.DataLoader(x; batchsize, shuffle = false, partial = true)
 
     p, st = (p, st) |> device
-    st = Lux.testmode(st)
+	# st = Lux.testmode(st) # scalar indexing error with freeze_decoder
 
     if device isa AbstractGPUDevice
         loader = DeviceIterator(device, loader)
@@ -145,6 +145,7 @@ function eval_model(
 
     hcat(y...)
 end
+
 #======================================================#
 """
 Input size `[out_dim, ...]`
