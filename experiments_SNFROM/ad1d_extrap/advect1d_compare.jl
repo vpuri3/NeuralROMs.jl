@@ -1,6 +1,5 @@
 #
 using NeuralROMs
-using Plots, LaTeXStrings
 
 joinpath(pkgdir(NeuralROMs), "experiments_SNFROM", "compare.jl") |> include
 #======================================================#
@@ -33,8 +32,12 @@ for latent in [2] # [1, 2]
 		α = 0f-0,
 		γ = 0f-2,
 		makedata_kws,
-		λ2 = 0f-6,
 		# _batchsize = 128,
+
+		# hyper
+		λ2 = 0f-6,
+		hh = 2, # hidden
+		wh = 32, # width
 	)
 	train_SNF_compare(latent, datafile, modeldir, train_params; periodic_layer, rng, device)
 	# postprocess_SNF(prob, datafile, modelfile; rng, device, evolve_kw)

@@ -159,14 +159,20 @@ function train_SNF(
 
     hyper = begin
 		# wi = prm_dim
-		wp = 2
+		# wp = 1
+		# wp = 2
+		wp = wh
+
 		wi = periodic_layer ? wp + prm_dim - 1 : prm_dim
         wo = l
 
 		periodic = if periodic_layer
-			# WrappedFunction(x -> @. sinpi(2 * x / 2))
-			# PeriodicLayer(1:1, [2.0f0,], wp)
-			PeriodicLayer(1:1, [10.0f0,], wp)
+			@assert false
+			# WrappedFunction(x -> @. sin(2f0 * x / 2f0))
+			# WrappedFunction(x -> @. sin(2f0 * Float32(pi) * x / 4f0))
+
+			PeriodicLayer(1:1, [2f0,], wp)
+			# PeriodicLayer(1:1, [10f0,], wp)
 			# NoOpLayer()
 		else
 			NoOpLayer()

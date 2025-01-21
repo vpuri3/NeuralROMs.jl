@@ -91,7 +91,7 @@ function compare_compression(; device = gpu_device(), compute_svd::Bool = false)
 end
 
 # compare_compression(; compute_svd = true)
-compare_compression()
+# compare_compression()
 
 #======================================================#
 # Training functions
