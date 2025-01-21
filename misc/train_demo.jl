@@ -48,6 +48,5 @@ trainer = Trainer(NN, _data; device,
 # 	nepochs = (10, 10, 10),
 # )
 
-
 #
 nothing

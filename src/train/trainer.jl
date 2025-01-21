@@ -5,6 +5,9 @@
 # 3. asssert that evaluate has been called before update_trainer_state!
 # 4. make data transfer in update_trainer_state! async
 #===============================================================#
+
+import Lux: Training
+
 abstract type AbstractTrainState end
 
 @concrete mutable struct TrainState <: AbstractTrainState
