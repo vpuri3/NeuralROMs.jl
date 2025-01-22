@@ -56,7 +56,7 @@ Reactant.set_default_backend("cpu")
 ####
 
 @time train(gpu_device(), AutoZygote())
-@time train(gpu_device(), AutoEnzyme()) # failing
+# @time train(gpu_device(), AutoEnzyme()) # failing
 Reactant.set_default_backend("gpu")
 @time train(reactant_device(), AutoEnzyme())
 
