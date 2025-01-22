@@ -1,17 +1,15 @@
 #
 using Lux, MLDataDevices
+using Zygote, Enzyme, Reactant
 using CUDA, LuxCUDA, KernelAbstractions
 using Random, Printf, Optimisers, MLUtils
-
-using Zygote
-using Enzyme
-using Reactant
 
 function train(device, adtype)
 
 	N = 10000
 	W = 64
-	E = 500
+	B = div(N, 100)
+	E = 1
 
 	# model
 	NN = Chain(Dense(1 => W, gelu), Dense(W => W, gelu), Dense(W => 1))
@@ -23,7 +21,7 @@ function train(device, adtype)
 	y = @. sinpi(2x)
 
 	# data loader
-	DL = DataLoader((x, y); batchsize = div(N, 100))
+	DL = DataLoader((x, y); batchsize = B)
 
 	# device transfer
 	ps = ps |> device
@@ -34,26 +32,31 @@ function train(device, adtype)
     train_state = Training.TrainState(NN, ps, st, Adam(0.001f0))
 
     for epoch in 1:E
-        for (i, (xᵢ, yᵢ)) in enumerate(DL)
+		loss = 0
+        for batch in DL
             _, loss, _, train_state = Training.single_train_step!(
-                adtype, MSELoss(), (xᵢ, yᵢ), train_state)
-            if (epoch % E == 0 || epoch == 1) && i == 1
-				println("Epoch $(epoch)/$(E)\tLoss: $(loss)")
-            end
+                adtype, MSELoss(), batch, train_state)
         end
     end
 
     return train_state
 end
 
-# @time train(cpu_device(), AutoZygote())
-# @time train(gpu_device(), AutoZygote())
+####
+# CPU
+####
 
-# @time train(cpu_device(), AutoEnzyme())
-# @time train(gpu_device(), AutoEnzyme())
+@time train(cpu_device(), AutoZygote())
+@time train(cpu_device(), AutoEnzyme())
+Reactant.set_default_backend("cpu")
+@time train(reactant_device(), AutoEnzyme())
 
-# Reactant.set_default_backend("cpu")
-# @time train(reactant_device(), AutoEnzyme())
+####
+# GPU
+####
+
+@time train(gpu_device(), AutoZygote())
+@time train(gpu_device(), AutoEnzyme()) # failing
 Reactant.set_default_backend("gpu")
 @time train(reactant_device(), AutoEnzyme())
 
