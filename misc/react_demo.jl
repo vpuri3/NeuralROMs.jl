@@ -1,20 +1,23 @@
 #
 using Lux, MLDataDevices
 using Zygote, Enzyme, Reactant
-using CUDA, LuxCUDA, KernelAbstractions
-using Random, Printf, Optimisers, MLUtils
+using CUDA, LuxCUDA
+using Random, Optimisers, MLUtils
 
-Lux.Lux.DUMP_REACTANT_HLO_OPT_MODE[] = true
-
-function train(device, adtype)
+function train(device, adtype, verbose)
 
 	N = 10000
-	W = 64
+	H = 1
+	W = 128
 	B = div(N, 100)
-	E = 1
+	E = 100
 
 	# model
-	NN = Chain(Dense(1 => W, gelu), Dense(W => W, gelu), Dense(W => 1))
+	NN = Chain(
+		Dense(1 => W, gelu),
+		[Dense(W => W, gelu) for _ in 1:H]...,
+		Dense(W => 1)
+	)
 	ps, st = Lux.setup(Random.default_rng(), NN)
 
 	# data
@@ -23,7 +26,7 @@ function train(device, adtype)
 	y = @. sinpi(2x)
 
 	# data loader
-	DL = DataLoader((x, y); batchsize = B)
+	DL = DataLoader((x, y); batchsize = B, partial = false)
 
 	# device transfer
 	ps = ps |> device
@@ -33,7 +36,22 @@ function train(device, adtype)
 	# training
     train_state = Training.TrainState(NN, ps, st, Adam(0.001f0))
 
-    for epoch in 1:E
+	verbose && println("##################")
+	verbose && println("$(device) + $(adtype)")
+	verbose && println("##################")
+
+	# warm up
+	verbose && println("Warm up:")
+	@time begin
+		batch = first(DL)
+		_, _, _, train_state = Training.single_train_step!(
+			adtype, MSELoss(), batch, train_state;
+			return_gradients = Training.False(),
+		)
+	end
+
+	verbose && println("Training:")
+    @time for epoch in 1:E
 		loss = 0
         for batch in DL
             _, loss, _, train_state = Training.single_train_step!(
@@ -43,6 +61,8 @@ function train(device, adtype)
         end
     end
 
+	verbose && println("")
+
     return train_state
 end
 
@@ -50,29 +70,27 @@ end
 # CPU
 ####
 
-train(cpu_device(), AutoZygote())
-train(cpu_device(), AutoEnzyme())
-Reactant.set_default_backend("cpu")
-train(reactant_device(), AutoEnzyme())
-
-@time train(cpu_device(), AutoZygote())
-@time train(cpu_device(), AutoEnzyme())
-@time train(reactant_device(), AutoEnzyme())
-
-println()
+# train(cpu_device(), AutoZygote(), false)
+# train(cpu_device(), AutoEnzyme(), false)
+# Reactant.set_default_backend("cpu")
+# train(reactant_device(), AutoEnzyme(), false)
+#
+# train(cpu_device(), AutoZygote(), true)
+# train(cpu_device(), AutoEnzyme(), true)
+# train(reactant_device(), AutoEnzyme(), true)
 
 ####
 # GPU
 ####
 
-train(gpu_device(), AutoZygote())
-# train(gpu_device(), AutoEnzyme()) # failing
+# train(gpu_device(), AutoZygote(), false); CUDA.reclaim()
+# train(gpu_device(), AutoEnzyme(), false) # failing
 Reactant.set_default_backend("gpu")
-train(reactant_device(), AutoEnzyme())
+train(reactant_device(), AutoEnzyme(), false)
 
-@time train(gpu_device(), AutoZygote())
-# @time train(gpu_device(), AutoEnzyme()) # failing
-@time train(reactant_device(), AutoEnzyme())
+# train(gpu_device(), AutoZygote(), true); CUDA.reclaim()
+# @time train(gpu_device(), AutoEnzyme(), true) # failing
+train(reactant_device(), AutoEnzyme(), true)
 
 #====================================================#
 nothing
