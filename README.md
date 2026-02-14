@@ -1,13 +1,13 @@
 # NeuralROMs.jl
 
 This repository implements machine learning (ML) based reduced order models (ROMs).
-Specifically, we introduce [smooth neural field ROM (SNF-ROM)](https://arxiv.org/abs/2405.14890) for solving advection dominated PDE problems.
+Specifically, we introduce [smooth neural field ROM (SNF-ROM)](https://www.sciencedirect.com/science/article/pii/S0021999125002402) for solving advection dominated PDE problems.
 
 ## Smooth neural field ROM
 
 > SNF-ROM: Projection-based nonlinear reduced order modeling with smooth neural fields  
 > [Vedant Puri](https://vpuri3.github.io/), [Aviral Prakash](https://scholar.google.com/citations?user=KgbgFP0AAAAJ&hl=en&oi=ao), [Levent Burak Kara](http://vdel.me.cmu.edu/), [Yongjie Jessica Zhang](https://www.meche.engineering.cmu.edu/faculty/zhang-computational-bio-modeling-lab.html)  
-> [Project page](https://vpuri3.github.io/NeuralROMs.jl/dev/) / [Paper](https://arxiv.org/abs/2405.14890) / [Code](https://github.com/vpuri3/NeuralROMs.jl/tree/master) / [Slides](https://slides.com/vedantpuri/snf-rom-wccm2024) / [Talk](https://youtu.be/zio-_89DJ0g?si=sDVE1c0xJqzVi8bm)
+> [Project page](https://vpuri3.github.io/NeuralROMs.jl/dev/) / [Paper](https://www.sciencedirect.com/science/article/pii/S0021999125002402) / [Code](https://github.com/vpuri3/NeuralROMs.jl/tree/master) / [Slides](https://slides.com/vedantpuri/snf-rom-wccm2024) / [Talk](https://youtu.be/zio-_89DJ0g?si=sDVE1c0xJqzVi8bm)
 
 #### Offline stage
 ![Capture-2024-05-28-171751](https://github.com/vpuri3/NeuralROMs.jl/assets/36345239/9656da99-de98-4ead-9ae6-37f935bffa33)
